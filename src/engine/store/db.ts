@@ -8,7 +8,7 @@ export function getDb(): Client {
     return client;
   }
 
-  const localPath = process.env.TURSO_LOCAL_PATH;
+  const localPath = process.env.VERCEL ? undefined : process.env.TURSO_LOCAL_PATH;
   const url = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
 

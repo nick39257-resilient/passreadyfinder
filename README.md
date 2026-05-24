@@ -62,6 +62,28 @@ npm run review
 
 Open http://localhost:3000 on your phone or tablet. Edit the draft in the textarea, then tap **Approve** or **Reject**.
 
+### Deploy to Vercel (phone access anywhere)
+
+The dashboard UI uses **relative** API paths (`/api/drafts`) — no hard-coded localhost in the frontend.
+
+1. Push the repo to GitHub.
+2. Import the project in [vercel.com](https://vercel.com) → **Add New Project**.
+3. Set **Environment Variables** (Production):
+   - `TURSO_DATABASE_URL`
+   - `TURSO_AUTH_TOKEN`
+   - Do **not** set `TURSO_LOCAL_PATH` on Vercel (local SQLite won't work).
+4. Deploy. Vercel serves `public/index.html` at `/` and routes `/api/*` to the serverless handler.
+
+```bash
+# Or deploy from CLI
+npm i -g vercel
+vercel
+```
+
+Your live URL will be something like `https://passreadyfinder.vercel.app`.
+
+**Security:** The dashboard has no login. Use [Vercel Deployment Protection](https://vercel.com/docs/security/deployment-protection) or add auth before sharing the URL publicly.
+
 ## Phase D — Sender (The Mailroom)
 
 Sends approved drafts via Resend and marks leads as `contacted`.
