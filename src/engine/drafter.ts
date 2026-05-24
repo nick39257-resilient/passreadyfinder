@@ -54,16 +54,31 @@ export function extractCity(lead: LeadForDraft): string {
   return "your area";
 }
 
+const GEMINI_MODEL = "gemini-2.5-flash";
+
 function createLlmClient(): OpenAI {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is required in .env");
   }
 
-  return new OpenAI({
-    apiKey,
-    baseURL: process.env.OPENAI_BASE_URL || undefined,
-  });
+  let baseURL = process.env.OPENAI_BASE_URL?.trim();
+  if (!baseURL) {
+    throw new Error(
+      "OPENAI_BASE_URL is required in .env (e.g. https://generativelanguage.googleapis.com/v1beta/openai/)",
+    );
+  }
+  if (!baseURL.endsWith("/")) {
+    baseURL += "/";
+  }
+
+  return new OpenAI({ apiKey, baseURL });
+}
+
+function logLlmConfig(): void {
+  const baseURL = process.env.OPENAI_BASE_URL?.trim() ?? "";
+  console.log(`LLM: ${GEMINI_MODEL} @ ${baseURL}`);
+  console.log(`API key: ${process.env.OPENAI_API_KEY ? "set" : "missing"}\n`);
 }
 
 function buildSystemPrompt(waMeLink: string): string {
@@ -112,27 +127,39 @@ export async function saveDraftMessage(leadId: number, message: string): Promise
   await db.execute({
     sql: `
       UPDATE leads
-      SET draft_message = ?, updated_at = datetime('now')
+      SET draft_message = ?, status = 'drafted', updated_at = datetime('now')
       WHERE id = ?
     `,
     args: [message.trim(), leadId],
   });
 }
 
-export async function generateDraftForLead(lead: LeadForDraft): Promise<string> {
+export async function generateDraftForLead(
+  lead: LeadForDraft,
+  client?: OpenAI,
+): Promise<string> {
   const city = extractCity(lead);
   const waMeLink = buildWaMeLink(lead.business_name);
-  const client = createLlmClient();
-  const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+  const llm = client ?? createLlmClient();
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.7,
-    messages: [
-      { role: "system", content: buildSystemPrompt(waMeLink) },
-      { role: "user", content: buildUserPrompt(lead, city, waMeLink) },
-    ],
-  });
+  let completion;
+  try {
+    completion = await llm.chat.completions.create({
+      model: GEMINI_MODEL,
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: buildSystemPrompt(waMeLink) },
+        { role: "user", content: buildUserPrompt(lead, city, waMeLink) },
+      ],
+    });
+  } catch (err) {
+    if (err instanceof OpenAI.APIError && err.status === 404) {
+      throw new Error(
+        `404 from Gemini: model "${GEMINI_MODEL}" not found. Check available models at /v1beta/openai/models.`,
+      );
+    }
+    throw err;
+  }
 
   const content = completion.choices[0]?.message?.content?.trim();
   if (!content) {
@@ -160,10 +187,14 @@ export async function runDrafter(): Promise<DraftRunResult> {
   }
 
   console.log(`Drafting ${leads.length} lead(s)…\n`);
+  logLlmConfig();
 
-  for (const lead of leads) {
+  const llmClient = createLlmClient();
+
+  for (let i = 0; i < leads.length; i++) {
+    const lead = leads[i];
     try {
-      const draft = await generateDraftForLead(lead);
+      const draft = await generateDraftForLead(lead, llmClient);
       await saveDraftMessage(lead.id, draft);
       result.drafted++;
       console.log(`✓ ${lead.business_name}`);
@@ -176,6 +207,10 @@ export async function runDrafter(): Promise<DraftRunResult> {
         error: message,
       });
       console.error(`✗ ${lead.business_name}: ${message}\n`);
+    }
+
+    if (i < leads.length - 1) {
+      await new Promise((r) => setTimeout(r, 3000));
     }
   }
 

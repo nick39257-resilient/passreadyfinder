@@ -34,6 +34,7 @@ npm run find
 | `npm run list` | Print top leads from DB |
 | `npm run list -- -n 50` | Show top 50 |
 | `npm run draft` | LLM-draft outreach for top 5 un-drafted leads (no sending) |
+| `npm run review` | Local review dashboard at http://localhost:3000 |
 
 ## Phase B — Drafter (draft only, no sending)
 
@@ -49,6 +50,16 @@ npm run draft
 ```
 
 Swap provider via `OPENAI_BASE_URL` (DeepSeek, Mistral, etc.). Each draft ends with a `wa.me` trapdoor link — the sole CTA.
+
+## Phase C — Review dashboard
+
+Approve or reject AI drafts in the browser before anything is sent.
+
+```bash
+npm run review
+```
+
+Open http://localhost:3000 on your phone or tablet. Edit the draft in the textarea, then tap **Approve** or **Reject**.
 
 ## Config
 

@@ -81,6 +81,12 @@ export async function runOutreachMigrations(): Promise<void> {
     sql: `INSERT OR IGNORE INTO outreach_settings (key, value) VALUES ('sending_paused', 'false')`,
     args: [],
   });
+
+  // Backfill: leads with AI drafts should appear in the review queue
+  await db.execute(`
+    UPDATE leads SET status = 'drafted'
+    WHERE draft_message IS NOT NULL AND status = 'new'
+  `);
 }
 
 export async function getSetting(key: string): Promise<string | null> {
