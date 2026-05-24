@@ -35,6 +35,7 @@ npm run find
 | `npm run list -- -n 50` | Show top 50 |
 | `npm run draft` | LLM-draft outreach for top 5 un-drafted leads (no sending) |
 | `npm run review` | Local review dashboard at http://localhost:3000 |
+| `npm run send` | Email all approved leads via Resend |
 
 ## Phase B — Drafter (draft only, no sending)
 
@@ -60,6 +61,21 @@ npm run review
 ```
 
 Open http://localhost:3000 on your phone or tablet. Edit the draft in the textarea, then tap **Approve** or **Reject**.
+
+## Phase D — Sender (The Mailroom)
+
+Sends approved drafts via Resend and marks leads as `contacted`.
+
+```bash
+# Add to .env (see .env.example)
+RESEND_API_KEY=re_...
+FROM_EMAIL=PassReady <hello@your-sending-domain.com>
+TEST_EMAIL_ADDRESS=you@example.com
+
+npm run send
+```
+
+Leads without an email on file are sent to `TEST_EMAIL_ADDRESS` so you can test safely.
 
 ## Config
 
