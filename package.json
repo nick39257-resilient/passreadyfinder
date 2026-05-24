@@ -9,6 +9,7 @@
     "draft": "tsx src/cli/draft.ts",
     "review": "tsx src/server/app.ts",
     "send": "tsx src/cli/send.ts",
+    "enrich": "npx tsx src/engine/enricher.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
