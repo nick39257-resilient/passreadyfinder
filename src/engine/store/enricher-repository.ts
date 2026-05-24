@@ -2,15 +2,18 @@ import { getDb } from "./db.js";
 
 export interface LeadNeedingPhone {
   id: number;
+  fsa_id: number;
   business_name: string;
   postcode: string;
   address: string;
+  latitude: number;
+  longitude: number;
 }
 
 export async function getLeadsNeedingPhone(): Promise<LeadNeedingPhone[]> {
   const db = getDb();
   const result = await db.execute(`
-    SELECT id, business_name, postcode, address
+    SELECT id, fsa_id, business_name, postcode, address, latitude, longitude
     FROM leads
     WHERE phone IS NULL
     ORDER BY lead_score DESC
