@@ -240,15 +240,15 @@ export async function createApp(options?: {
   });
 
   if (options?.serveStatic) {
-    app.use(express.static(publicDir));
+    app.get("/", (_req, res) => {
+      res.sendFile(path.join(publicDir, "control.html"));
+    });
 
     app.get("/review", (_req, res) => {
       res.sendFile(path.join(publicDir, "review.html"));
     });
 
-    app.get("/", (_req, res) => {
-      res.sendFile(path.join(publicDir, "control.html"));
-    });
+    app.use(express.static(publicDir, { index: false }));
   }
 
   return app;
