@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>PassReady — Control Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .stat-card { min-width: 0; }
+      .pulse-dot { animation: pulse 1.5s ease-in-out infinite; }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+    </style>
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+    <div class="mx-auto flex min-h-screen max-w-lg flex-col px-4 pb-10 pt-6">
+      <header class="mb-5">
+        <p class="text-sm font-medium uppercase tracking-wider text-emerald-400">PassReady</p>
+        <h1 class="text-2xl font-bold">Control panel</h1>
+        <p class="mt-1 text-sm text-slate-400">Runs on server — safe to close this tab</p>
+      </header>
+
+      <section id="stats" class="mb-6 grid grid-cols-5 gap-2"></section>
+
+      <section class="mb-6 flex flex-col gap-3">
+        <button
+          id="btn-find"
+          type="button"
+          class="min-h-[52px] rounded-2xl bg-sky-600 text-lg font-bold text-white shadow-lg shadow-sky-900/30 active:scale-[0.98] disabled:opacity-50"
+        >
+          Find Leads
+        </button>
+        <button
+          id="btn-draft"
+          type="button"
+          class="min-h-[52px] rounded-2xl bg-violet-600 text-lg font-bold text-white shadow-lg shadow-violet-900/30 active:scale-[0.98] disabled:opacity-50"
+        >
+          Draft Messages
+        </button>
+        <button
+          id="btn-send"
+          type="button"
+          class="min-h-[52px] rounded-2xl bg-amber-600 text-lg font-bold text-white shadow-lg shadow-amber-900/30 active:scale-[0.98] disabled:opacity-50"
+        >
+          Send Approved
+        </button>
+      </section>
+
+      <section class="mb-6 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+        <div class="mb-2 flex items-center justify-between">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-400">Job status</h2>
+          <span id="job-indicator" class="hidden h-2 w-2 rounded-full bg-emerald-400 pulse-dot"></span>
+        </div>
+        <p id="job-status" class="text-sm text-slate-300">Idle</p>
+        <pre id="job-result" class="mt-2 hidden max-h-40 overflow-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-400"></pre>
+      </section>
+
+      <nav class="mt-auto flex flex-col gap-3 border-t border-slate-800 pt-6">
+        <a
+          href="/review"
+          class="flex min-h-[48px] items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 font-semibold text-emerald-400 active:scale-[0.98]"
+        >
+          Review drafts →
+        </a>
+      </nav>
+
+      <details class="mt-4 text-sm text-slate-500">
+        <summary class="cursor-pointer">API secret</summary>
+        <input
+          id="api-secret"
+          type="password"
+          placeholder="CONTROL_PANEL_SECRET"
+          class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/50"
+        />
+      </details>
+    </div>
+
+    <div
+      id="send-modal"
+      class="fixed inset-0 z-50 hidden items-end justify-center bg-black/70 p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        <h2 class="text-xl font-bold">Confirm send</h2>
+        <p id="send-modal-text" class="mt-3 text-slate-300"></p>
+        <div class="mt-6 grid grid-cols-2 gap-3">
+          <button
+            id="send-cancel"
+            type="button"
+            class="min-h-[52px] rounded-2xl bg-slate-800 font-bold active:scale-[0.98]"
+          >
+            Cancel
+          </button>
+          <button
+            id="send-confirm"
+            type="button"
+            class="min-h-[52px] rounded-2xl bg-amber-600 font-bold text-white active:scale-[0.98]"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const STAT_LABELS = {
+        new: "New",
+        drafted: "Drafted",
+        approved: "Approved",
+        contacted: "Sent",
+        opted_in: "Opted in",
+      };
+
+      let pollTimer = null;
+      let activeJobId = null;
+      let sendPreview = null;
+
+      const statsEl = document.getElementById("stats");
+      const jobStatusEl = document.getElementById("job-status");
+      const jobResultEl = document.getElementById("job-result");
+      const jobIndicatorEl = document.getElementById("job-indicator");
+      const sendModal = document.getElementById("send-modal");
+      const sendModalText = document.getElementById("send-modal-text");
+      const secretInput = document.getElementById("api-secret");
+
+      function getAuthHeaders() {
+        const secret = secretInput?.value?.trim() || sessionStorage.getItem("control_secret") || "";
+        if (secret) {
+          sessionStorage.setItem("control_secret", secret);
+          return { Authorization: `Bearer ${secret}` };
+        }
+        return {};
+      }
+
+      function jsonHeaders() {
+        return { "Content-Type": "application/json", ...getAuthHeaders() };
+      }
+
+      function setButtonsDisabled(disabled) {
+        ["btn-find", "btn-draft", "btn-send"].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.disabled = disabled;
+        });
+      }
+
+      function renderStats(counts) {
+        statsEl.innerHTML = Object.entries(STAT_LABELS)
+          .map(
+            ([key, label]) => `
+          <div class="stat-card rounded-xl border border-slate-800 bg-slate-900/60 px-2 py-3 text-center">
+            <p class="text-lg font-bold tabular-nums text-white">${counts[key] ?? 0}</p>
+            <p class="truncate text-[10px] font-medium uppercase tracking-wide text-slate-500">${label}</p>
+          </div>`,
+          )
+          .join("");
+      }
+
+      async function loadStats() {
+        try {
+          const res = await fetch("/api/stats");
+          if (!res.ok) throw new Error("Stats failed");
+          renderStats(await res.json());
+        } catch {
+          statsEl.innerHTML = `<p class="col-span-5 text-center text-sm text-red-400">Could not load stats</p>`;
+        }
+      }
+
+      function showJob(text, running) {
+        jobStatusEl.textContent = text;
+        jobIndicatorEl.classList.toggle("hidden", !running);
+      }
+
+      function showJobResult(obj) {
+        if (!obj) {
+          jobResultEl.classList.add("hidden");
+          return;
+        }
+        jobResultEl.textContent = JSON.stringify(obj, null, 2);
+        jobResultEl.classList.remove("hidden");
+      }
+
+      function stopPolling() {
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      async function pollJob(jobId) {
+        activeJobId = jobId;
+        setButtonsDisabled(true);
+        showJob("Starting…", true);
+        showJobResult(null);
+
+        const tick = async () => {
+          try {
+            const res = await fetch(`/api/jobs/${jobId}`);
+            if (!res.ok) throw new Error("Job poll failed");
+            const job = await res.json();
+
+            showJob(job.progress || job.status, job.status === "pending" || job.status === "running");
+
+            if (job.status === "done") {
+              stopPolling();
+              showJob("Complete ✓", false);
+              showJobResult(job.result);
+              setButtonsDisabled(false);
+              activeJobId = null;
+              await loadStats();
+            } else if (job.status === "failed") {
+              stopPolling();
+              showJob(`Failed: ${job.error || "unknown error"}`, false);
+              setButtonsDisabled(false);
+              activeJobId = null;
+            }
+          } catch (err) {
+            stopPolling();
+            showJob(err.message || "Poll error", false);
+            setButtonsDisabled(false);
+            activeJobId = null;
+          }
+        };
+
+        await tick();
+        pollTimer = setInterval(tick, 2500);
+      }
+
+      async function startJob(url, options = {}) {
+        if (activeJobId) return;
+        setButtonsDisabled(true);
+        showJob("Queuing…", true);
+
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: jsonHeaders(),
+            ...options,
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(data.error || `Request failed (${res.status})`);
+          }
+          await pollJob(data.jobId);
+        } catch (err) {
+          showJob(err.message || "Could not start job", false);
+          setButtonsDisabled(false);
+        }
+      }
+
+      function openSendModal(count) {
+        sendModalText.textContent = `About to send ${count} email${count === 1 ? "" : "s"}. Confirm?`;
+        sendModal.classList.remove("hidden");
+        sendModal.classList.add("flex");
+      }
+
+      function closeSendModal() {
+        sendModal.classList.add("hidden");
+        sendModal.classList.remove("flex");
+        sendPreview = null;
+      }
+
+      document.getElementById("btn-find").addEventListener("click", () => {
+        startJob("/api/jobs/find");
+      });
+
+      document.getElementById("btn-draft").addEventListener("click", () => {
+        startJob("/api/jobs/draft");
+      });
+
+      document.getElementById("btn-send").addEventListener("click", async () => {
+        if (activeJobId) return;
+
+        try {
+          const res = await fetch("/api/send/preview", { headers: getAuthHeaders() });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "Preview failed");
+
+          if (data.approvedCount === 0) {
+            showJob("No approved leads to send", false);
+            return;
+          }
+
+          sendPreview = data;
+          openSendModal(data.approvedCount);
+        } catch (err) {
+          showJob(err.message || "Preview failed", false);
+        }
+      });
+
+      document.getElementById("send-cancel").addEventListener("click", closeSendModal);
+
+      document.getElementById("send-confirm").addEventListener("click", async () => {
+        if (!sendPreview?.confirmToken) return;
+        closeSendModal();
+        await startJob("/api/jobs/send", {
+          body: JSON.stringify({
+            confirmToken: sendPreview.confirmToken,
+            expectedCount: sendPreview.approvedCount,
+          }),
+        });
+      });
+
+      sendModal.addEventListener("click", (e) => {
+        if (e.target === sendModal) closeSendModal();
+      });
+
+      const savedSecret = sessionStorage.getItem("control_secret");
+      if (savedSecret && secretInput) secretInput.value = savedSecret;
+
+      loadStats();
+      setInterval(loadStats, 15000);
+    </script>
+  </body>
+</html>

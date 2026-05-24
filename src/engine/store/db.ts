@@ -8,7 +8,8 @@ export function getDb(): Client {
     return client;
   }
 
-  const localPath = process.env.VERCEL ? undefined : process.env.TURSO_LOCAL_PATH;
+  const useRemoteOnly = process.env.VERCEL || process.env.RENDER;
+  const localPath = useRemoteOnly ? undefined : process.env.TURSO_LOCAL_PATH;
   const url = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
 
@@ -68,6 +69,9 @@ export async function runMigrations(): Promise<void> {
 
   const { runOutreachMigrations } = await import("./outreach-migrations.js");
   await runOutreachMigrations();
+
+  const { runJobsMigrations } = await import("./jobs-repository.js");
+  await runJobsMigrations();
 }
 
 export async function closeDb(): Promise<void> {

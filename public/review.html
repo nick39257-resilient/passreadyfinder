@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>PassReady — Review Drafts</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      textarea { font-size: 16px; } /* prevents iOS zoom on focus */
+      .card-enter { animation: slideIn 0.25s ease-out; }
+      @keyframes slideIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    </style>
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+    <div class="mx-auto flex min-h-screen max-w-lg flex-col px-4 pb-8 pt-6 safe-area-inset">
+      <header class="mb-6">
+        <a href="/" class="mb-3 inline-block text-sm text-slate-500 active:text-slate-300">← Control panel</a>
+        <p class="text-sm font-medium uppercase tracking-wider text-emerald-400">PassReady</p>
+        <h1 class="text-2xl font-bold">Review drafts</h1>
+        <p id="queue-count" class="mt-1 text-slate-400"></p>
+      </header>
+
+      <main id="app" class="flex flex-1 flex-col"></main>
+    </div>
+
+    <script>
+      let drafts = [];
+      let currentIndex = 0;
+      let busy = false;
+
+      const app = document.getElementById("app");
+      const queueCount = document.getElementById("queue-count");
+
+      function ratingBadge(rating) {
+        if (rating === null || rating === undefined) return "Unrated";
+        return `${rating}★ FSA`;
+      }
+
+      function ratingColor(rating) {
+        if (rating === 0 || rating === 1) return "bg-red-500/20 text-red-300 ring-red-500/40";
+        if (rating === 2) return "bg-amber-500/20 text-amber-300 ring-amber-500/40";
+        return "bg-slate-500/20 text-slate-300 ring-slate-500/40";
+      }
+
+      function renderEmpty(message, sub) {
+        app.innerHTML = `
+          <div class="flex flex-1 flex-col items-center justify-center text-center">
+            <div class="mb-4 text-5xl">✓</div>
+            <p class="text-xl font-semibold">${message}</p>
+            ${sub ? `<p class="mt-2 text-slate-400">${sub}</p>` : ""}
+          </div>`;
+        queueCount.textContent = "Queue empty";
+      }
+
+      function renderError(message) {
+        app.innerHTML = `
+          <div class="rounded-2xl border border-red-500/40 bg-red-950/40 p-6 text-center">
+            <p class="font-semibold text-red-300">${message}</p>
+            <button onclick="loadDrafts()" class="mt-4 rounded-xl bg-slate-800 px-6 py-3 font-medium active:scale-95">
+              Retry
+            </button>
+          </div>`;
+      }
+
+      function renderCard() {
+        if (currentIndex >= drafts.length) {
+          renderEmpty("All caught up!", "No drafts waiting for review.");
+          return;
+        }
+
+        const lead = drafts[currentIndex];
+        const remaining = drafts.length - currentIndex;
+        queueCount.textContent = `${remaining} draft${remaining === 1 ? "" : "s"} in queue`;
+
+        app.innerHTML = `
+          <article class="card-enter flex flex-1 flex-col rounded-3xl border border-slate-800 bg-slate-900/80 shadow-2xl shadow-black/40">
+            <div class="border-b border-slate-800 p-5">
+              <div class="flex items-start justify-between gap-3">
+                <h2 class="text-xl font-bold leading-tight">${escapeHtml(lead.business_name)}</h2>
+                <span class="shrink-0 rounded-full px-3 py-1 text-sm font-semibold ring-1 ${ratingColor(lead.fsa_rating)}">
+                  ${ratingBadge(lead.fsa_rating)}
+                </span>
+              </div>
+              <p class="mt-2 text-sm text-slate-400">${escapeHtml(lead.postcode)} · score ${lead.lead_score}</p>
+            </div>
+
+            <div class="flex flex-1 flex-col p-5">
+              <label class="mb-2 text-sm font-medium text-slate-400" for="draft-text">Draft message</label>
+              <textarea
+                id="draft-text"
+                class="min-h-[220px] flex-1 resize-none rounded-2xl border border-slate-700 bg-slate-950 p-4 leading-relaxed text-slate-100 outline-none ring-emerald-500/50 focus:ring-2"
+              >${escapeHtml(lead.draft_message)}</textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 p-5 pt-0">
+              <button
+                id="reject-btn"
+                type="button"
+                class="min-h-[56px] rounded-2xl bg-red-600 text-lg font-bold text-white shadow-lg shadow-red-900/30 active:scale-[0.98] disabled:opacity-50"
+              >
+                Reject
+              </button>
+              <button
+                id="approve-btn"
+                type="button"
+                class="min-h-[56px] rounded-2xl bg-emerald-600 text-lg font-bold text-white shadow-lg shadow-emerald-900/30 active:scale-[0.98] disabled:opacity-50"
+              >
+                Approve
+              </button>
+            </div>
+          </article>`;
+
+        document.getElementById("reject-btn").addEventListener("click", () => act("reject"));
+        document.getElementById("approve-btn").addEventListener("click", () => act("approve"));
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      async function act(type) {
+        if (busy || currentIndex >= drafts.length) return;
+        busy = true;
+
+        const lead = drafts[currentIndex];
+        const rejectBtn = document.getElementById("reject-btn");
+        const approveBtn = document.getElementById("approve-btn");
+        if (rejectBtn) rejectBtn.disabled = true;
+        if (approveBtn) approveBtn.disabled = true;
+
+        try {
+          const url =
+            type === "approve"
+              ? `/api/drafts/${lead.id}/approve`
+              : `/api/drafts/${lead.id}/reject`;
+
+          const options =
+            type === "approve"
+              ? {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    draft_message: document.getElementById("draft-text").value,
+                  }),
+                }
+              : { method: "POST" };
+
+          const res = await fetch(url, options);
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || `Request failed (${res.status})`);
+          }
+
+          currentIndex++;
+          renderCard();
+        } catch (err) {
+          alert(err.message || "Something went wrong");
+          if (rejectBtn) rejectBtn.disabled = false;
+          if (approveBtn) approveBtn.disabled = false;
+        } finally {
+          busy = false;
+        }
+      }
+
+      async function loadDrafts() {
+        app.innerHTML = `<p class="text-center text-slate-400 py-20">Loading drafts…</p>`;
+        try {
+          const res = await fetch("/api/drafts");
+          if (!res.ok) throw new Error("Failed to load drafts");
+          drafts = await res.json();
+          currentIndex = 0;
+          if (drafts.length === 0) {
+            renderEmpty("No drafts to review", "Use Draft Messages on the control panel.");
+          } else {
+            renderCard();
+          }
+        } catch (err) {
+          renderError(err.message || "Could not load drafts");
+        }
+      }
+
+      loadDrafts();
+    </script>
+  </body>
+</html>

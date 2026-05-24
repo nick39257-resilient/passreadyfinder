@@ -1,14 +1,15 @@
 import "dotenv/config";
 import { closeDb } from "../engine/store/db.js";
-import { createReviewApp } from "./createApp.js";
+import { createApp } from "./createApp.js";
 
-const PORT = Number(process.env.REVIEW_PORT ?? 3000);
+const PORT = Number(process.env.PORT ?? process.env.REVIEW_PORT ?? 3000);
 
 async function start(): Promise<void> {
-  const app = await createReviewApp({ serveStatic: true });
-  app.listen(PORT, () => {
-    const host = process.env.REVIEW_HOST ?? "localhost";
-    console.log(`Review dashboard → http://${host}:${PORT}`);
+  const app = await createApp({ serveStatic: true });
+  app.listen(PORT, "0.0.0.0", () => {
+    const host = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${PORT}`;
+    console.log(`PassReady control panel → ${host}/`);
+    console.log(`Review drafts → ${host}/review`);
   });
 }
 
@@ -18,6 +19,11 @@ start().catch((err) => {
 });
 
 process.on("SIGINT", async () => {
+  await closeDb();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
   await closeDb();
   process.exit(0);
 });
