@@ -75,7 +75,12 @@ export const productConfig = {
     /** Leads to draft per `npm run draft` run */
     draftBatchSize: 5,
     /** Auto-pause sending if bounce rate exceeds this (0–1) over recent sends */
-    bounceRatePauseThreshold: 0.05,
+    bounceRatePauseThreshold: 0.02,
+    /** Max outreach emails per lead before moving to nurture */
+    maxTouchesPerLead: 4,
+    /** Min/max delay between individual sends (ms) */
+    sendDelayMinMs: 5 * 60 * 1000,
+    sendDelayMaxMs: 15 * 60 * 1000,
     /** Window size for bounce-rate calculation */
     bounceRateWindowSize: 50,
     /** Email tone guidelines passed to Gemini */
@@ -85,7 +90,7 @@ export const productConfig = {
       "Never pretend to be an EHO officer or any official body",
       "Be openly from PassReady — a £29.99/month app for UK food businesses",
       "One clear call-to-action: tap the WhatsApp link to see how it works",
-      "Keep it short — under 150 words",
+      "Keep it short — under 125 words",
     ],
   },
 } as const;

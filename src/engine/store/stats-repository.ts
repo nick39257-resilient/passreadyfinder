@@ -6,6 +6,7 @@ export interface LeadStatusCounts {
   approved: number;
   contacted: number;
   opted_in: number;
+  nurture: number;
 }
 
 const TRACKED_STATUSES = [
@@ -14,6 +15,7 @@ const TRACKED_STATUSES = [
   "approved",
   "contacted",
   "opted_in",
+  "nurture",
 ] as const;
 
 export async function getLeadStatusCounts(): Promise<LeadStatusCounts> {
@@ -30,6 +32,7 @@ export async function getLeadStatusCounts(): Promise<LeadStatusCounts> {
     approved: 0,
     contacted: 0,
     opted_in: 0,
+    nurture: 0,
   };
 
   for (const row of result.rows) {

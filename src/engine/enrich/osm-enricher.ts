@@ -1,19 +1,9 @@
 import { productConfig } from "../../config/product.config.js";
 import type { OsmEnrichmentResult, DeliveryAppStatus } from "../../types/lead.js";
+import { overpassResponseSchema } from "../../validation/osm.schemas.js";
 import { getOsmCache, setOsmCache } from "../store/leads-repository.js";
 
-interface OverpassElement {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
-
-interface OverpassResponse {
-  elements: OverpassElement[];
-}
+type OverpassElement = ReturnType<typeof overpassResponseSchema.parse>["elements"][number];
 
 function escapeOverpassRegex(value: string): string {
   return value.replace(/[\\.*+?^${}()|[\]\\]/g, "\\$&");
@@ -88,7 +78,7 @@ function buildOverpassQuery(businessName: string, lat: number, lon: number): str
   `.trim();
 }
 
-async function queryOverpass(query: string): Promise<OverpassResponse> {
+async function queryOverpass(query: string): Promise<ReturnType<typeof overpassResponseSchema.parse>> {
   const response = await fetch(productConfig.osm.overpassUrl, {
     method: "POST",
     headers: {
@@ -104,7 +94,8 @@ async function queryOverpass(query: string): Promise<OverpassResponse> {
     throw new Error(`Overpass API error ${response.status}: ${text.slice(0, 200)}`);
   }
 
-  return response.json() as Promise<OverpassResponse>;
+  const json: unknown = await response.json();
+  return overpassResponseSchema.parse(json);
 }
 
 function pickBestMatch(

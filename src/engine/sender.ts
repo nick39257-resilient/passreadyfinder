@@ -1,4 +1,10 @@
 import { Resend } from "resend";
+import { productConfig } from "../config/product.config.js";
+import {
+  formatDelayMinutes,
+  getDeliverabilityStatus,
+  randomSendDelayMs,
+} from "./deliverability.js";
 import { runMigrations } from "./store/db.js";
 import {
   getApprovedLeads,
@@ -6,7 +12,7 @@ import {
   type ApprovedLead,
 } from "./store/sender-repository.js";
 
-const EMAIL_SUBJECT = "PassReady / Upcoming FSA Inspection";
+const EMAIL_SUBJECT = "passready / upcoming fsa inspection";
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -43,11 +49,25 @@ export interface SendRunResult {
   sent: number;
   skipped: number;
   errors: { leadId: number; businessName: string; error: string }[];
+  sendLocked?: boolean;
 }
 
-/** Sweep approved leads and send via Resend. Marks each as 'contacted' on success. */
-export async function runSender(): Promise<SendRunResult> {
+export type SendProgressCallback = (message: string) => void | Promise<void>;
+
+/** Sweep approved leads and send via Resend. Marks each as contacted or nurture on success. */
+export async function runSender(onProgress?: SendProgressCallback): Promise<SendRunResult> {
   await runMigrations();
+
+  const deliverability = await getDeliverabilityStatus();
+  if (deliverability.sendLocked) {
+    console.log(`Sending locked: ${deliverability.reason}`);
+    return {
+      sent: 0,
+      skipped: 0,
+      errors: [],
+      sendLocked: true,
+    };
+  }
 
   const apiKey = requireEnv("RESEND_API_KEY");
   const fromEmail = requireEnv("FROM_EMAIL");
@@ -62,22 +82,26 @@ export async function runSender(): Promise<SendRunResult> {
     return result;
   }
 
-  console.log(`Sending ${leads.length} approved lead(s) via Resend…`);
-  console.log(`From: ${fromEmail}`);
+  const report = async (msg: string) => {
+    console.log(msg);
+    await onProgress?.(msg);
+  };
+
+  await report(`Sending ${leads.length} approved lead(s) via Resend…`);
+  await report(`From: ${fromEmail}`);
   if (testEmail) {
-    console.log(`Test fallback: ${testEmail} (used when lead has no email)\n`);
-  } else {
-    console.log("Warning: TEST_EMAIL_ADDRESS not set — leads without email will fail.\n");
+    await report(`Test fallback: ${testEmail} (used when lead has no email)\n`);
   }
 
-  for (const lead of leads) {
+  for (let i = 0; i < leads.length; i++) {
+    const lead = leads[i];
     try {
       const { to, usingTestFallback } = resolveRecipient(lead);
 
       if (usingTestFallback) {
-        console.log(`→ ${lead.business_name}: sending to TEST ${to} (no lead email on file)`);
+        await report(`→ ${lead.business_name}: TEST ${to}`);
       } else {
-        console.log(`→ ${lead.business_name}: sending to ${to}`);
+        await report(`→ ${lead.business_name}: ${to}`);
       }
 
       const { data, error } = await resend.emails.send({
@@ -97,7 +121,13 @@ export async function runSender(): Promise<SendRunResult> {
 
       await markLeadContacted(lead.id, data.id);
       result.sent++;
-      console.log(`  ✓ sent (Resend id: ${data.id})\n`);
+      await report(`  ✓ sent (Resend id: ${data.id})\n`);
+
+      if (i < leads.length - 1) {
+        const delayMs = randomSendDelayMs();
+        await report(`  Waiting ${formatDelayMinutes(delayMs)} before next send (human pacing)…`);
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       result.errors.push({
@@ -105,7 +135,7 @@ export async function runSender(): Promise<SendRunResult> {
         businessName: lead.business_name,
         error: message,
       });
-      console.error(`  ✗ ${lead.business_name}: ${message}\n`);
+      await report(`  ✗ ${lead.business_name}: ${message}\n`);
     }
   }
 

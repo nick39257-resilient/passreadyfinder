@@ -22,7 +22,34 @@
         <p class="mt-1 text-sm text-slate-400">Runs on server — safe to close this tab</p>
       </header>
 
-      <section id="stats" class="mb-6 grid grid-cols-5 gap-2"></section>
+      <section id="stats" class="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-6"></section>
+
+      <p id="deliverability-banner" class="mb-4 hidden rounded-xl border border-amber-500/40 bg-amber-950/40 px-3 py-2 text-sm text-amber-200"></p>
+
+      <section class="mb-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+        <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Targeting</h2>
+        <label class="mb-3 block">
+          <span class="mb-1 block text-xs text-slate-500">Area (local authority)</span>
+          <input
+            id="filter-area"
+            type="text"
+            placeholder="Preston"
+            class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-base text-slate-100 outline-none focus:ring-2 focus:ring-sky-500/50"
+          />
+        </label>
+        <label class="block">
+          <span class="mb-1 block text-xs text-slate-500">FSA rating</span>
+          <select
+            id="filter-rating"
+            class="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-base text-slate-100 outline-none focus:ring-2 focus:ring-sky-500/50"
+          >
+            <option value="2">2 stars</option>
+            <option value="3">3 stars</option>
+            <option value="4">4 stars</option>
+            <option value="5">5 stars</option>
+          </select>
+        </label>
+      </section>
 
       <section class="mb-6 flex flex-col gap-3">
         <button
@@ -106,19 +133,28 @@
     </div>
 
     <script>
+      const STORAGE_AREA = "passready_area";
+      const STORAGE_RATING = "passready_rating";
+
       const STAT_LABELS = {
         new: "New",
         drafted: "Drafted",
         approved: "Approved",
         contacted: "Sent",
         opted_in: "Opted in",
+        nurture: "Nurture",
       };
 
       let pollTimer = null;
       let activeJobId = null;
       let sendPreview = null;
+      let sendLocked = false;
 
       const statsEl = document.getElementById("stats");
+      const deliverabilityBanner = document.getElementById("deliverability-banner");
+      const areaInput = document.getElementById("filter-area");
+      const ratingSelect = document.getElementById("filter-rating");
+      const btnSend = document.getElementById("btn-send");
       const jobStatusEl = document.getElementById("job-status");
       const jobResultEl = document.getElementById("job-result");
       const jobIndicatorEl = document.getElementById("job-indicator");
@@ -139,11 +175,46 @@
         return { "Content-Type": "application/json", ...getAuthHeaders() };
       }
 
+      function getFilters() {
+        return {
+          area: areaInput?.value?.trim() || "Preston",
+          targetRating: Number(ratingSelect?.value || 2),
+        };
+      }
+
+      function saveFilters() {
+        const f = getFilters();
+        localStorage.setItem(STORAGE_AREA, f.area);
+        localStorage.setItem(STORAGE_RATING, String(f.targetRating));
+      }
+
+      function loadFilters() {
+        const savedArea = localStorage.getItem(STORAGE_AREA);
+        const savedRating = localStorage.getItem(STORAGE_RATING);
+        if (savedArea && areaInput) areaInput.value = savedArea;
+        if (savedRating && ratingSelect) ratingSelect.value = savedRating;
+      }
+
+      function applyDeliverability(deliverability) {
+        sendLocked = Boolean(deliverability?.sendLocked);
+        if (btnSend) {
+          btnSend.disabled = sendLocked;
+          btnSend.title = sendLocked ? deliverability?.reason || "Send locked" : "";
+        }
+        if (deliverability?.sendLocked && deliverabilityBanner) {
+          deliverabilityBanner.textContent = deliverability.reason || "Send locked due to bounce rate";
+          deliverabilityBanner.classList.remove("hidden");
+        } else if (deliverabilityBanner) {
+          deliverabilityBanner.classList.add("hidden");
+        }
+      }
+
       function setButtonsDisabled(disabled) {
-        ["btn-find", "btn-draft", "btn-send"].forEach((id) => {
+        ["btn-find", "btn-draft"].forEach((id) => {
           const el = document.getElementById(id);
           if (el) el.disabled = disabled;
         });
+        if (btnSend) btnSend.disabled = disabled || sendLocked;
       }
 
       function renderStats(counts) {
@@ -162,9 +233,11 @@
         try {
           const res = await fetch("/api/stats");
           if (!res.ok) throw new Error("Stats failed");
-          renderStats(await res.json());
+          const data = await res.json();
+          applyDeliverability(data.deliverability);
+          renderStats(data);
         } catch {
-          statsEl.innerHTML = `<p class="col-span-5 text-center text-sm text-red-400">Could not load stats</p>`;
+          statsEl.innerHTML = `<p class="col-span-3 text-center text-sm text-red-400 sm:col-span-6">Could not load stats</p>`;
         }
       }
 
@@ -262,21 +335,42 @@
         sendPreview = null;
       }
 
+      areaInput?.addEventListener("change", saveFilters);
+      ratingSelect?.addEventListener("change", saveFilters);
+
       document.getElementById("btn-find").addEventListener("click", () => {
-        startJob("/api/jobs/find");
+        saveFilters();
+        const f = getFilters();
+        if (!f.area) {
+          showJob("Enter an area (local authority name)", false);
+          return;
+        }
+        startJob("/api/jobs/find", {
+          body: JSON.stringify({ area: f.area, targetRating: f.targetRating }),
+        });
       });
 
       document.getElementById("btn-draft").addEventListener("click", () => {
-        startJob("/api/jobs/draft");
+        saveFilters();
+        const f = getFilters();
+        startJob("/api/jobs/draft", {
+          body: JSON.stringify({ targetRating: f.targetRating }),
+        });
       });
 
       document.getElementById("btn-send").addEventListener("click", async () => {
-        if (activeJobId) return;
+        if (activeJobId || sendLocked) return;
 
         try {
           const res = await fetch("/api/send/preview", { headers: getAuthHeaders() });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || "Preview failed");
+
+          if (data.sendLocked) {
+            applyDeliverability({ sendLocked: true, reason: data.reason });
+            showJob(data.reason || "Send locked (bounce rate)", false);
+            return;
+          }
 
           if (data.approvedCount === 0) {
             showJob("No approved leads to send", false);
@@ -310,6 +404,7 @@
       const savedSecret = sessionStorage.getItem("control_secret");
       if (savedSecret && secretInput) secretInput.value = savedSecret;
 
+      loadFilters();
       loadStats();
       setInterval(loadStats, 15000);
     </script>

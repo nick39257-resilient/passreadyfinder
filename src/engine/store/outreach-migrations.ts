@@ -7,6 +7,7 @@ const LEAD_PHASE_B_COLUMNS = [
   "unsubscribe_token TEXT",
   "email TEXT",
   "draft_message TEXT",
+  "touch_count INTEGER NOT NULL DEFAULT 0",
 ] as const;
 
 async function columnExists(table: string, column: string): Promise<boolean> {

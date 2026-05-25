@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import { productConfig } from "../config/product.config.js";
+import type { DraftJobParams, TargetRating } from "../types/segmentation.js";
+import { geminiChatCompletionSchema } from "../validation/gemini.schemas.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
 
@@ -30,7 +32,7 @@ export function buildWaMeLink(businessName: string): string {
 }
 
 /** Best-effort city from address; falls back to configured area name */
-export function extractCity(lead: LeadForDraft): string {
+export function extractCity(lead: LeadForDraft, areaFallback?: string): string {
   const parts = lead.address
     .split(",")
     .map((s) => s.trim())
@@ -44,6 +46,10 @@ export function extractCity(lead: LeadForDraft): string {
     if (parts.length >= 3) {
       return parts[parts.length - 2];
     }
+  }
+
+  if (areaFallback?.trim()) {
+    return areaFallback.trim();
   }
 
   const area = productConfig.area;
@@ -81,12 +87,26 @@ function logLlmConfig(): void {
   console.log(`API key: ${process.env.OPENAI_API_KEY ? "set" : "missing"}\n`);
 }
 
-function buildSystemPrompt(waMeLink: string): string {
+function ratingToneGuidance(rating: number | null): string {
+  if (rating === 2) {
+    return "Tone: recovery and compliance-focused. They need practical help getting inspection-ready without shame.";
+  }
+  if (rating === 3) {
+    return "Tone: growth and habit-focused. Emphasize building consistent daily routines that stick.";
+  }
+  if (rating === 4 || rating === 5) {
+    return "Tone: efficiency and time-saving. They are doing well—focus on saving manager time and simplifying paperwork.";
+  }
+  return "Tone: supportive ally. Focus on being ready for their next inspection.";
+}
+
+function buildSystemPrompt(waMeLink: string, rating: number | null): string {
   return [
-    "You are drafting a short, casual, text-based email to a takeaway owner.",
-    "Acknowledge they might be stressed about their upcoming FSA inspection because of their recent star score. Be an ally, not an accuser.",
-    "Pitch 'PassReady'—a digital EHO compliance tool that works in English, Urdu, Bengali, and Polish.",
-    "Do not be overly formal. Keep it to 4 sentences max.",
+    "You are drafting a short, casual, text-based email to a UK takeaway owner.",
+    ratingToneGuidance(rating),
+    "Pitch PassReady—a digital EHO compliance tool (English, Urdu, Bengali, Polish). Be an ally, never accusatory.",
+    "Maximum 125 words. No images. No attachments. Plain, internal-style tone.",
+    ...productConfig.outreach.pitchGuidelines,
     `End the message with this exact link: ${waMeLink}`,
     "Do not add any other links or calls-to-action.",
   ].join("\n");
@@ -106,18 +126,30 @@ function buildUserPrompt(lead: LeadForDraft, city: string, waMeLink: string): st
 
 export async function fetchLeadsNeedingDraft(
   limit = productConfig.outreach.draftBatchSize,
+  targetRating?: TargetRating,
 ): Promise<LeadForDraft[]> {
   const db = getDb();
-  const result = await db.execute({
-    sql: `
-      SELECT id, business_name, address, postcode, fsa_rating
-      FROM leads
-      WHERE draft_message IS NULL
-      ORDER BY lead_score DESC
-      LIMIT ?
-    `,
-    args: [limit],
-  });
+  const result = targetRating
+    ? await db.execute({
+        sql: `
+          SELECT id, business_name, address, postcode, fsa_rating
+          FROM leads
+          WHERE draft_message IS NULL AND fsa_rating = ?
+          ORDER BY lead_score DESC
+          LIMIT ?
+        `,
+        args: [targetRating, limit],
+      })
+    : await db.execute({
+        sql: `
+          SELECT id, business_name, address, postcode, fsa_rating
+          FROM leads
+          WHERE draft_message IS NULL
+          ORDER BY lead_score DESC
+          LIMIT ?
+        `,
+        args: [limit],
+      });
 
   return result.rows as unknown as LeadForDraft[];
 }
@@ -148,7 +180,7 @@ export async function generateDraftForLead(
       model: GEMINI_MODEL,
       temperature: 0.7,
       messages: [
-        { role: "system", content: buildSystemPrompt(waMeLink) },
+        { role: "system", content: buildSystemPrompt(waMeLink, lead.fsa_rating) },
         { role: "user", content: buildUserPrompt(lead, city, waMeLink) },
       ],
     });
@@ -161,7 +193,8 @@ export async function generateDraftForLead(
     throw err;
   }
 
-  const content = completion.choices[0]?.message?.content?.trim();
+  const parsed = geminiChatCompletionSchema.parse(completion);
+  const content = parsed.choices[0]?.message?.content?.trim();
   if (!content) {
     throw new Error(`LLM returned empty content for lead ${lead.id}`);
   }
@@ -176,10 +209,13 @@ export interface DraftRunResult {
 }
 
 /** Fetch top un-drafted leads, generate copy via LLM, save to draft_message. Does not send. */
-export async function runDrafter(): Promise<DraftRunResult> {
+export async function runDrafter(options?: DraftJobParams): Promise<DraftRunResult> {
   await runMigrations();
 
-  const leads = await fetchLeadsNeedingDraft();
+  const leads = await fetchLeadsNeedingDraft(
+    productConfig.outreach.draftBatchSize,
+    options?.targetRating,
+  );
   const result: DraftRunResult = { drafted: 0, skipped: 0, errors: [] };
 
   if (leads.length === 0) {

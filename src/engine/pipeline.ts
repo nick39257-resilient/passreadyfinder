@@ -1,4 +1,5 @@
 import { productConfig } from "../config/product.config.js";
+import type { FindJobParams } from "../types/segmentation.js";
 import {
   findEstablishments,
   resolveBusinessTypeIds,
@@ -23,8 +24,16 @@ export interface PipelineResult {
 
 export async function runFindPipeline(options?: {
   skipEnrichment?: boolean;
+  segmentation?: FindJobParams;
 }): Promise<PipelineResult> {
   await runMigrations();
+
+  const areaName =
+    options?.segmentation?.area ??
+    (productConfig.area.mode === "localAuthority"
+      ? productConfig.area.localAuthorityName
+      : "Preston");
+  const targetRating = options?.segmentation?.targetRating ?? 2;
 
   console.log("Resolving business type IDs from FSA /BusinessTypes…");
   const typeMap = await resolveBusinessTypeIds(productConfig.businessTypeNames);
@@ -33,15 +42,12 @@ export async function runFindPipeline(options?: {
     `  Types: ${productConfig.businessTypeNames.map((n) => `${n} (${typeMap.get(n)})`).join(", ")}`,
   );
 
-  const areaLabel =
-    productConfig.area.mode === "localAuthority"
-      ? productConfig.area.localAuthorityName
-      : `${productConfig.area.latitude},${productConfig.area.longitude} (${productConfig.area.radiusMetres}m)`;
-  console.log(`Finding establishments in ${areaLabel} rated 0–${productConfig.maxRating}…`);
+  console.log(`Finding establishments in ${areaName} with ${targetRating}★ FSA rating…`);
 
   const rawLeads = await findEstablishments({
     businessTypeIds,
-    maxRating: productConfig.maxRating,
+    localAuthorityName: areaName,
+    targetRating,
   });
   console.log(`  Found ${rawLeads.length} matching leads from FSA.`);
 

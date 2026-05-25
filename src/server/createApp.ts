@@ -17,6 +17,8 @@ import {
   countApprovedLeads,
   getLeadStatusCounts,
 } from "../engine/store/stats-repository.js";
+import { getDeliverabilityStatus } from "../engine/deliverability.js";
+import { parseArea, parseTargetRating } from "../types/segmentation.js";
 import { startJob } from "./job-runner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -62,10 +64,20 @@ export async function createApp(options?: {
   app.get("/api/stats", async (_req, res) => {
     try {
       const counts = await getLeadStatusCounts();
-      res.json(counts);
+      const deliverability = await getDeliverabilityStatus();
+      res.json({ ...counts, deliverability });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
+  app.get("/api/deliverability", async (_req, res) => {
+    try {
+      res.json(await getDeliverabilityStatus());
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch deliverability" });
     }
   });
 
@@ -102,9 +114,21 @@ export async function createApp(options?: {
     }
   });
 
-  app.post("/api/jobs/find", requireControlAuth, async (_req, res) => {
+  app.post("/api/jobs/find", requireControlAuth, async (req, res) => {
+    const area = parseArea(req.body?.area);
+    const targetRating = parseTargetRating(req.body?.targetRating);
+
+    if (!area) {
+      res.status(400).json({ error: "area is required (local authority name, e.g. Preston)" });
+      return;
+    }
+    if (!targetRating) {
+      res.status(400).json({ error: "targetRating must be 2, 3, 4, or 5" });
+      return;
+    }
+
     try {
-      const jobId = await createJob("find");
+      const jobId = await createJob("find", { area, targetRating });
       startJob(jobId, "find");
       res.status(202).json({ jobId });
     } catch (err) {
@@ -113,9 +137,12 @@ export async function createApp(options?: {
     }
   });
 
-  app.post("/api/jobs/draft", requireControlAuth, async (_req, res) => {
+  app.post("/api/jobs/draft", requireControlAuth, async (req, res) => {
+    const targetRating = parseTargetRating(req.body?.targetRating);
+    const params = targetRating ? { targetRating } : undefined;
+
     try {
-      const jobId = await createJob("draft");
+      const jobId = await createJob("draft", params);
       startJob(jobId, "draft");
       res.status(202).json({ jobId });
     } catch (err) {
@@ -126,14 +153,25 @@ export async function createApp(options?: {
 
   app.get("/api/send/preview", requireControlAuth, async (_req, res) => {
     try {
+      const deliverability = await getDeliverabilityStatus();
+      if (deliverability.sendLocked) {
+        res.json({
+          approvedCount: 0,
+          confirmToken: null,
+          sendLocked: true,
+          reason: deliverability.reason,
+        });
+        return;
+      }
+
       const approvedCount = await countApprovedLeads();
       if (approvedCount === 0) {
-        res.json({ approvedCount: 0, confirmToken: null });
+        res.json({ approvedCount: 0, confirmToken: null, sendLocked: false });
         return;
       }
 
       const confirmToken = await createSendConfirmToken(approvedCount);
-      res.json({ approvedCount, confirmToken });
+      res.json({ approvedCount, confirmToken, sendLocked: false });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to preview send" });
@@ -155,6 +193,12 @@ export async function createApp(options?: {
     }
 
     try {
+      const deliverability = await getDeliverabilityStatus();
+      if (deliverability.sendLocked) {
+        res.status(423).json({ error: deliverability.reason, sendLocked: true });
+        return;
+      }
+
       const currentCount = await countApprovedLeads();
       if (currentCount === 0) {
         res.status(400).json({ error: "No approved leads to send" });

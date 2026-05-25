@@ -1,11 +1,10 @@
-import type {
-  FsaAuthoritiesResponse,
-  FsaBusinessTypesResponse,
-  FsaEstablishment,
-  FsaEstablishmentsResponse,
-  RawLead,
-} from "../../types/fsa.js";
+import type { FsaEstablishment, RawLead } from "../../types/fsa.js";
 import { productConfig } from "../../config/product.config.js";
+import {
+  fsaAuthoritiesResponseSchema,
+  fsaBusinessTypesResponseSchema,
+  fsaEstablishmentsResponseSchema,
+} from "../../validation/fsa.schemas.js";
 
 const FSA_HEADERS = {
   "x-api-version": "2",
@@ -28,11 +27,17 @@ async function fsaFetch<T>(path: string, params?: Record<string, string | number
     const body = await response.text();
     throw new Error(`FSA API error ${response.status} for ${path}: ${body}`);
   }
-  return response.json() as Promise<T>;
+  const json: unknown = await response.json();
+  return json as T;
+}
+
+function parseFsaResponse<T>(schema: { parse: (data: unknown) => T }, data: unknown): T {
+  return schema.parse(data);
 }
 
 export async function resolveBusinessTypeIds(names: readonly string[]): Promise<Map<string, number>> {
-  const data = await fsaFetch<FsaBusinessTypesResponse>("/BusinessTypes");
+  const raw = await fsaFetch<unknown>("/BusinessTypes");
+  const data = parseFsaResponse(fsaBusinessTypesResponseSchema, raw);
   const map = new Map<string, number>();
   for (const name of names) {
     const match = data.businessTypes.find(
@@ -52,7 +57,8 @@ export async function resolveBusinessTypeIds(names: readonly string[]): Promise<
 }
 
 export async function resolveLocalAuthorityId(name: string): Promise<number> {
-  const data = await fsaFetch<FsaAuthoritiesResponse>("/Authorities/basic");
+  const raw = await fsaFetch<unknown>("/Authorities/basic");
+  const data = parseFsaResponse(fsaAuthoritiesResponseSchema, raw);
   const match = data.authorities.find((a) => a.Name.toLowerCase() === name.toLowerCase());
   if (!match) {
     throw new Error(`Local authority "${name}" not found in FSA /Authorities/basic`);
@@ -96,12 +102,13 @@ function establishmentToRawLead(e: FsaEstablishment): RawLead {
 async function fetchEstablishmentsPage(
   params: Record<string, string | number>,
   pageNumber: number,
-): Promise<FsaEstablishmentsResponse> {
-  return fsaFetch<FsaEstablishmentsResponse>("/Establishments", {
+): Promise<ReturnType<typeof fsaEstablishmentsResponseSchema.parse>> {
+  const raw = await fsaFetch<unknown>("/Establishments", {
     ...params,
     pageNumber,
     pageSize: productConfig.fsa.pageSize,
   });
+  return parseFsaResponse(fsaEstablishmentsResponseSchema, raw);
 }
 
 async function fetchAllPages(params: Record<string, string | number>): Promise<FsaEstablishment[]> {
@@ -118,36 +125,23 @@ async function fetchAllPages(params: Record<string, string | number>): Promise<F
 
 export interface FinderOptions {
   businessTypeIds: number[];
-  maxRating: number;
+  localAuthorityName: string;
+  /** Exact FSA star rating to match (2, 3, 4, or 5) */
+  targetRating: number;
 }
 
 export async function findEstablishments(options: FinderOptions): Promise<RawLead[]> {
-  const { businessTypeIds, maxRating } = options;
-  const area = productConfig.area;
+  const { businessTypeIds, localAuthorityName, targetRating } = options;
   const seen = new Map<number, RawLead>();
+  const localAuthorityId = await resolveLocalAuthorityId(localAuthorityName);
 
   for (const businessTypeId of businessTypeIds) {
-    let params: Record<string, string | number>;
-
-    if (area.mode === "localAuthority") {
-      const localAuthorityId = await resolveLocalAuthorityId(area.localAuthorityName);
-      params = { localAuthorityId, businessTypeId };
-    } else if (area.mode === "radius") {
-      params = {
-        latitude: area.latitude,
-        longitude: area.longitude,
-        maxDistanceLimit: area.radiusMetres,
-        businessTypeId,
-      };
-    } else {
-      throw new Error("Invalid area config");
-    }
-
+    const params = { localAuthorityId, businessTypeId };
     const establishments = await fetchAllPages(params);
 
     for (const est of establishments) {
       const lead = establishmentToRawLead(est);
-      if (lead.fsaRating === null || lead.fsaRating > maxRating) {
+      if (lead.fsaRating !== targetRating) {
         continue;
       }
       seen.set(lead.fsaId, lead);

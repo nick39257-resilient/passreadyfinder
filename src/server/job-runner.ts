@@ -2,35 +2,53 @@ import { runFindPipeline } from "../engine/pipeline.js";
 import { runDrafter } from "../engine/drafter.js";
 import { runSender } from "../engine/sender.js";
 import {
+  getJob,
   updateJob,
   type JobType,
 } from "../engine/store/jobs-repository.js";
+import type { DraftJobParams, FindJobParams } from "../types/segmentation.js";
 
 async function runJobBody(
   jobId: string,
   type: JobType,
 ): Promise<unknown> {
+  const job = await getJob(jobId);
+  let params: unknown = null;
+  if (job?.params) {
+    try {
+      params = JSON.parse(job.params);
+    } catch {
+      params = null;
+    }
+  }
+
+  const onProgress = async (message: string) => {
+    await updateJob(jobId, { progress: message });
+  };
+
   switch (type) {
     case "find": {
       await updateJob(jobId, {
         status: "running",
         progress: "Finding FSA leads and enriching via OSM…",
       });
-      return runFindPipeline();
+      return runFindPipeline({
+        segmentation: params as FindJobParams | undefined,
+      });
     }
     case "draft": {
       await updateJob(jobId, {
         status: "running",
         progress: "Drafting messages with Gemini (may take several minutes)…",
       });
-      return runDrafter();
+      return runDrafter(params as DraftJobParams | undefined);
     }
     case "send": {
       await updateJob(jobId, {
         status: "running",
         progress: "Sending approved emails via Resend…",
       });
-      return runSender();
+      return runSender(onProgress);
     }
     default: {
       const _exhaustive: never = type;

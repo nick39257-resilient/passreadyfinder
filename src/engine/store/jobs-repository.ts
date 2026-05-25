@@ -11,11 +11,18 @@ export interface JobRecord {
   progress: string | null;
   result: string | null;
   error: string | null;
+  params: string | null;
   created_at: string;
   updated_at: string;
 }
 
 const CONFIRM_TTL_MS = 5 * 60 * 1000;
+
+async function jobsColumnExists(column: string): Promise<boolean> {
+  const db = getDb();
+  const result = await db.execute(`PRAGMA table_info(jobs)`);
+  return result.rows.some((row) => row.name === column);
+}
 
 export async function runJobsMigrations(): Promise<void> {
   const db = getDb();
@@ -28,6 +35,7 @@ export async function runJobsMigrations(): Promise<void> {
         progress TEXT,
         result TEXT,
         error TEXT,
+        params TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       )`,
@@ -41,17 +49,22 @@ export async function runJobsMigrations(): Promise<void> {
     ],
     "write",
   );
+
+  if (!(await jobsColumnExists("params"))) {
+    await db.execute(`ALTER TABLE jobs ADD COLUMN params TEXT`);
+  }
 }
 
-export async function createJob(type: JobType): Promise<string> {
+export async function createJob(type: JobType, params?: unknown): Promise<string> {
   const db = getDb();
   const id = randomUUID();
+  const paramsJson = params !== undefined ? JSON.stringify(params) : null;
   await db.execute({
     sql: `
-      INSERT INTO jobs (id, type, status, progress)
-      VALUES (?, ?, 'pending', 'Queued…')
+      INSERT INTO jobs (id, type, status, progress, params)
+      VALUES (?, ?, 'pending', 'Queued…', ?)
     `,
-    args: [id, type],
+    args: [id, type, paramsJson],
   });
   return id;
 }
