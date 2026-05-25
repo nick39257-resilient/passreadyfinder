@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { productConfig } from "../config/product.config.js";
 import type { DraftJobParams, TargetRating } from "../types/segmentation.js";
+import { draftMessageSchema } from "../validation/draft.schemas.js";
 import { geminiChatCompletionSchema } from "../validation/gemini.schemas.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
@@ -87,22 +88,23 @@ function logLlmConfig(): void {
   console.log(`API key: ${process.env.OPENAI_API_KEY ? "set" : "missing"}\n`);
 }
 
-function ratingToneGuidance(rating: number | null): string {
+export function ratingToneGuidance(rating: number | null): string {
   if (rating === 2) {
-    return "Tone: recovery and compliance-focused. They need practical help getting inspection-ready without shame.";
+    return "Consultant tone (2-star): urgency, safety, and compliance recovery. Practical inspection-ready help—never shame.";
   }
   if (rating === 3) {
-    return "Tone: growth and habit-focused. Emphasize building consistent daily routines that stick.";
+    return "Consultant tone (3-star): consistency, habit-building, and steady growth.";
   }
   if (rating === 4 || rating === 5) {
-    return "Tone: efficiency and time-saving. They are doing well—focus on saving manager time and simplifying paperwork.";
+    return "Consultant tone (4–5 star): efficiency, time-saving, and reputation maintenance.";
   }
-  return "Tone: supportive ally. Focus on being ready for their next inspection.";
+  return "Consultant tone: supportive ally focused on inspection readiness.";
 }
 
 function buildSystemPrompt(waMeLink: string, rating: number | null): string {
   return [
-    "You are drafting a short, casual, text-based email to a UK takeaway owner.",
+    "You are a PassReady consultant drafting a short, conversational email to a UK takeaway owner.",
+    "Explicitly consider their FSA star rating before writing.",
     ratingToneGuidance(rating),
     "Pitch PassReady—a digital EHO compliance tool (English, Urdu, Bengali, Polish). Be an ally, never accusatory.",
     "Maximum 125 words. No images. No attachments. Plain, internal-style tone.",
@@ -118,7 +120,7 @@ function buildUserPrompt(lead: LeadForDraft, city: string, waMeLink: string): st
 
   return [
     `Takeaway name: ${lead.business_name}`,
-    `FSA rating: ${rating} (out of 5)`,
+    `FSA rating: ${rating} (out of 5) — pivot tone to match this rating`,
     `City: ${city}`,
     `Required closing link (use exactly): ${waMeLink}`,
   ].join("\n");
@@ -134,7 +136,10 @@ export async function fetchLeadsNeedingDraft(
         sql: `
           SELECT id, business_name, address, postcode, fsa_rating
           FROM leads
-          WHERE draft_message IS NULL AND fsa_rating = ?
+          WHERE draft_message IS NULL
+            AND status != 'nurture'
+            AND COALESCE(touch_count, 0) < 4
+            AND fsa_rating = ?
           ORDER BY lead_score DESC
           LIMIT ?
         `,
@@ -145,6 +150,8 @@ export async function fetchLeadsNeedingDraft(
           SELECT id, business_name, address, postcode, fsa_rating
           FROM leads
           WHERE draft_message IS NULL
+            AND status != 'nurture'
+            AND COALESCE(touch_count, 0) < 4
           ORDER BY lead_score DESC
           LIMIT ?
         `,
@@ -194,12 +201,12 @@ export async function generateDraftForLead(
   }
 
   const parsed = geminiChatCompletionSchema.parse(completion);
-  const content = parsed.choices[0]?.message?.content?.trim();
-  if (!content) {
+  const raw = parsed.choices[0]?.message?.content?.trim();
+  if (!raw) {
     throw new Error(`LLM returned empty content for lead ${lead.id}`);
   }
 
-  return content;
+  return draftMessageSchema.parse(raw);
 }
 
 export interface DraftRunResult {

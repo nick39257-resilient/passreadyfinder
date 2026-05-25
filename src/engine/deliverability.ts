@@ -66,3 +66,19 @@ export function randomSendDelayMs(): number {
 export function formatDelayMinutes(ms: number): string {
   return `${Math.round(ms / 60000)} min`;
 }
+
+/** Human pacing delay with periodic progress updates for the control panel job poll. */
+export async function sleepWithProgress(
+  ms: number,
+  onProgress?: (message: string) => void | Promise<void>,
+): Promise<void> {
+  const tickMs = 60_000;
+  const start = Date.now();
+
+  while (Date.now() - start < ms) {
+    const remaining = ms - (Date.now() - start);
+    const minsLeft = Math.max(1, Math.ceil(remaining / 60000));
+    await onProgress?.(`Waiting ~${minsLeft} min before next send (human pacing)…`);
+    await new Promise((r) => setTimeout(r, Math.min(tickMs, remaining)));
+  }
+}

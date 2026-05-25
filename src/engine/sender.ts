@@ -1,9 +1,9 @@
 import { Resend } from "resend";
 import { productConfig } from "../config/product.config.js";
 import {
-  formatDelayMinutes,
   getDeliverabilityStatus,
   randomSendDelayMs,
+  sleepWithProgress,
 } from "./deliverability.js";
 import { runMigrations } from "./store/db.js";
 import {
@@ -12,7 +12,7 @@ import {
   type ApprovedLead,
 } from "./store/sender-repository.js";
 
-const EMAIL_SUBJECT = "passready / upcoming fsa inspection";
+const EMAIL_SUBJECT = "upcoming fsa inspection";
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -125,8 +125,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
 
       if (i < leads.length - 1) {
         const delayMs = randomSendDelayMs();
-        await report(`  Waiting ${formatDelayMinutes(delayMs)} before next send (human pacing)…`);
-        await new Promise((r) => setTimeout(r, delayMs));
+        await sleepWithProgress(delayMs, report);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
