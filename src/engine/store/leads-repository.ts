@@ -102,6 +102,12 @@ export interface LeadRow {
   updated_at: string;
 }
 
+export async function getAllLeads(): Promise<LeadRow[]> {
+  const db = getDb();
+  const result = await db.execute(`SELECT * FROM leads`);
+  return result.rows as unknown as LeadRow[];
+}
+
 export async function getTopLeads(limit: number): Promise<LeadRow[]> {
   const db = getDb();
   const result = await db.execute({

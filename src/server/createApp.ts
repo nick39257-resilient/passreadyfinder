@@ -19,6 +19,9 @@ import {
   getLeadStatusCounts,
 } from "../engine/store/stats-repository.js";
 import { getDeliverabilityStatus } from "../engine/deliverability.js";
+import { calculateRiskScore } from "../engine/risk-scorer.js";
+import { getAllLeads } from "../engine/store/leads-repository.js";
+import type { LeadRow } from "../engine/store/leads-repository.js";
 import { parseArea, parseTargetRating } from "../types/segmentation.js";
 import { startJob } from "./job-runner.js";
 
@@ -27,6 +30,37 @@ const projectRoot = path.join(__dirname, "../..");
 const publicDir = path.join(projectRoot, "public");
 const dashboardDir = path.join(projectRoot, "dashboard/dist");
 const dashboardIndex = path.join(dashboardDir, "index.html");
+
+function leadRowToApiLead(row: LeadRow) {
+  const risk = calculateRiskScore({
+    fsaRating: row.fsa_rating,
+    fsaLastInspectionDate: row.fsa_last_inspection_date,
+    phone: row.phone,
+    website: row.website,
+  });
+
+  return {
+    id: row.id,
+    fsaId: row.fsa_id,
+    businessName: row.business_name,
+    businessType: row.business_type,
+    address: row.address,
+    postcode: row.postcode,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    fsaRating: row.fsa_rating,
+    fsaLastInspectionDate: row.fsa_last_inspection_date,
+    phone: row.phone,
+    website: row.website,
+    onDeliveryApp: row.on_delivery_app,
+    leadScore: row.lead_score,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    riskScore: risk.score,
+    riskBand: risk.band,
+    riskComponents: risk.components,
+  };
+}
 
 function mountDashboard(app: express.Express): void {
   if (!fs.existsSync(dashboardIndex)) {
@@ -105,6 +139,19 @@ export async function createApp(options?: {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
+  app.get("/api/leads", async (_req, res) => {
+    try {
+      const rows = await getAllLeads();
+      const leads = rows
+        .map(leadRowToApiLead)
+        .sort((a, b) => b.riskScore - a.riskScore || b.id - a.id);
+      res.json({ leads });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch leads" });
     }
   });
 

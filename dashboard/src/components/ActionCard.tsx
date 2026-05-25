@@ -2,6 +2,7 @@ export type RiskBand = "critical" | "high" | "medium" | "low";
 
 export interface ActionCardProps {
   businessName: string;
+  detail?: string;
   riskScore: number;
   riskBand?: RiskBand;
   actionLabel: string;
@@ -48,6 +49,7 @@ function bandLabel(band: RiskBand): string {
 
 export function ActionCard({
   businessName,
+  detail,
   riskScore,
   riskBand,
   actionLabel,
@@ -67,6 +69,9 @@ export function ActionCard({
             Lead
           </p>
           <h2 className="truncate text-lg font-bold leading-tight">{businessName}</h2>
+          {detail ? (
+            <p className="mt-1 truncate text-sm text-slate-400">{detail}</p>
+          ) : null}
         </div>
         <span
           className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${styles.badge}`}
