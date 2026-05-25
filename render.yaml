@@ -3,7 +3,7 @@ services:
     name: passreadyfinder
     runtime: node
     plan: starter
-    buildCommand: npm install && npm install --prefix dashboard && npm run build
+    buildCommand: npm install && NPM_CONFIG_PRODUCTION=false npm install --prefix dashboard && npm run build
     startCommand: npm start
     healthCheckPath: /health
     envVars:

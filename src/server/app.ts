@@ -10,6 +10,7 @@ async function start(): Promise<void> {
     const host = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${PORT}`;
     console.log(`PassReady control panel → ${host}/`);
     console.log(`Review drafts → ${host}/review`);
+    console.log(`React dashboard → ${host}/dashboard/`);
   });
 }
 

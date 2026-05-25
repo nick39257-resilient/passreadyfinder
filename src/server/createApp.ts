@@ -23,25 +23,36 @@ import { parseArea, parseTargetRating } from "../types/segmentation.js";
 import { startJob } from "./job-runner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const publicDir = path.join(__dirname, "../../public");
-const dashboardDir = path.join(__dirname, "../../dashboard/dist");
+const projectRoot = path.join(__dirname, "../..");
+const publicDir = path.join(projectRoot, "public");
+const dashboardDir = path.join(projectRoot, "dashboard/dist");
 const dashboardIndex = path.join(dashboardDir, "index.html");
 
 function mountDashboard(app: express.Express): void {
   if (!fs.existsSync(dashboardIndex)) {
     console.warn(
-      "React dashboard not built — run: npm install --prefix dashboard && npm run dashboard:build",
+      `React dashboard not built (missing ${dashboardIndex}) — run: NPM_CONFIG_PRODUCTION=false npm install --prefix dashboard && npm run dashboard:build`,
     );
+    app.get(["/dashboard", "/dashboard/*splat"], (_req, res) => {
+      res.status(503).type("html").send(
+        "<!DOCTYPE html><html><body style=\"font-family:system-ui;padding:2rem\"><h1>Dashboard not built</h1><p>On Render, set the build command to install dashboard devDependencies (see <code>render.yaml</code>) and redeploy.</p></body></html>",
+      );
+    });
     return;
   }
 
   app.use("/dashboard", express.static(dashboardDir, { index: false }));
 
   app.get("/dashboard", (_req, res) => {
-    res.sendFile(dashboardIndex);
+    res.redirect(301, "/dashboard/");
   });
 
-  app.get("/dashboard/*path", (_req, res) => {
+  app.get("/dashboard/*splat", (req, res, next) => {
+    const subpath = String(req.params.splat ?? "");
+    if (subpath.length > 0 && subpath.includes(".")) {
+      next();
+      return;
+    }
     res.sendFile(dashboardIndex);
   });
 }
