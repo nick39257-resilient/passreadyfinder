@@ -1,0 +1,15 @@
+---
+description: Mobile-first UI standards for the React dashboard.
+globs: "dashboard/**/*.{tsx,css}"
+alwaysApply: false
+---
+
+# Mobile UI standards
+
+- **Viewport:** design for narrow phones first (`max-w-lg`, full-width cards).
+- **Touch targets:** minimum **48px** height on buttons; **56px** for primary actions.
+- **Typography:** `text-base` (16px) minimum on inputs to prevent iOS zoom.
+- **Theme:** dark slate (`bg-slate-950`, cards `bg-slate-900/80`, borders `border-slate-800`).
+- **Accent:** emerald for success/primary; amber critical; sky informational.
+- **Layout:** one primary action per card; stats/labels above fold; no horizontal scroll.
+- **Accessibility:** semantic buttons, `aria-label` on icon-only controls, sufficient contrast.

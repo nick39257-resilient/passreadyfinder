@@ -11,7 +11,10 @@
     "review": "tsx src/server/app.ts",
     "send": "tsx src/cli/send.ts",
     "enrich": "npx tsx src/engine/enricher.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dashboard:install": "npm install --prefix dashboard",
+    "dashboard:dev": "npm run dev --prefix dashboard",
+    "dashboard:build": "npm run build --prefix dashboard"
   },
   "keywords": [
     "passready",

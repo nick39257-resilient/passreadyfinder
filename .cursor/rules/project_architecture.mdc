@@ -1,0 +1,30 @@
+---
+description: PassReady folder structure for engine, API, and React dashboard.
+globs: "**/*.{ts,tsx,js,jsx}"
+alwaysApply: false
+---
+
+# Project layout
+
+```
+passreadyfinder/
+├── src/
+│   ├── config/              # product.config.ts
+│   ├── engine/              # Intelligence + pipeline (risk-scorer.ts, finder, drafter…)
+│   ├── server/              # Express API + job runner
+│   ├── validation/          # Zod schemas
+│   └── types/
+├── dashboard/               # React mobile command center (Vite)
+│   └── src/
+│       ├── components/      # ActionCard.tsx, etc.
+│       ├── App.tsx
+│       └── main.tsx
+├── public/                  # Legacy static control/review (until dashboard replaces)
+└── .cursor/rules/
+```
+
+# Rules
+
+- **Engine logic** lives in `src/engine/` — no React imports in engine files.
+- **UI components** live in `dashboard/src/components/` — call API routes, never Turso directly.
+- **Shared scoring** — import `calculateRiskScore` from engine path only in API/CLI, expose to UI via JSON.

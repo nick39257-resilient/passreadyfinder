@@ -1,0 +1,29 @@
+---
+description: Operational workflows including weighted risk scoring.
+globs: "src/engine/**/*.ts,dashboard/**/*.tsx"
+alwaysApply: false
+---
+
+# Weighted risk score (0–100)
+
+Implemented in `src/engine/risk-scorer.ts`. **Higher = greater compliance urgency.**
+
+| Component | Max pts | Calculation |
+|-----------|---------|-------------|
+| FSA rating pressure | 40 | `((5 - clamp(rating,0,5)) / 5) × 40`; unrated → 20 |
+| Inspection staleness | 35 | `min(daysSinceInspection / 730, 1) × 35` |
+| Low-rating urgency | 15 | rating ≤1 → 15; rating 2 → 10; rating 3 → 5; else 0 |
+| Contact gap | 10 | no phone **and** no website → 10; one missing → 5; else 0 |
+
+**Total:** `round(sum)`, clamped to 0–100.
+
+## Bands
+
+| Band | Range |
+|------|-------|
+| Critical | 75–100 |
+| High | 50–74 |
+| Medium | 25–49 |
+| Low | 0–24 |
+
+Use bands for dashboard accent colors and outreach prioritization.
