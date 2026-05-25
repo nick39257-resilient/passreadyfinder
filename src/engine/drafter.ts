@@ -63,7 +63,7 @@ export function extractCity(lead: LeadForDraft, areaFallback?: string): string {
 
 const GEMINI_MODEL = "gemini-2.5-flash";
 
-function createLlmClient(): OpenAI {
+export function createLlmClient(): OpenAI {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is required in .env");
@@ -176,10 +176,13 @@ export async function saveDraftMessage(leadId: number, message: string): Promise
 export async function generateDraftForLead(
   lead: LeadForDraft,
   client?: OpenAI,
+  options?: { templateRating?: number | null },
 ): Promise<string> {
   const city = extractCity(lead);
   const waMeLink = buildWaMeLink(lead.business_name);
   const llm = client ?? createLlmClient();
+  const toneRating =
+    options?.templateRating !== undefined ? options.templateRating : lead.fsa_rating;
 
   let completion;
   try {
@@ -187,7 +190,7 @@ export async function generateDraftForLead(
       model: GEMINI_MODEL,
       temperature: 0.7,
       messages: [
-        { role: "system", content: buildSystemPrompt(waMeLink, lead.fsa_rating) },
+        { role: "system", content: buildSystemPrompt(waMeLink, toneRating) },
         { role: "user", content: buildUserPrompt(lead, city, waMeLink) },
       ],
     });

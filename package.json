@@ -7,6 +7,7 @@
     "find": "tsx src/cli/find-leads.ts find",
     "list": "tsx src/cli/find-leads.ts list",
     "draft": "tsx src/cli/draft.ts",
+    "auto-draft": "tsx src/cli/auto-draft.ts",
     "prestart": "node scripts/ensure-dashboard.mjs",
     "start": "tsx src/server/app.ts",
     "review": "tsx src/server/app.ts",
