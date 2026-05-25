@@ -5,6 +5,7 @@ import {
   fsaBusinessTypesResponseSchema,
   fsaEstablishmentsResponseSchema,
 } from "../../validation/fsa.schemas.js";
+import { establishmentChangedSince } from "../sync/fsa-sync-state.js";
 
 const FSA_HEADERS = {
   "x-api-version": "2",
@@ -128,18 +129,42 @@ export interface FinderOptions {
   localAuthorityName: string;
   /** Exact FSA star rating to match (2, 3, 4, or 5) */
   targetRating: number;
+  /** ISO timestamp — only include establishments with RatingDate newer than this (delta-sync) */
+  lastSyncTimestamp?: string | null;
 }
 
-export async function findEstablishments(options: FinderOptions): Promise<RawLead[]> {
-  const { businessTypeIds, localAuthorityName, targetRating } = options;
+export interface FindEstablishmentsResult {
+  leads: RawLead[];
+  /** Total establishments returned from FSA pagination (before filters) */
+  apiRows: number;
+  /** Rows passing delta-sync (RatingDate > lastSyncTimestamp) */
+  deltaRows: number;
+}
+
+export async function findEstablishments(
+  options: FinderOptions,
+): Promise<FindEstablishmentsResult> {
+  const { businessTypeIds, localAuthorityName, targetRating, lastSyncTimestamp } =
+    options;
   const seen = new Map<number, RawLead>();
   const localAuthorityId = await resolveLocalAuthorityId(localAuthorityName);
+  let apiRows = 0;
+  let deltaRows = 0;
 
   for (const businessTypeId of businessTypeIds) {
     const params = { localAuthorityId, businessTypeId };
     const establishments = await fetchAllPages(params);
+    apiRows += establishments.length;
 
     for (const est of establishments) {
+      if (
+        lastSyncTimestamp &&
+        !establishmentChangedSince(est.RatingDate, lastSyncTimestamp)
+      ) {
+        continue;
+      }
+      deltaRows++;
+
       const lead = establishmentToRawLead(est);
       if (lead.fsaRating !== targetRating) {
         continue;
@@ -148,5 +173,5 @@ export async function findEstablishments(options: FinderOptions): Promise<RawLea
     }
   }
 
-  return Array.from(seen.values());
+  return { leads: Array.from(seen.values()), apiRows, deltaRows };
 }

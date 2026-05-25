@@ -17,7 +17,8 @@ program
     try {
       const result = await runFindPipeline({ skipEnrichment: options.skipEnrichment });
       console.log("\nSummary:");
-      console.log(`  FSA matches (rating 0–2): ${result.fetched}`);
+      console.log(`  FSA matches (target rating): ${result.fetched}`);
+      console.log(`  API rows scanned: ${result.apiRows}, delta rows: ${result.deltaRows}`);
       console.log(`  Stored in database:       ${result.stored}`);
       if (!options.skipEnrichment) {
         console.log(`  OSM enriched:             ${result.enriched}`);

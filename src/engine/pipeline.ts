@@ -1,4 +1,8 @@
 import { productConfig } from "../config/product.config.js";
+import {
+  getLastSyncTimestamp,
+  setLastSyncTimestamp,
+} from "./sync/fsa-sync-state.js";
 import type { FindJobParams } from "../types/segmentation.js";
 import {
   findEstablishments,
@@ -20,6 +24,12 @@ export interface PipelineResult {
   enriched: number;
   withPhone: number;
   withWebsite: number;
+  /** FSA rows returned across all pages */
+  apiRows: number;
+  /** Rows newer than last_sync_timestamp */
+  deltaRows: number;
+  lastSyncTimestamp: string | null;
+  syncTimestampUpdated: boolean;
 }
 
 export async function runFindPipeline(options?: {
@@ -27,6 +37,9 @@ export async function runFindPipeline(options?: {
   segmentation?: FindJobParams;
 }): Promise<PipelineResult> {
   await runMigrations();
+
+  const syncStartedAt = new Date().toISOString();
+  const lastSyncTimestamp = await getLastSyncTimestamp();
 
   const areaName =
     options?.segmentation?.area ??
@@ -42,14 +55,36 @@ export async function runFindPipeline(options?: {
     `  Types: ${productConfig.businessTypeNames.map((n) => `${n} (${typeMap.get(n)})`).join(", ")}`,
   );
 
-  console.log(`Finding establishments in ${areaName} with ${targetRating}★ FSA rating…`);
+  if (lastSyncTimestamp) {
+    console.log(
+      `Delta-sync: fetching ${areaName} (RatingDate > ${lastSyncTimestamp}), target ${targetRating}★…`,
+    );
+  } else {
+    console.log(
+      `Initial sync: fetching ${areaName}, target ${targetRating}★ (no last_sync_timestamp yet)…`,
+    );
+  }
 
-  const rawLeads = await findEstablishments({
-    businessTypeIds,
-    localAuthorityName: areaName,
-    targetRating,
-  });
-  console.log(`  Found ${rawLeads.length} matching leads from FSA.`);
+  let findResult;
+  try {
+    findResult = await findEstablishments({
+      businessTypeIds,
+      localAuthorityName: areaName,
+      targetRating,
+      lastSyncTimestamp,
+    });
+  } catch (err) {
+    console.error(
+      "FSA fetch failed — last_sync_timestamp not updated:",
+      err instanceof Error ? err.message : err,
+    );
+    throw err;
+  }
+
+  const rawLeads = findResult.leads;
+  console.log(
+    `  FSA pages: ${findResult.apiRows} rows, ${findResult.deltaRows} changed since last sync, ${rawLeads.length} match target rating.`,
+  );
 
   const scored = rawLeads.map((lead) => ({
     ...lead,
@@ -114,12 +149,19 @@ export async function runFindPipeline(options?: {
     console.log("\n  Enrichment complete.");
   }
 
+  await setLastSyncTimestamp(syncStartedAt);
+  console.log(`  Updated last_sync_timestamp → ${syncStartedAt}`);
+
   return {
     fetched: rawLeads.length,
     stored: scored.length,
     enriched,
     withPhone,
     withWebsite,
+    apiRows: findResult.apiRows,
+    deltaRows: findResult.deltaRows,
+    lastSyncTimestamp,
+    syncTimestampUpdated: true,
   };
 }
 

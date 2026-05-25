@@ -1,0 +1,19 @@
+---
+description: Instructs the agent on implementing Delta-sync logic for the FSA API.
+globs: "src/engine/finder/**/*.ts,src/engine/pipeline.ts,src/engine/sync/**/*.ts"
+alwaysApply: false
+---
+
+# Delta-Sync Implementation Rules
+
+When implementing or refactoring the lead-fetching service:
+
+1. **State Tracking:** Always check `outreach_settings.last_sync_timestamp` before initiating an FSA request (no new Turso tables).
+2. **Change detection:** FSA v2 has no `LastUpdatedDate` query parameter. Filter client-side using establishment `RatingDate` (best available change signal) greater than `last_sync_timestamp`.
+3. **Upsert Logic:** Use existing `upsertLead` on `fsa_id` — update rating/address when changed, insert when new.
+4. **Resilience:** If the find pipeline fails, do **not** update `last_sync_timestamp`. Log the error; next run retries the same window.
+5. **No Schema Changes:** Do not add Prisma or new Turso columns. Sync state lives in `outreach_settings` only.
+
+# Goal
+
+Transition from processing every paginated row to **only upserting establishments whose `RatingDate` is newer than the last successful sync**.
