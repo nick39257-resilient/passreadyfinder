@@ -1,4 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from "express";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { runMigrations } from "../engine/store/db.js";
@@ -23,6 +24,27 @@ import { startJob } from "./job-runner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "../../public");
+const dashboardDir = path.join(__dirname, "../../dashboard/dist");
+const dashboardIndex = path.join(dashboardDir, "index.html");
+
+function mountDashboard(app: express.Express): void {
+  if (!fs.existsSync(dashboardIndex)) {
+    console.warn(
+      "React dashboard not built — run: npm install --prefix dashboard && npm run dashboard:build",
+    );
+    return;
+  }
+
+  app.use("/dashboard", express.static(dashboardDir, { index: false }));
+
+  app.get("/dashboard", (_req, res) => {
+    res.sendFile(dashboardIndex);
+  });
+
+  app.get("/dashboard/*path", (_req, res) => {
+    res.sendFile(dashboardIndex);
+  });
+}
 
 let migrationsDone = false;
 
@@ -291,6 +313,8 @@ export async function createApp(options?: {
     app.get("/review", (_req, res) => {
       res.sendFile(path.join(publicDir, "review.html"));
     });
+
+    mountDashboard(app);
 
     app.use(express.static(publicDir, { index: false }));
   }

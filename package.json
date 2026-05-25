@@ -12,6 +12,7 @@
     "send": "tsx src/cli/send.ts",
     "enrich": "npx tsx src/engine/enricher.ts",
     "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && npm run dashboard:build",
     "dashboard:install": "npm install --prefix dashboard",
     "dashboard:dev": "npm run dev --prefix dashboard",
     "dashboard:build": "npm run build --prefix dashboard"
