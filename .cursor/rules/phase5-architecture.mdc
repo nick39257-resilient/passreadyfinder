@@ -1,0 +1,37 @@
+---
+description: Defines the high-level architecture for PassReady Phase 5.
+globs: "**/*.{js,ts,tsx}"
+alwaysApply: true
+---
+
+# Architecture Overview
+
+PassReady is a predictive compliance intelligence engine.
+
+## Target stack (Phase 5)
+
+- **Frontend (Dashboard):** React + Tailwind CSS. Mobile-first, insights-first command center.
+- **Backend (API):** Node.js + Express. Central orchestration logic.
+- **Database:** PostgreSQL + Prisma. Single source of truth.
+- **AI/Intelligence:** OpenAI API. Drafting, reply intelligence, risk scoring.
+- **Workflow:** Delta-sync only — query FSA changes via `LastUpdatedDate`, not full re-scrapes.
+
+## Core principles
+
+- Modularize components: small, reusable UI pieces.
+- Data-driven: reference `schema.prisma` before changing database logic.
+- Robustness: every automated process (scraping, outreach, scoring) needs error handling and logging.
+
+## This repo today (`passreadyfinder`)
+
+Do **not** assume Phase 5 stack is already in place. Current implementation:
+
+| Layer | Current |
+|-------|---------|
+| UI | Static HTML + Tailwind CDN (`public/control.html`, `public/review.html`) |
+| API | Express (`src/server/createApp.ts`) |
+| DB | Turso / libSQL (`src/engine/store/`), no Prisma |
+| AI | Gemini via OpenAI-compatible API (`src/engine/drafter.ts`) |
+| Find | Full FSA pagination per run (`src/engine/finder/fsa-finder.ts`), not delta-sync yet |
+
+When editing this repo: follow **CONSTITUTION.md** / **PHASE2.md**, keep engine modules intact, and only introduce React/Prisma/delta-sync when explicitly requested as a migration task.
