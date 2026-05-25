@@ -2,6 +2,7 @@ node_modules/
 dist/
 dashboard/node_modules/
 dashboard/dist/
+dashboard/*.tsbuildinfo
 .env
 data/
 *.db
