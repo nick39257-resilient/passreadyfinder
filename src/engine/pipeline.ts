@@ -1,12 +1,16 @@
 import { productConfig } from "../config/product.config.js";
 import {
+  establishmentChangedSince,
   getLastSyncTimestamp,
   setLastSyncTimestamp,
 } from "./sync/fsa-sync-state.js";
 import type { FindJobParams } from "../types/segmentation.js";
+import type { RawLead } from "../types/fsa.js";
 import {
-  findEstablishments,
+  establishmentToRawLead,
+  iterateEstablishmentPages,
   resolveBusinessTypeIds,
+  resolveLocalAuthorityId,
 } from "./finder/fsa-finder.js";
 import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
 import { calculateLeadScore } from "./score/scorer.js";
@@ -24,12 +28,70 @@ export interface PipelineResult {
   enriched: number;
   withPhone: number;
   withWebsite: number;
-  /** FSA rows returned across all pages */
+  /** FSA rows returned across all /Establishments pages */
   apiRows: number;
-  /** Rows newer than last_sync_timestamp */
+  /** Rows passing RatingDate > last_sync_timestamp */
   deltaRows: number;
+  /** Total /Establishments pages fetched */
+  pagesFetched: number;
   lastSyncTimestamp: string | null;
   syncTimestampUpdated: boolean;
+}
+
+interface FetchLeadsResult {
+  leads: RawLead[];
+  apiRows: number;
+  deltaRows: number;
+  pagesFetched: number;
+}
+
+/**
+ * Paginate FSA /Establishments per business type, apply delta-sync (RatingDate) and
+ * target-rating filters client-side. See .cursor/rules/delta-sync-fsa.mdc.
+ */
+async function fetchLeadsWithDeltaSync(options: {
+  localAuthorityName: string;
+  businessTypeIds: number[];
+  targetRating: number;
+  lastSyncTimestamp: string | null;
+}): Promise<FetchLeadsResult> {
+  const { localAuthorityName, businessTypeIds, targetRating, lastSyncTimestamp } =
+    options;
+  const localAuthorityId = await resolveLocalAuthorityId(localAuthorityName);
+  const seen = new Map<number, RawLead>();
+  let apiRows = 0;
+  let deltaRows = 0;
+  let pagesFetched = 0;
+
+  for (const businessTypeId of businessTypeIds) {
+    for await (const page of iterateEstablishmentPages(localAuthorityId, businessTypeId)) {
+      pagesFetched++;
+      console.log(
+        `  /Establishments page ${page.pageNumber}/${page.totalPages} (type ${businessTypeId})…`,
+      );
+      apiRows += page.establishments.length;
+
+      for (const est of page.establishments) {
+        if (!establishmentChangedSince(est.RatingDate, lastSyncTimestamp)) {
+          continue;
+        }
+        deltaRows++;
+
+        const lead = establishmentToRawLead(est);
+        if (lead.fsaRating !== targetRating) {
+          continue;
+        }
+        seen.set(lead.fsaId, lead);
+      }
+    }
+  }
+
+  return {
+    leads: Array.from(seen.values()),
+    apiRows,
+    deltaRows,
+    pagesFetched,
+  };
 }
 
 export async function runFindPipeline(options?: {
@@ -57,33 +119,33 @@ export async function runFindPipeline(options?: {
 
   if (lastSyncTimestamp) {
     console.log(
-      `Delta-sync: fetching ${areaName} (RatingDate > ${lastSyncTimestamp}), target ${targetRating}★…`,
+      `Delta-sync: ${areaName}, RatingDate > ${lastSyncTimestamp}, target ${targetRating}★…`,
     );
   } else {
     console.log(
-      `Initial sync: fetching ${areaName}, target ${targetRating}★ (no last_sync_timestamp yet)…`,
+      `Initial sync: ${areaName}, target ${targetRating}★ (no last_sync_timestamp yet)…`,
     );
   }
 
-  let findResult;
+  let fetchResult: FetchLeadsResult;
   try {
-    findResult = await findEstablishments({
-      businessTypeIds,
+    fetchResult = await fetchLeadsWithDeltaSync({
       localAuthorityName: areaName,
+      businessTypeIds,
       targetRating,
       lastSyncTimestamp,
     });
   } catch (err) {
     console.error(
-      "FSA fetch failed — last_sync_timestamp not updated:",
+      "FSA /Establishments fetch failed — last_sync_timestamp not updated:",
       err instanceof Error ? err.message : err,
     );
     throw err;
   }
 
-  const rawLeads = findResult.leads;
+  const rawLeads = fetchResult.leads;
   console.log(
-    `  FSA pages: ${findResult.apiRows} rows, ${findResult.deltaRows} changed since last sync, ${rawLeads.length} match target rating.`,
+    `  Done: ${fetchResult.pagesFetched} page(s), ${fetchResult.apiRows} API rows, ${fetchResult.deltaRows} delta rows, ${rawLeads.length} match target rating.`,
   );
 
   const scored = rawLeads.map((lead) => ({
@@ -158,8 +220,9 @@ export async function runFindPipeline(options?: {
     enriched,
     withPhone,
     withWebsite,
-    apiRows: findResult.apiRows,
-    deltaRows: findResult.deltaRows,
+    apiRows: fetchResult.apiRows,
+    deltaRows: fetchResult.deltaRows,
+    pagesFetched: fetchResult.pagesFetched,
     lastSyncTimestamp,
     syncTimestampUpdated: true,
   };

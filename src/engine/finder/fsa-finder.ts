@@ -5,7 +5,6 @@ import {
   fsaBusinessTypesResponseSchema,
   fsaEstablishmentsResponseSchema,
 } from "../../validation/fsa.schemas.js";
-import { establishmentChangedSince } from "../sync/fsa-sync-state.js";
 
 const FSA_HEADERS = {
   "x-api-version": "2",
@@ -86,7 +85,7 @@ function buildAddress(e: FsaEstablishment): string {
     .join(", ");
 }
 
-function establishmentToRawLead(e: FsaEstablishment): RawLead {
+export function establishmentToRawLead(e: FsaEstablishment): RawLead {
   return {
     fsaId: e.FHRSID,
     businessName: e.BusinessName.trim(),
@@ -112,66 +111,31 @@ async function fetchEstablishmentsPage(
   return parseFsaResponse(fsaEstablishmentsResponseSchema, raw);
 }
 
-async function fetchAllPages(params: Record<string, string | number>): Promise<FsaEstablishment[]> {
+export interface EstablishmentsPage {
+  pageNumber: number;
+  totalPages: number;
+  establishments: FsaEstablishment[];
+}
+
+/** Paginate the standard FSA /Establishments endpoint (full detail rows). */
+export async function* iterateEstablishmentPages(
+  localAuthorityId: number,
+  businessTypeId: number,
+): AsyncGenerator<EstablishmentsPage> {
+  const params = { localAuthorityId, businessTypeId };
   const first = await fetchEstablishmentsPage(params, 1);
-  const all = [...first.establishments];
+  yield {
+    pageNumber: 1,
+    totalPages: first.meta.totalPages,
+    establishments: first.establishments,
+  };
 
   for (let page = 2; page <= first.meta.totalPages; page++) {
     const next = await fetchEstablishmentsPage(params, page);
-    all.push(...next.establishments);
+    yield {
+      pageNumber: page,
+      totalPages: next.meta.totalPages,
+      establishments: next.establishments,
+    };
   }
-
-  return all;
-}
-
-export interface FinderOptions {
-  businessTypeIds: number[];
-  localAuthorityName: string;
-  /** Exact FSA star rating to match (2, 3, 4, or 5) */
-  targetRating: number;
-  /** ISO timestamp — only include establishments with RatingDate newer than this (delta-sync) */
-  lastSyncTimestamp?: string | null;
-}
-
-export interface FindEstablishmentsResult {
-  leads: RawLead[];
-  /** Total establishments returned from FSA pagination (before filters) */
-  apiRows: number;
-  /** Rows passing delta-sync (RatingDate > lastSyncTimestamp) */
-  deltaRows: number;
-}
-
-export async function findEstablishments(
-  options: FinderOptions,
-): Promise<FindEstablishmentsResult> {
-  const { businessTypeIds, localAuthorityName, targetRating, lastSyncTimestamp } =
-    options;
-  const seen = new Map<number, RawLead>();
-  const localAuthorityId = await resolveLocalAuthorityId(localAuthorityName);
-  let apiRows = 0;
-  let deltaRows = 0;
-
-  for (const businessTypeId of businessTypeIds) {
-    const params = { localAuthorityId, businessTypeId };
-    const establishments = await fetchAllPages(params);
-    apiRows += establishments.length;
-
-    for (const est of establishments) {
-      if (
-        lastSyncTimestamp &&
-        !establishmentChangedSince(est.RatingDate, lastSyncTimestamp)
-      ) {
-        continue;
-      }
-      deltaRows++;
-
-      const lead = establishmentToRawLead(est);
-      if (lead.fsaRating !== targetRating) {
-        continue;
-      }
-      seen.set(lead.fsaId, lead);
-    }
-  }
-
-  return { leads: Array.from(seen.values()), apiRows, deltaRows };
 }
