@@ -41,10 +41,13 @@ function mountDashboard(app: express.Express): void {
     return;
   }
 
-  app.use("/dashboard", express.static(dashboardDir, { index: false }));
+  app.use(
+    "/dashboard",
+    express.static(dashboardDir, { index: "index.html", redirect: false }),
+  );
 
-  app.get("/dashboard", (_req, res) => {
-    res.redirect(301, "/dashboard/");
+  app.get(["/dashboard", "/dashboard/"], (_req, res) => {
+    res.sendFile(dashboardIndex);
   });
 
   app.get("/dashboard/*splat", (req, res, next) => {
