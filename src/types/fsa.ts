@@ -24,10 +24,10 @@ export interface FsaEstablishment {
   RatingDate: string;
   SchemeType: string;
   LocalAuthorityName: string;
-  geocode: {
-    longitude: string;
-    latitude: string;
-  };
+  geocode?: {
+    longitude?: string | null;
+    latitude?: string | null;
+  } | null;
 }
 
 export interface FsaPaginatedMeta {

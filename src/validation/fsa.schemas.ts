@@ -11,6 +11,12 @@ const fsaAuthoritySchema = z.object({
   Name: z.string(),
 });
 
+/** FSA sometimes returns null or omits lat/long inside geocode */
+const geocodeSchema = z.object({
+  latitude: z.string().nullable().optional(),
+  longitude: z.string().nullable().optional(),
+});
+
 const fsaEstablishmentSchema = z.object({
   FHRSID: z.number(),
   BusinessName: z.string(),
@@ -26,10 +32,7 @@ const fsaEstablishmentSchema = z.object({
   RatingDate: z.string(),
   SchemeType: z.string(),
   LocalAuthorityName: z.string(),
-  geocode: z.object({
-    longitude: z.string(),
-    latitude: z.string(),
-  }),
+  geocode: geocodeSchema.nullable().optional(),
 });
 
 const fsaPaginatedMetaSchema = z.object({
