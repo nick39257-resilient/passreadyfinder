@@ -8,6 +8,9 @@ const LEAD_PHASE_B_COLUMNS = [
   "email TEXT",
   "draft_message TEXT",
   "touch_count INTEGER NOT NULL DEFAULT 0",
+  "fsa_score_hygiene INTEGER",
+  "fsa_score_structural INTEGER",
+  "fsa_score_management INTEGER",
 ] as const;
 
 async function columnExists(table: string, column: string): Promise<boolean> {

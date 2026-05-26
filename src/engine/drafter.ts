@@ -3,6 +3,7 @@ import { productConfig } from "../config/product.config.js";
 import type { DraftJobParams, TargetRating } from "../types/segmentation.js";
 import type { DraftHookContext } from "./intelligence/draft-hooks.js";
 import { buildDraftHookGuidance } from "./intelligence/draft-hooks.js";
+import { draftMessageSchema } from "../validation/draft.schemas.js";
 import { geminiChatCompletionSchema } from "../validation/gemini.schemas.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
@@ -120,16 +121,25 @@ function buildSystemPrompt(
   ].join("\n");
 }
 
-function buildUserPrompt(lead: LeadForDraft, city: string, waMeLink: string): string {
+function buildUserPrompt(
+  lead: LeadForDraft,
+  city: string,
+  waMeLink: string,
+  consultantTip?: string | null,
+): string {
   const rating =
     lead.fsa_rating === null ? "unrated" : String(lead.fsa_rating);
 
-  return [
+  const lines = [
     `Takeaway name: ${lead.business_name}`,
     `FSA rating: ${rating} (out of 5) — pivot tone to match this rating`,
     `City: ${city}`,
-    `Required closing link (use exactly): ${waMeLink}`,
-  ].join("\n");
+  ];
+  if (consultantTip) {
+    lines.push(`Consultant focus (weave naturally into the message): ${consultantTip}`);
+  }
+  lines.push(`Required closing link (use exactly): ${waMeLink}`);
+  return lines.join("\n");
 }
 
 export async function fetchLeadsNeedingDraft(
@@ -182,7 +192,11 @@ export async function saveDraftMessage(leadId: number, message: string): Promise
 export async function generateDraftForLead(
   lead: LeadForDraft,
   client?: OpenAI,
-  options?: { templateRating?: number | null; hookContext?: DraftHookContext },
+  options?: {
+    templateRating?: number | null;
+    hookContext?: DraftHookContext;
+    consultantTip?: string | null;
+  },
 ): Promise<string> {
   const city = extractCity(lead);
   const waMeLink = buildWaMeLink(lead.business_name);
@@ -192,6 +206,11 @@ export async function generateDraftForLead(
   const hookLines = options?.hookContext
     ? buildDraftHookGuidance(options.hookContext)
     : [];
+  if (options?.consultantTip) {
+    hookLines.push(
+      `Carrot insight (address their weakest FSA area): ${options.consultantTip}`,
+    );
+  }
 
   let completion;
   try {
@@ -200,7 +219,10 @@ export async function generateDraftForLead(
       temperature: 0.7,
       messages: [
         { role: "system", content: buildSystemPrompt(waMeLink, toneRating, hookLines) },
-        { role: "user", content: buildUserPrompt(lead, city, waMeLink) },
+        {
+          role: "user",
+          content: buildUserPrompt(lead, city, waMeLink, options?.consultantTip),
+        },
       ],
     });
   } catch (err) {

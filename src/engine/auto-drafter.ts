@@ -3,7 +3,12 @@ import {
   countLocalPassReadyUsers,
   findLocalCompetitors,
 } from "./intelligence/competitors.js";
+import {
+  getConsultantTip,
+  scoresFromRow,
+} from "./intelligence/carrot.js";
 import { calculateRiskScore } from "./risk-scorer.js";
+import { ensureLeadFsaScores } from "./finder/fsa-detail.js";
 import {
   createLlmClient,
   generateDraftForLead,
@@ -19,11 +24,15 @@ const RISK_SCORE_THRESHOLD = 75;
 const RESCUE_TEMPLATE_RATING = 2;
 
 interface LeadForAutoDraft extends LeadForDraft {
+  fsa_id: number;
   postcode: string;
   business_type: string;
   fsa_last_inspection_date: string | null;
   phone: string | null;
   website: string | null;
+  fsa_score_hygiene?: number | null;
+  fsa_score_structural?: number | null;
+  fsa_score_management?: number | null;
 }
 
 export interface AutoDraftRunResult {
@@ -38,6 +47,7 @@ async function fetchEligibleNewLeads(): Promise<LeadForAutoDraft[]> {
     sql: `
       SELECT
         id,
+        fsa_id,
         business_name,
         address,
         postcode,
@@ -45,7 +55,10 @@ async function fetchEligibleNewLeads(): Promise<LeadForAutoDraft[]> {
         fsa_rating,
         fsa_last_inspection_date,
         phone,
-        website
+        website,
+        fsa_score_hygiene,
+        fsa_score_structural,
+        fsa_score_management
       FROM leads
       WHERE status = 'new'
         AND contacted_at IS NULL
@@ -123,9 +136,12 @@ export async function runAutoDrafter(options?: {
         }),
         countLocalPassReadyUsers(lead.postcode),
       ]);
+      const fsaScores = await ensureLeadFsaScores(lead.id, lead.fsa_id, scoresFromRow(lead));
+      const consultantTip = getConsultantTip(fsaScores);
       const draft = await generateDraftForLead(lead, llmClient, {
         templateRating: RESCUE_TEMPLATE_RATING,
         hookContext: { competitors, localPassReadyCount },
+        consultantTip,
       });
       await saveDraftMessage(lead.id, draft);
       result.drafted++;

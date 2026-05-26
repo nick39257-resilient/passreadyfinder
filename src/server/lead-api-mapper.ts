@@ -3,6 +3,15 @@ import {
   daysSinceInspection,
 } from "../engine/intelligence/compliance.js";
 import {
+  buildEhoReportUrl,
+  formatRivalBadge,
+  getConsultantTip,
+  getLowestScoreArea,
+  scoresFromRow,
+  type FsaBreakdownScores,
+} from "../engine/intelligence/carrot.js";
+import { ensureLeadFsaScores } from "../engine/finder/fsa-detail.js";
+import {
   countLocalPassReadyUsers,
   findLocalCompetitors,
 } from "../engine/intelligence/competitors.js";
@@ -41,6 +50,11 @@ export interface ApiLeadDetail {
   inspectionSummary: string;
   competitors: Awaited<ReturnType<typeof findLocalCompetitors>>;
   localPassReadyCount: number;
+  fsaScores: FsaBreakdownScores;
+  consultantTip: string | null;
+  rivalBadge: string | null;
+  ehoReportUrl: string;
+  carrotFocusArea: string | null;
 }
 
 function readStatus(row: LeadRow & { status?: string }): string {
@@ -64,7 +78,16 @@ function deriveSignals(
   };
 }
 
-export async function mapLeadRowToApiLead(row: LeadRow): Promise<ApiLeadDetail> {
+export async function mapLeadRowToApiLead(
+  row: LeadRow,
+  options?: { ensureFsaScores?: boolean },
+): Promise<ApiLeadDetail> {
+  let fsaScores = scoresFromRow(row);
+  if (options?.ensureFsaScores) {
+    fsaScores = await ensureLeadFsaScores(row.id, row.fsa_id, fsaScores);
+  }
+  const consultantTip = getConsultantTip(fsaScores);
+
   const risk = calculateRiskScore({
     fsaRating: row.fsa_rating,
     fsaLastInspectionDate: row.fsa_last_inspection_date,
@@ -110,5 +133,10 @@ export async function mapLeadRowToApiLead(row: LeadRow): Promise<ApiLeadDetail> 
     ),
     competitors,
     localPassReadyCount,
+    fsaScores,
+    consultantTip,
+    rivalBadge: formatRivalBadge(competitors),
+    ehoReportUrl: buildEhoReportUrl(row.fsa_id),
+    carrotFocusArea: getLowestScoreArea(fsaScores),
   };
 }

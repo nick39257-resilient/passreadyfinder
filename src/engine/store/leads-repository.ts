@@ -17,8 +17,9 @@ export async function upsertLead(input: LeadUpsertInput): Promise<void> {
       INSERT INTO leads (
         fsa_id, business_name, business_type, address, postcode,
         latitude, longitude, fsa_rating, fsa_last_inspection_date,
+        fsa_score_hygiene, fsa_score_structural, fsa_score_management,
         phone, website, on_delivery_app, lead_score, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       ON CONFLICT(fsa_id) DO UPDATE SET
         business_name = excluded.business_name,
         business_type = excluded.business_type,
@@ -28,6 +29,9 @@ export async function upsertLead(input: LeadUpsertInput): Promise<void> {
         longitude = excluded.longitude,
         fsa_rating = excluded.fsa_rating,
         fsa_last_inspection_date = excluded.fsa_last_inspection_date,
+        fsa_score_hygiene = COALESCE(excluded.fsa_score_hygiene, leads.fsa_score_hygiene),
+        fsa_score_structural = COALESCE(excluded.fsa_score_structural, leads.fsa_score_structural),
+        fsa_score_management = COALESCE(excluded.fsa_score_management, leads.fsa_score_management),
         phone = COALESCE(excluded.phone, leads.phone),
         website = COALESCE(excluded.website, leads.website),
         on_delivery_app = excluded.on_delivery_app,
@@ -44,6 +48,9 @@ export async function upsertLead(input: LeadUpsertInput): Promise<void> {
       input.longitude,
       input.fsaRating,
       input.fsaLastInspectionDate,
+      input.fsaScoreHygiene ?? null,
+      input.fsaScoreStructural ?? null,
+      input.fsaScoreManagement ?? null,
       input.phone ?? null,
       input.website ?? null,
       input.onDeliveryApp ?? "unknown",
@@ -94,6 +101,9 @@ export interface LeadRow {
   longitude: number;
   fsa_rating: number | null;
   fsa_last_inspection_date: string | null;
+  fsa_score_hygiene?: number | null;
+  fsa_score_structural?: number | null;
+  fsa_score_management?: number | null;
   phone: string | null;
   website: string | null;
   on_delivery_app: DeliveryAppStatus;

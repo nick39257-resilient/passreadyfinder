@@ -7,13 +7,13 @@ const SWIPE_THRESHOLD = 72;
 
 export function LeadRow({
   lead,
-  onRiskTap,
+  onRowTap,
   onSwipeLeft,
   onSwipeRight,
   busy,
 }: {
   lead: ApiLead;
-  onRiskTap: () => void;
+  onRowTap: () => void;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
   busy?: boolean;
@@ -36,12 +36,15 @@ export function LeadRow({
           Quick draft →
         </span>
         <span className={hint === "left" ? "text-amber-400" : "text-transparent"}>
-          ← Snooze
+          ← Snooze 30d
         </span>
       </div>
 
-      <div
-        className="relative flex min-h-[56px] touch-pan-y items-center gap-2 bg-slate-900/95 px-3 py-3 transition-transform"
+      <button
+        type="button"
+        onClick={onRowTap}
+        disabled={busy}
+        className="relative flex min-h-[56px] w-full touch-pan-y items-center gap-2 bg-slate-900/95 px-3 py-3 text-left transition-transform"
         style={{ transform: `translateX(${offset}px)` }}
         onTouchStart={(e) => {
           startX.current = e.touches[0]?.clientX ?? 0;
@@ -82,22 +85,18 @@ export function LeadRow({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onRiskTap}
-          disabled={busy}
+        <span
           className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-bold tabular-nums ring-1 ${riskPillStyles[band]}`}
-          aria-label={`Risk score ${lead.riskScore}, view details`}
         >
           {lead.riskScore}
-        </button>
+        </span>
 
         <span
           className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusStyle}`}
         >
           {lead.status}
         </span>
-      </div>
+      </button>
     </li>
   );
 }

@@ -12,9 +12,10 @@ import {
   resolveBusinessTypeIds,
   resolveLocalAuthorityId,
 } from "./finder/fsa-finder.js";
+import { fetchEstablishmentScores } from "./finder/fsa-detail.js";
 import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
 import { calculateLeadScore } from "./score/scorer.js";
-import { runMigrations } from "./store/db.js";
+import { getDb, runMigrations } from "./store/db.js";
 import {
   countLeads,
   getTopLeads,
@@ -162,6 +163,24 @@ export async function runFindPipeline(options?: {
 
   for (const lead of scored) {
     await upsertLead(lead);
+    try {
+      const scores = await fetchEstablishmentScores(lead.fsaId);
+      if (scores) {
+        const db = getDb();
+        await db.execute({
+          sql: `UPDATE leads SET fsa_score_hygiene = ?, fsa_score_structural = ?, fsa_score_management = ? WHERE fsa_id = ?`,
+          args: [
+            scores.hygiene,
+            scores.structural,
+            scores.management,
+            lead.fsaId,
+          ],
+        });
+      }
+      await new Promise((r) => setTimeout(r, 120));
+    } catch {
+      /* scores optional — FHIS/rescore may omit them */
+    }
   }
   console.log(`  Stored ${scored.length} leads (idempotent upsert on fsa_id).`);
 

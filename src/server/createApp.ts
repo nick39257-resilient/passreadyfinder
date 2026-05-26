@@ -16,11 +16,14 @@ import {
 } from "../engine/store/jobs-repository.js";
 import {
   countApprovedLeads,
+  getFunnelStats,
   getLeadStatusCounts,
 } from "../engine/store/stats-repository.js";
 import { getDeliverabilityStatus } from "../engine/deliverability.js";
 import { getComplianceTipOfDay } from "../engine/intelligence/compliance.js";
 import { getSystemActivity } from "../engine/intelligence/activity.js";
+import { getConsultantTip, scoresFromRow } from "../engine/intelligence/carrot.js";
+import { ensureLeadFsaScores } from "../engine/finder/fsa-detail.js";
 import {
   countLocalPassReadyUsers,
   findLocalCompetitors,
@@ -31,11 +34,6 @@ import {
   saveDraftMessage,
 } from "../engine/drafter.js";
 import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
-import {
-  countApprovedLeads,
-  getFunnelStats,
-  getLeadStatusCounts,
-} from "../engine/store/stats-repository.js";
 import { parseArea, parseTargetRating } from "../types/segmentation.js";
 import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
 import { startJob } from "./job-runner.js";
@@ -158,6 +156,26 @@ export async function createApp(options?: {
     }
   });
 
+  app.get("/api/leads/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+
+    try {
+      const row = await getLeadById(id);
+      if (!row) {
+        res.status(404).json({ error: "Lead not found" });
+        return;
+      }
+      res.json({ lead: await mapLeadRowToApiLead(row, { ensureFsaScores: true }) });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch lead" });
+    }
+  });
+
   app.post("/api/leads/:id/quick-draft", requireControlAuth, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
@@ -185,6 +203,9 @@ export async function createApp(options?: {
         countLocalPassReadyUsers(row.postcode),
       ]);
 
+      const fsaScores = await ensureLeadFsaScores(row.id, row.fsa_id, scoresFromRow(row));
+      const consultantTip = getConsultantTip(fsaScores);
+
       const llm = createLlmClient();
       const draft = await generateDraftForLead(
         {
@@ -198,6 +219,7 @@ export async function createApp(options?: {
         {
           templateRating: row.fsa_rating === 2 ? 2 : row.fsa_rating,
           hookContext: { competitors, localPassReadyCount },
+          consultantTip,
         },
       );
       await saveDraftMessage(id, draft);

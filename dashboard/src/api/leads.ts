@@ -7,6 +7,12 @@ export interface RiskComponents {
   contactGap: number;
 }
 
+export interface FsaBreakdownScores {
+  hygiene: number | null;
+  structural: number | null;
+  management: number | null;
+}
+
 export interface LeadSignals {
   ehoScraped: boolean;
   predictiveScore: boolean;
@@ -40,6 +46,11 @@ export interface ApiLead {
   inspectionSummary: string;
   competitors: LocalCompetitor[];
   localPassReadyCount: number;
+  fsaScores: FsaBreakdownScores;
+  consultantTip: string | null;
+  rivalBadge: string | null;
+  ehoReportUrl: string;
+  carrotFocusArea: string | null;
 }
 
 export async function fetchLeads(): Promise<ApiLead[]> {
@@ -50,6 +61,15 @@ export async function fetchLeads(): Promise<ApiLead[]> {
 
   const data = (await res.json()) as { leads?: ApiLead[] };
   return data.leads ?? [];
+}
+
+export async function fetchLeadDetail(leadId: number): Promise<ApiLead> {
+  const res = await fetch(`/api/leads/${leadId}`);
+  if (!res.ok) {
+    throw new Error(`Failed to load lead (${res.status})`);
+  }
+  const data = (await res.json()) as { lead: ApiLead };
+  return data.lead;
 }
 
 export async function quickDraftLead(leadId: number, secret?: string): Promise<void> {

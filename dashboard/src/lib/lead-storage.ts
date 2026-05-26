@@ -20,7 +20,7 @@ function readDismissed(): Set<number> {
   }
 }
 
-export function snoozeLead(leadId: number, hours = 24): void {
+export function snoozeLead(leadId: number, hours = 24 * 30): void {
   const map = readSnoozed();
   map[String(leadId)] = Date.now() + hours * 60 * 60 * 1000;
   localStorage.setItem(SNOOZE_KEY, JSON.stringify(map));

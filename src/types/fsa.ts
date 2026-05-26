@@ -60,4 +60,7 @@ export interface RawLead {
   longitude: number;
   fsaRating: number | null;
   fsaLastInspectionDate: string | null;
+  fsaScoreHygiene?: number | null;
+  fsaScoreStructural?: number | null;
+  fsaScoreManagement?: number | null;
 }

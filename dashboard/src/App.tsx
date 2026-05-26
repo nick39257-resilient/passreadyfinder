@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchActivity } from "./api/activity";
 import { fetchFunnel, type FunnelStats } from "./api/funnel";
 import { startDraftJob, startFindJob } from "./api/jobs";
-import { fetchLeads, quickDraftLead, type ApiLead } from "./api/leads";
+import { fetchLeads, fetchLeadDetail, quickDraftLead, type ApiLead } from "./api/leads";
 import { ComplianceBanner } from "./components/ComplianceBanner";
 import { ExecutiveFunnel } from "./components/ExecutiveFunnel";
 import { FixedActionBar } from "./components/FixedActionBar";
+import { LeadDetailDrawer } from "./components/LeadDetailDrawer";
 import { LeadRow } from "./components/LeadRow";
-import { RiskDeepDiveModal } from "./components/RiskDeepDiveModal";
 import { SystemActivityBar } from "./components/SystemActivityBar";
 import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
 
@@ -28,6 +28,7 @@ export function App() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [hiddenVersion, setHiddenVersion] = useState(0);
+  const [drawerLoading, setDrawerLoading] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -57,6 +58,19 @@ export function App() {
   void hiddenVersion;
 
   const getSecret = () => sessionStorage.getItem(STORAGE_SECRET) ?? "";
+
+  const openLeadDrawer = async (lead: ApiLead) => {
+    setSelectedLead(lead);
+    setDrawerLoading(true);
+    try {
+      const detail = await fetchLeadDetail(lead.id);
+      setSelectedLead(detail);
+    } catch {
+      /* keep list row data if detail fetch fails */
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
 
   const handleQuickDraft = async (lead: ApiLead) => {
     setBusyId(lead.id);
@@ -170,7 +184,7 @@ export function App() {
               key={lead.id}
               lead={lead}
               busy={busyId === lead.id}
-              onRiskTap={() => setSelectedLead(lead)}
+              onRowTap={() => void openLeadDrawer(lead)}
               onSwipeLeft={() => {
                 snoozeLead(lead.id);
                 setHiddenVersion((v) => v + 1);
@@ -182,7 +196,7 @@ export function App() {
       ) : null}
 
       <p className="mt-4 text-center text-xs text-slate-500">
-        Swipe right to quick-draft · Swipe left to snooze 24h · Tap risk score for deep-dive
+        Tap row for detail · Swipe right quick-draft · Swipe left snooze 30d
       </p>
 
       <FixedActionBar
@@ -195,7 +209,22 @@ export function App() {
       />
 
       {selectedLead ? (
-        <RiskDeepDiveModal lead={selectedLead} onClose={() => setSelectedLead(null)} />
+        <LeadDetailDrawer
+          lead={selectedLead}
+          busy={busyId === selectedLead.id || drawerLoading}
+          onClose={() => setSelectedLead(null)}
+          onQuickDraft={() => void handleQuickDraft(selectedLead)}
+          onSnooze={() => {
+            snoozeLead(selectedLead.id);
+            setSelectedLead(null);
+            setHiddenVersion((v) => v + 1);
+          }}
+          onDismiss={() => {
+            dismissLead(selectedLead.id);
+            setSelectedLead(null);
+            setHiddenVersion((v) => v + 1);
+          }}
+        />
       ) : null}
     </div>
   );
