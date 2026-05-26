@@ -90,17 +90,18 @@ function logLlmConfig(): void {
   console.log(`API key: ${process.env.OPENAI_API_KEY ? "set" : "missing"}\n`);
 }
 
+/** Internal pacing from FSA rating — never cite rating or inspection outcomes in the draft. */
 export function ratingToneGuidance(rating: number | null): string {
   if (rating === 2) {
-    return "Consultant tone (2-star): urgency, safety, and compliance recovery. Practical inspection-ready help—never shame.";
+    return "Internal (do not mention in copy): extra warmth—they may be stretched thin; keep it practical and human.";
   }
   if (rating === 3) {
-    return "Consultant tone (3-star): consistency, habit-building, and steady growth.";
+    return "Internal (do not mention in copy): steady, peer-to-peer tone—habits and small wins, not lectures.";
   }
   if (rating === 4 || rating === 5) {
-    return "Consultant tone (4–5 star): efficiency, time-saving, and reputation maintenance.";
+    return "Internal (do not mention in copy): light touch—efficiency and peace of mind, not fixing problems.";
   }
-  return "Consultant tone: supportive ally focused on inspection readiness.";
+  return "Internal (do not mention in copy): friendly peer who runs a kitchen, not a consultant auditing them.";
 }
 
 function buildSystemPrompt(
@@ -109,14 +110,13 @@ function buildSystemPrompt(
   hookLines: string[] = [],
 ): string {
   return [
-    "You are a PassReady consultant drafting a short, conversational email to a UK takeaway owner.",
-    "Explicitly consider their FSA star rating before writing.",
+    "You write a short, conversational email to a UK takeaway owner—as one operator to another, not as a vendor.",
     ratingToneGuidance(rating),
-    "Pitch PassReady—a digital EHO compliance tool (English, Urdu, Bengali, Polish). Be an ally, never accusatory.",
+    "PassReady is a side project you built for your own kitchens (EHO checklists in English, Urdu, Bengali, Polish)—mention it only as something that helped you, not as a product launch.",
     "Maximum 125 words. No images. No attachments. Plain, internal-style tone.",
     ...productConfig.outreach.pitchGuidelines,
     ...hookLines,
-    `End the message with this exact link: ${waMeLink}`,
+    `End with your curious ask, then this exact link on its own line: ${waMeLink}`,
     "Do not add any other links or calls-to-action.",
   ].join("\n");
 }
@@ -127,16 +127,19 @@ function buildUserPrompt(
   waMeLink: string,
   consultantTip?: string | null,
 ): string {
-  const rating =
-    lead.fsa_rating === null ? "unrated" : String(lead.fsa_rating);
-
   const lines = [
     `Takeaway name: ${lead.business_name}`,
-    `FSA rating: ${rating} (out of 5) — pivot tone to match this rating`,
     `City: ${city}`,
   ];
+  if (lead.fsa_rating !== null) {
+    lines.push(
+      `Internal only (never mention in the message): FSA rating ${lead.fsa_rating}/5 — calibrate warmth only; no stars, scores, or inspection talk.`,
+    );
+  }
   if (consultantTip) {
-    lines.push(`Consultant focus (weave naturally into the message): ${consultantTip}`);
+    lines.push(
+      `Optional practical note (middle of message only, never in opening, never judgmental): ${consultantTip}`,
+    );
   }
   lines.push(`Required closing link (use exactly): ${waMeLink}`);
   return lines.join("\n");
@@ -208,7 +211,7 @@ export async function generateDraftForLead(
     : [];
   if (options?.consultantTip) {
     hookLines.push(
-      `Carrot insight (address their weakest FSA area): ${options.consultantTip}`,
+      `Optional practical note (middle of message only, never opening, never judgmental): ${options.consultantTip}`,
     );
   }
 

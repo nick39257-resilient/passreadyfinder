@@ -71,7 +71,7 @@ export const productConfig = {
     trialUrlEnvKey: "TRIAL_URL" as const,
     /** Pre-filled WhatsApp opener — [Business Name] replaced per lead */
     whatsappPrefillTemplate:
-      "Show me how PassReady works for [Business Name]",
+      "Curious if this might help [Business Name] like it did our kitchen — happy to show you",
     /** Leads to draft per `npm run draft` run */
     draftBatchSize: 5,
     /** Auto-pause sending if bounce rate exceeds this (0–1) over recent sends */
@@ -85,12 +85,14 @@ export const productConfig = {
     bounceRateWindowSize: 50,
     /** Email tone guidelines passed to Gemini */
     pitchGuidelines: [
-      "Speak as an ally helping them be ready for their next EHO inspection",
-      "Never accuse or shame them about their rating",
-      "Never pretend to be an EHO officer or any official body",
-      "Be openly from PassReady — a £29.99/month app for UK food businesses",
-      "One clear call-to-action: tap the WhatsApp link to see how it works",
-      "Keep it short — under 125 words",
+      "Zero judgment: never mention their FSA rating, stars, failures, issues, or inspection outcomes in the opening—or anywhere as shame.",
+      "Assume they are doing their best in a high-pressure environment.",
+      "Shared struggle opener: start with one line acknowledging the grind (e.g. Friday night rush, staffing, stock).",
+      "Tool as byproduct: do not present PassReady as a product or sales pitch—it is a side project you built for your own kitchens that happened to work well.",
+      "The ask: never say 'let me help you.' Close with curiosity (e.g. 'I'm curious if this would make your life easier like it did mine') before the WhatsApp link.",
+      "Never pretend to be an EHO officer or any official body.",
+      "One clear call-to-action: the WhatsApp link only—no other links.",
+      "Keep it short — under 125 words.",
     ],
   },
 } as const;

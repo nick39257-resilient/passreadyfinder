@@ -9,11 +9,11 @@ export type CarrotFocusArea = "hygiene" | "structural" | "management";
 
 const TIPS: Record<CarrotFocusArea, string> = {
   hygiene:
-    "Hygiene is your weakest area — focus on deep cleans, sanitiser logs, and cross-contamination controls before the next visit.",
+    "A practical nudge for the middle of the message: staying on top of daily cleans and sanitizer logs when service is flat-out—no blame, just what helped you.",
   structural:
-    "Structure is your weakest area — check fridge seals, grout, ceilings, and equipment maintenance; small fixes prevent major findings.",
+    "A practical nudge for the middle of the message: quick wins on seals, grout, and kit upkeep when you're running on fumes—peer tip, not a warning.",
   management:
-    "Management is your weakest area — tighten digital record-keeping, daily checklists, and staff training so everything is inspection-ready.",
+    "A practical nudge for the middle of the message: keeping checklists and temps in one place so handovers are easier—share what your side project solved for you.",
 };
 
 export function scoresFromRow(row: {
