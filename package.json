@@ -15,6 +15,7 @@
     "review": "tsx src/server/app.ts",
     "send": "tsx src/cli/send.ts",
     "enrich": "npx tsx src/engine/enricher.ts",
+    "smoke": "tsx scripts/smoke-test.mjs",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && npm run dashboard:build",
     "dashboard:install": "npm install --prefix dashboard --include=dev",
