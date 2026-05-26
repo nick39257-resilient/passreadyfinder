@@ -20,6 +20,12 @@ export async function fetchSendPreview(secret?: string): Promise<SendPreviewResp
   });
   const body = (await res.json().catch(() => ({}))) as SendPreviewResponse & { error?: string };
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error(
+        body.error ??
+          "Unauthorized — tap Key (top right) and paste CONTROL_PANEL_SECRET from Render.",
+      );
+    }
     throw new Error(body.error ?? `Send preview failed (${res.status})`);
   }
   return body;

@@ -26,11 +26,7 @@ import { getSystemStatus } from "../engine/intelligence/system-status.js";
 import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
 import { parseArea, parseTargetRating } from "../types/segmentation.js";
 import { getDailySendQuota } from "../engine/daily-send-cap.js";
-import {
-  formatRouteError,
-  markLeadRepliedAndDraftFollowUp,
-  quickDraftLeadById,
-} from "./quick-draft-handler.js";
+import { formatRouteError, markLeadRepliedAndDraftFollowUp } from "./quick-draft-handler.js";
 import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
 import { startJob } from "./job-runner.js";
 
@@ -107,6 +103,12 @@ export async function createApp(options?: {
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true });
+  });
+
+  app.get("/api/config", (_req, res) => {
+    res.json({
+      requiresControlSecret: Boolean(process.env.CONTROL_PANEL_SECRET?.trim()),
+    });
   });
 
   app.get("/api/stats", async (_req, res) => {
@@ -211,19 +213,26 @@ export async function createApp(options?: {
     }
 
     try {
-      const draft = await quickDraftLeadById(id);
-      res.json({ ok: true, draft });
+      const row = await getLeadById(id);
+      if (!row) {
+        res.status(404).json({ error: "Lead not found" });
+        return;
+      }
+      const hasReplied = Boolean((row as { replied_at?: string | null }).replied_at);
+      if (row.contacted_at && !hasReplied) {
+        res.status(409).json({
+          error:
+            "Lead already contacted — mark as replied before generating a follow-up draft",
+        });
+        return;
+      }
+
+      const jobId = await createJob("quick_draft", { leadId: id });
+      startJob(jobId, "quick_draft");
+      res.status(202).json({ jobId });
     } catch (err) {
       const message = formatRouteError(err);
       console.error("Quick-draft failed:", message, err);
-      if (message === "Lead not found") {
-        res.status(404).json({ error: message });
-        return;
-      }
-      if (message.includes("already contacted")) {
-        res.status(409).json({ error: message });
-        return;
-      }
       const status = message.includes("not configured") ? 503 : 500;
       res.status(status).json({ error: message });
     }

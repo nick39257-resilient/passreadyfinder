@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchFunnel, type FunnelStats } from "./api/funnel";
 import { startDraftJob, startFindJob, startSendJob } from "./api/jobs";
+import { fetchAppConfig } from "./api/config";
 import { fetchLeads, fetchLeadDetail, quickDraftLead, type ApiLead } from "./api/leads";
 import { fetchSendPreview, type SendPreviewResponse } from "./api/send";
 import {
@@ -100,6 +101,18 @@ export function App() {
   }, [loadAll]);
 
   useEffect(() => {
+    void fetchAppConfig().then((config) => {
+      if (config.requiresControlSecret && !getControlSecret()) {
+        setBanner({
+          tone: "info",
+          message:
+            "This server requires a control secret — tap Key (top right) and paste CONTROL_PANEL_SECRET from Render before Draft / Send / Find.",
+        });
+      }
+    });
+  }, []);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       void fetchSystemStatus()
         .then((status) => {
@@ -187,7 +200,9 @@ export function App() {
     setBusyId(lead.id);
     setJobMessage(`Drafting ${lead.businessName}… (30–90 sec)`);
     try {
-      await quickDraftLead(lead.id, secret);
+      await quickDraftLead(lead.id, secret, (progress) => {
+        setJobMessage(progress);
+      });
       await loadAll();
       setBanner({
         tone: "success",

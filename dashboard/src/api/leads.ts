@@ -1,5 +1,6 @@
 import type { RiskBand } from "../components/ActionCard";
 import { authHeaders } from "../lib/auth-headers.js";
+import { pollJobUntilDone } from "../lib/job-poll.js";
 
 export interface RiskComponents {
   ratingPressure: number;
@@ -73,22 +74,45 @@ export async function fetchLeadDetail(leadId: number): Promise<ApiLead> {
   return data.lead;
 }
 
-export async function quickDraftLead(leadId: number, secret?: string): Promise<string> {
+export async function quickDraftLead(
+  leadId: number,
+  secret?: string,
+  onProgress?: (message: string) => void,
+): Promise<string> {
   const res = await fetch(`/api/leads/${leadId}/quick-draft`, {
     method: "POST",
     headers: authHeaders(secret),
   });
 
-  const body = (await res.json().catch(() => ({}))) as { ok?: boolean; draft?: string; error?: string };
+  const body = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    draft?: string;
+    jobId?: string;
+    error?: string;
+  };
 
   if (!res.ok) {
     if (res.status === 401) {
       throw new Error(
         body.error ??
-          "Unauthorized — set CONTROL_PANEL_SECRET in Render and enter it when prompted.",
+          "Unauthorized — tap Key (top right) and paste CONTROL_PANEL_SECRET from Render.",
       );
     }
     throw new Error(body.error ?? `Quick draft failed (${res.status})`);
+  }
+
+  if (res.status === 202 && body.jobId) {
+    onProgress?.("Quick draft started…");
+    const { promise } = pollJobUntilDone(body.jobId, (job) => {
+      onProgress?.(job.progress ?? "Drafting with AI…");
+    });
+    const job = await promise;
+    const result = job.result as { draft?: string } | null;
+    const draft = result?.draft?.trim() ?? "";
+    if (!draft) {
+      throw new Error("Quick draft finished but no message was saved");
+    }
+    return draft;
   }
 
   return body.draft?.trim() ?? "";

@@ -1,6 +1,7 @@
 import { runFindLeadsJob } from "../engine/find-leads-job.js";
 import { runQueueDrafter } from "../engine/queue-drafter.js";
 import { runSender } from "../engine/sender.js";
+import { quickDraftLeadById } from "./quick-draft-handler.js";
 import { appendEngineLog } from "../engine/store/engine-log-repository.js";
 import {
   getJob,
@@ -52,6 +53,18 @@ async function runJobBody(
         progress: "Sending approved emails via Resend…",
       });
       return runSender(onProgress);
+    }
+    case "quick_draft": {
+      const leadId = Number((params as { leadId?: number } | null)?.leadId);
+      if (!Number.isInteger(leadId) || leadId < 1) {
+        throw new Error("Invalid lead id for quick draft job");
+      }
+      await updateJob(jobId, {
+        status: "running",
+        progress: "Quick draft (ConsultantTip + Gemini)…",
+      });
+      const draft = await quickDraftLeadById(leadId);
+      return { draft, leadId };
     }
     default: {
       const _exhaustive: never = type;
