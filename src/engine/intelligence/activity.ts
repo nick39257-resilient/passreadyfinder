@@ -11,9 +11,9 @@ export interface ActivityTickerItem {
 function labelForJobType(type: JobType): string {
   switch (type) {
     case "find":
-      return "Scraping FSA EHO data";
+      return "FindLeads: scraping & scoring";
     case "draft":
-      return "Generating outreach drafts";
+      return "QueueDrafter: drafting batch";
     case "send":
       return "Sending approved messages";
     default:

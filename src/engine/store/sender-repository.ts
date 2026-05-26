@@ -7,24 +7,49 @@ export interface ApprovedLead {
   email: string | null;
   draft_message: string;
   touch_count: number;
+  replied_at: string | null;
+}
+
+export async function countSendsTodayUtc(): Promise<number> {
+  const db = getDb();
+  const result = await db.execute(`
+    SELECT COUNT(*) AS count
+    FROM email_events
+    WHERE event_type = 'sent'
+      AND date(created_at) = date('now')
+  `);
+  return Number(result.rows[0]?.count ?? 0);
 }
 
 const maxTouches = productConfig.outreach.maxTouchesPerLead;
 
-export async function getApprovedLeads(): Promise<ApprovedLead[]> {
+export async function getApprovedLeads(limit?: number): Promise<ApprovedLead[]> {
   const db = getDb();
-  const result = await db.execute({
-    sql: `
-      SELECT id, business_name, email, draft_message, COALESCE(touch_count, 0) AS touch_count
+  const sql = `
+      SELECT id, business_name, email, draft_message, COALESCE(touch_count, 0) AS touch_count, replied_at
       FROM leads
       WHERE status = 'approved'
         AND draft_message IS NOT NULL
         AND COALESCE(touch_count, 0) < ?
       ORDER BY lead_score DESC
-    `,
-    args: [maxTouches],
-  });
+      ${limit !== undefined ? "LIMIT ?" : ""}
+    `;
+  const args = limit !== undefined ? [maxTouches, limit] : [maxTouches];
+  const result = await db.execute({ sql, args });
   return result.rows as unknown as ApprovedLead[];
+}
+
+export async function markLeadReplied(leadId: number): Promise<boolean> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `
+      UPDATE leads
+      SET replied_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ? AND replied_at IS NULL
+    `,
+    args: [leadId],
+  });
+  return (result.rowsAffected ?? 0) > 0;
 }
 
 export async function markLeadContacted(

@@ -8,6 +8,7 @@ const LEAD_PHASE_B_COLUMNS = [
   "email TEXT",
   "draft_message TEXT",
   "touch_count INTEGER NOT NULL DEFAULT 0",
+  "replied_at TEXT",
   "fsa_score_hygiene INTEGER",
   "fsa_score_structural INTEGER",
   "fsa_score_management INTEGER",

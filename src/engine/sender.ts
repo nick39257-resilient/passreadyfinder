@@ -1,10 +1,11 @@
 import { Resend } from "resend";
-import { productConfig } from "../config/product.config.js";
+import { getDailySendQuota } from "./daily-send-cap.js";
 import {
   getDeliverabilityStatus,
   randomSendDelayMs,
   sleepWithProgress,
 } from "./deliverability.js";
+import { prepareOutboundMessage } from "./outreach-message.js";
 import { runMigrations } from "./store/db.js";
 import {
   getApprovedLeads,
@@ -38,18 +39,13 @@ function resolveRecipient(lead: ApprovedLead): {
   );
 }
 
-function plainTextToHtml(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`)
-    .join("");
-}
-
 export interface SendRunResult {
   sent: number;
   skipped: number;
   errors: { leadId: number; businessName: string; error: string }[];
   sendLocked?: boolean;
+  dailyCapReached?: boolean;
+  dailyQuota?: { sentToday: number; cap: number; remaining: number };
 }
 
 export type SendProgressCallback = (message: string) => void | Promise<void>;
@@ -74,8 +70,22 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
   const testEmail = process.env.TEST_EMAIL_ADDRESS?.trim();
 
   const resend = new Resend(apiKey);
-  const leads = await getApprovedLeads();
-  const result: SendRunResult = { sent: 0, skipped: 0, errors: [] };
+  const quota = await getDailySendQuota();
+  const result: SendRunResult = {
+    sent: 0,
+    skipped: 0,
+    errors: [],
+    dailyQuota: quota,
+  };
+
+  if (quota.remaining <= 0) {
+    console.log(
+      `Daily send cap reached (${quota.sentToday}/${quota.cap} today for this mailbox).`,
+    );
+    return { ...result, dailyCapReached: true };
+  }
+
+  const leads = await getApprovedLeads(quota.remaining);
 
   if (leads.length === 0) {
     console.log("No approved leads to send.");
@@ -87,7 +97,9 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
     await onProgress?.(msg);
   };
 
-  await report(`Sending ${leads.length} approved lead(s) via Resend…`);
+  await report(
+    `Sending ${leads.length} approved lead(s) via Resend (${quota.sentToday}/${quota.cap} sent today, cap ${quota.cap})…`,
+  );
   await report(`From: ${fromEmail}`);
   if (testEmail) {
     await report(`Test fallback: ${testEmail} (used when lead has no email)\n`);
@@ -104,12 +116,19 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
         await report(`→ ${lead.business_name}: ${to}`);
       }
 
+      const hasReplied = Boolean(lead.replied_at?.trim());
+      const { text, html } = prepareOutboundMessage({
+        body: lead.draft_message,
+        touchCount: lead.touch_count,
+        hasReplied,
+      });
+
       const { data, error } = await resend.emails.send({
         from: fromEmail,
         to,
         subject: EMAIL_SUBJECT,
-        text: lead.draft_message,
-        html: plainTextToHtml(lead.draft_message),
+        text,
+        ...(html ? { html } : {}),
       });
 
       if (error) {

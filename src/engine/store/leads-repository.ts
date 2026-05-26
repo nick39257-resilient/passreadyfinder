@@ -112,6 +112,7 @@ export interface LeadRow {
   draft_message?: string | null;
   contacted_at?: string | null;
   touch_count?: number;
+  replied_at?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "find": "tsx src/cli/find-leads.ts find",
+    "find-cron": "tsx src/cli/find-cron.ts",
     "list": "tsx src/cli/find-leads.ts list",
     "draft": "tsx src/cli/draft.ts",
-    "auto-draft": "tsx src/cli/auto-draft.ts",
+    "queue-draft": "tsx src/cli/queue-draft.ts",
+    "auto-draft": "tsx src/cli/queue-draft.ts",
     "prestart": "node scripts/ensure-dashboard.mjs",
     "start": "tsx src/server/app.ts",
     "review": "tsx src/server/app.ts",

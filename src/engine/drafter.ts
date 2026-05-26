@@ -3,7 +3,16 @@ import { productConfig } from "../config/product.config.js";
 import type { DraftJobParams, TargetRating } from "../types/segmentation.js";
 import type { DraftHookContext } from "./intelligence/draft-hooks.js";
 import { buildDraftHookGuidance } from "./intelligence/draft-hooks.js";
-import { draftMessageSchema } from "../validation/draft.schemas.js";
+import {
+  assertDraftUsesVariables,
+  buildDraftVariables,
+  type DraftVariables,
+} from "./intelligence/draft-variables.js";
+import { stripUrls } from "./outreach-message.js";
+import {
+  draftMessageSchema,
+  firstTouchDraftMessageSchema,
+} from "../validation/draft.schemas.js";
 import { geminiChatCompletionSchema } from "../validation/gemini.schemas.js";
 import { geminiApiQueue } from "./rate-limit-queue.js";
 import { getDb } from "./store/db.js";
@@ -17,6 +26,8 @@ export interface LeadForDraft {
   fsa_rating: number | null;
 }
 
+export type { DraftVariables };
+
 function getWhatsAppNumber(): string {
   const number = process.env.WHATSAPP_NUMBER?.replace(/\D/g, "");
   if (!number) {
@@ -25,7 +36,7 @@ function getWhatsAppNumber(): string {
   return number;
 }
 
-/** Trapdoor CTA — sole link in every draft */
+/** Trapdoor CTA — used only after the lead has replied. */
 export function buildWaMeLink(businessName: string): string {
   const number = getWhatsAppNumber();
   const prefill = productConfig.outreach.whatsappPrefillTemplate.replace(
@@ -106,43 +117,61 @@ export function ratingToneGuidance(rating: number | null): string {
 }
 
 function buildSystemPrompt(
-  waMeLink: string,
   rating: number | null,
-  hookLines: string[] = [],
+  hookLines: string[],
+  includeLink: boolean,
+  waMeLink?: string,
 ): string {
-  return [
+  const lines = [
     "You write a short, conversational email to a UK takeaway owner—as one operator to another, not as a vendor.",
     ratingToneGuidance(rating),
     "PassReady is a side project you built for your own kitchens (EHO checklists in English, Urdu, Bengali, Polish)—mention it only as something that helped you, not as a product launch.",
     "Maximum 125 words. No images. No attachments. Plain, internal-style tone.",
     ...productConfig.outreach.pitchGuidelines,
     ...hookLines,
-    `End with your curious ask, then this exact link on its own line: ${waMeLink}`,
-    "Do not add any other links or calls-to-action.",
-  ].join("\n");
+  ];
+
+  if (includeLink && waMeLink) {
+    lines.push(
+      `End with your curious ask, then this exact link on its own line: ${waMeLink}`,
+      "Do not add any other links or calls-to-action.",
+    );
+  } else {
+    lines.push(
+      "Do NOT include any URLs, links, or wa.me in this message.",
+      "End with a short curious ask that invites them to reply (no link).",
+    );
+  }
+
+  return lines.join("\n");
 }
 
 function buildUserPrompt(
   lead: LeadForDraft,
-  city: string,
-  waMeLink: string,
-  consultantTip?: string | null,
+  variables: DraftVariables,
+  includeLink: boolean,
+  waMeLink?: string,
 ): string {
   const lines = [
+    "Required variable injection — weave all three naturally into the message:",
+    `1) Business name (use exactly): ${variables.businessName}`,
+    `2) FSA practical issue hook (no star rating): ${variables.fsaIssue}`,
+    `3) Local reference: ${variables.localReference}`,
     `Takeaway name: ${lead.business_name}`,
-    `City: ${city}`,
   ];
+
   if (lead.fsa_rating !== null) {
     lines.push(
       `Internal only (never mention in the message): FSA rating ${lead.fsa_rating}/5 — calibrate warmth only; no stars, scores, or inspection talk.`,
     );
   }
-  if (consultantTip?.trim()) {
-    lines.push(
-      `Optional practical note (middle of message only, never in opening, never judgmental): ${consultantTip.trim()}`,
-    );
+
+  if (includeLink && waMeLink) {
+    lines.push(`Required closing link (use exactly): ${waMeLink}`);
+  } else {
+    lines.push("No links in this draft — reply-first outreach.");
   }
-  lines.push(`Required closing link (use exactly): ${waMeLink}`);
+
   return lines.join("\n");
 }
 
@@ -200,21 +229,37 @@ export async function generateDraftForLead(
     templateRating?: number | null;
     hookContext?: DraftHookContext;
     consultantTip?: string | null;
+    variables?: DraftVariables;
+    /** First outreach = no link. After reply = include WhatsApp link. */
+    includeLink?: boolean;
+    touchCount?: number;
+    hasReplied?: boolean;
   },
 ): Promise<string> {
   const city = extractCity(lead);
-  const waMeLink = buildWaMeLink(lead.business_name);
+  const hookContext = options?.hookContext ?? {
+    competitors: [],
+    localPassReadyCount: 0,
+  };
+  const consultantTip = options?.consultantTip?.trim() ?? "";
+  const variables =
+    options?.variables ??
+    buildDraftVariables({
+      businessName: lead.business_name,
+      city,
+      consultantTip,
+      competitors: hookContext.competitors,
+    });
+
+  const touchCount = options?.touchCount ?? 0;
+  const hasReplied = options?.hasReplied ?? false;
+  const includeLink = options?.includeLink ?? hasReplied;
+  const waMeLink = includeLink ? buildWaMeLink(lead.business_name) : undefined;
+
   const llm = client ?? createLlmClient();
   const toneRating =
     options?.templateRating !== undefined ? options.templateRating : lead.fsa_rating;
-  const hookLines = options?.hookContext
-    ? buildDraftHookGuidance(options.hookContext)
-    : [];
-  if (options?.consultantTip?.trim()) {
-    hookLines.push(
-      `Optional practical note (middle of message only, never opening, never judgmental): ${options.consultantTip.trim()}`,
-    );
-  }
+  const hookLines = options?.hookContext ? buildDraftHookGuidance(options.hookContext) : [];
 
   let completion;
   try {
@@ -223,10 +268,13 @@ export async function generateDraftForLead(
         model: GEMINI_MODEL,
         temperature: 0.7,
         messages: [
-          { role: "system", content: buildSystemPrompt(waMeLink, toneRating, hookLines) },
+          {
+            role: "system",
+            content: buildSystemPrompt(toneRating, hookLines, includeLink, waMeLink),
+          },
           {
             role: "user",
-            content: buildUserPrompt(lead, city, waMeLink, options?.consultantTip),
+            content: buildUserPrompt(lead, variables, includeLink, waMeLink),
           },
         ],
       }),
@@ -246,12 +294,23 @@ export async function generateDraftForLead(
   }
 
   const parsed = geminiChatCompletionSchema.parse(completion);
-  const raw = parsed.choices[0]?.message?.content?.trim();
+  let raw = parsed.choices[0]?.message?.content?.trim();
   if (!raw) {
     throw new Error(`LLM returned empty content for lead ${lead.id}`);
   }
 
-  return draftMessageSchema.parse(raw);
+  if (!includeLink) {
+    raw = stripUrls(raw);
+    raw = firstTouchDraftMessageSchema.parse(raw);
+  } else {
+    raw = draftMessageSchema.parse(raw);
+    if (waMeLink && !raw.includes(waMeLink)) {
+      raw = `${raw.trim()}\n\n${waMeLink}`;
+    }
+  }
+
+  assertDraftUsesVariables(raw, variables);
+  return raw;
 }
 
 export interface DraftRunResult {
@@ -282,7 +341,10 @@ export async function runDrafter(options?: DraftJobParams): Promise<DraftRunResu
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i];
     try {
-      const draft = await generateDraftForLead(lead, llmClient);
+      const draft = await generateDraftForLead(lead, llmClient, {
+        includeLink: false,
+        touchCount: 0,
+      });
       await saveDraftMessage(lead.id, draft);
       result.drafted++;
       console.log(`✓ ${lead.business_name}`);

@@ -24,8 +24,10 @@ import { getComplianceTipOfDay } from "../engine/intelligence/compliance.js";
 import { getSystemActivity } from "../engine/intelligence/activity.js";
 import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
 import { parseArea, parseTargetRating } from "../types/segmentation.js";
+import { getDailySendQuota } from "../engine/daily-send-cap.js";
 import {
   formatRouteError,
+  markLeadRepliedAndDraftFollowUp,
   quickDraftLeadById,
 } from "./quick-draft-handler.js";
 import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
@@ -169,6 +171,28 @@ export async function createApp(options?: {
     }
   });
 
+  app.post("/api/leads/:id/mark-replied", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+
+    try {
+      const draft = await markLeadRepliedAndDraftFollowUp(id);
+      res.json({ ok: true, draft });
+    } catch (err) {
+      const message = formatRouteError(err);
+      console.error("Mark-replied failed:", message, err);
+      if (message === "Lead not found") {
+        res.status(404).json({ error: message });
+        return;
+      }
+      const status = message.includes("not configured") ? 503 : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+
   app.post("/api/leads/:id/quick-draft", requireControlAuth, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
@@ -288,13 +312,29 @@ export async function createApp(options?: {
       }
 
       const approvedCount = await countApprovedLeads();
-      if (approvedCount === 0) {
-        res.json({ approvedCount: 0, confirmToken: null, sendLocked: false });
+      const dailyQuota = await getDailySendQuota();
+      const sendableCount = Math.min(approvedCount, dailyQuota.remaining);
+
+      if (approvedCount === 0 || sendableCount === 0) {
+        res.json({
+          approvedCount,
+          sendableCount: 0,
+          confirmToken: null,
+          sendLocked: false,
+          dailyQuota,
+          dailyCapReached: dailyQuota.remaining <= 0,
+        });
         return;
       }
 
-      const confirmToken = await createSendConfirmToken(approvedCount);
-      res.json({ approvedCount, confirmToken, sendLocked: false });
+      const confirmToken = await createSendConfirmToken(sendableCount);
+      res.json({
+        approvedCount,
+        sendableCount,
+        confirmToken,
+        sendLocked: false,
+        dailyQuota,
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to preview send" });

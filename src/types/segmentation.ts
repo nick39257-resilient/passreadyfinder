@@ -8,6 +8,8 @@ export interface FindJobParams {
 
 export interface DraftJobParams {
   targetRating?: TargetRating;
+  /** QueueDrafter batch size override (default from product.config). */
+  batchSize?: number;
 }
 
 export function parseTargetRating(value: unknown): TargetRating | null {

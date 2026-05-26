@@ -28,14 +28,30 @@ services:
       - key: CONTROL_PANEL_SECRET
         sync: false
 
-  # Phase 6 Background Prospector — daily at 09:00 UTC
+  # Finder — scrape & score leads once per UTC day (hourly tick + daily slot gate)
   - type: cron
-    name: passreadyfinder-auto-draft
+    name: passreadyfinder-find
     runtime: node
     plan: starter
-    schedule: "0 9 * * *"
+    schedule: "0 * * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install
-    startCommand: npm run auto-draft
+    startCommand: npm run find-cron
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+
+  # QueueDrafter — small staggered batches every 30 min (never blocks on full queue)
+  - type: cron
+    name: passreadyfinder-queue-draft
+    runtime: node
+    plan: starter
+    schedule: "*/30 * * * *"
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm install
+    startCommand: npm run queue-draft
     envVars:
       - key: NODE_VERSION
         value: "20"

@@ -1,5 +1,5 @@
-import { runFindPipeline } from "../engine/pipeline.js";
-import { runDrafter } from "../engine/drafter.js";
+import { runFindLeadsJob } from "../engine/find-leads-job.js";
+import { runQueueDrafter } from "../engine/queue-drafter.js";
 import { runSender } from "../engine/sender.js";
 import {
   getJob,
@@ -32,16 +32,18 @@ async function runJobBody(
         status: "running",
         progress: "Finding FSA leads and enriching via OSM…",
       });
-      return runFindPipeline({
+      return runFindLeadsJob({
         segmentation: params as FindJobParams | undefined,
       });
     }
     case "draft": {
       await updateJob(jobId, {
         status: "running",
-        progress: "Drafting messages with Gemini (may take several minutes)…",
+        progress: "QueueDrafter batch (ConsultantTip + Gemini)…",
       });
-      return runDrafter(params as DraftJobParams | undefined);
+      return runQueueDrafter({
+        batchSize: (params as DraftJobParams | undefined)?.batchSize,
+      });
     }
     case "send": {
       await updateJob(jobId, {

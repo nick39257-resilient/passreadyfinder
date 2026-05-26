@@ -84,6 +84,23 @@ export const productConfig = {
     /** Base pause when Gemini returns 429 before retry (multiplied by attempt). */
     geminiRateLimitPauseMs: 15_000,
     geminiMaxRetries: 4,
+    /** Finder cron — once per UTC day (pair with hourly Render schedule). */
+    finderCron: {
+      earliestHourUtc: 5,
+      latestHourUtc: 8,
+      runBucketMinutes: 60,
+    },
+    /** QueueDrafter — small batch every ~30 min; long gaps between leads. */
+    queueDrafter: {
+      /** Leads drafted per cron tick (keep low to avoid 429). */
+      batchSize: 2,
+      /** Only draft leads above this risk score. */
+      riskScoreThreshold: 75,
+      leadDelayMinMs: 60_000,
+      leadDelayMaxMs: 120_000,
+      rateLimitPauseMs: 5 * 60_000,
+      maxRetriesPerLead: 4,
+    },
     /** Auto-pause sending if bounce rate exceeds this (0–1) over recent sends */
     bounceRatePauseThreshold: 0.02,
     /** Max outreach emails per lead before moving to nurture */
@@ -91,6 +108,15 @@ export const productConfig = {
     /** Min/max delay between individual sends (ms) */
     sendDelayMinMs: 5 * 60 * 1000,
     sendDelayMaxMs: 15 * 60 * 1000,
+    /** Max outreach emails per mailbox per UTC day (deterministic cap in range). */
+    dailySendCapMin: 15,
+    dailySendCapMax: 20,
+    /** Background cron — run bucket size (pair with Render schedule every 5 minutes). */
+    cronSchedule: {
+      earliestHourUtc: 9,
+      latestHourUtc: 15,
+      runBucketMinutes: 5,
+    },
     /** Window size for bounce-rate calculation */
     bounceRateWindowSize: 50,
     /** Email tone guidelines passed to Gemini */
@@ -99,9 +125,10 @@ export const productConfig = {
       "Assume they are doing their best in a high-pressure environment.",
       "Shared struggle opener: start with one line acknowledging the grind (e.g. Friday night rush, staffing, stock).",
       "Tool as byproduct: do not present PassReady as a product or sales pitch—it is a side project you built for your own kitchens that happened to work well.",
-      "The ask: never say 'let me help you.' Close with curiosity (e.g. 'I'm curious if this would make your life easier like it did mine') before the WhatsApp link.",
+      "Variable injection (required): naturally include all three — (1) Business Name, (2) a practical FSA-area issue hook (not their star rating), (3) a specific local reference (area/high street).",
+      "First message: NO links, NO URLs, NO wa.me — plain text only. Close with a curious ask inviting a reply (e.g. 'Would it help if I shared what we did?').",
+      "Follow-up after they reply: you may include the WhatsApp link as the only CTA.",
       "Never pretend to be an EHO officer or any official body.",
-      "One clear call-to-action: the WhatsApp link only—no other links.",
       "Keep it short — under 125 words.",
     ],
   },
