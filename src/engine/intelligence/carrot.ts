@@ -55,6 +55,17 @@ export function getConsultantTip(scores: FsaBreakdownScores): string | null {
   return TIPS[area];
 }
 
+/** Always returns a string suitable for the drafter (never null/undefined). */
+export const DEFAULT_CONSULTANT_TIP =
+  "A practical nudge for the middle of the message: when the rush hits, small habits on temps and handovers kept our line sane—peer to peer, not a lecture.";
+
+export function resolveConsultantTip(scores: FsaBreakdownScores | null | undefined): string {
+  if (!scores) {
+    return DEFAULT_CONSULTANT_TIP;
+  }
+  return getConsultantTip(scores) ?? DEFAULT_CONSULTANT_TIP;
+}
+
 export function buildEhoReportUrl(fsaId: number): string {
   return `https://ratings.food.gov.uk/business/${fsaId}`;
 }

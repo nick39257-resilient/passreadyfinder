@@ -39,16 +39,26 @@ export function scoresFromFsaApi(
 
 /** GET /Establishments/{id} — Hygiene, Structural, ConfidenceInManagement (FHRS only). */
 export async function fetchEstablishmentScores(fsaId: number): Promise<FsaBreakdownScores | null> {
-  const base = productConfig.fsa.baseUrl.replace(/\/$/, "");
-  const url = `${base}/Establishments/${fsaId}`;
-  const response = await fetch(url, { headers: FSA_HEADERS });
-  if (!response.ok) {
-    return null;
-  }
-
   try {
+    const base = productConfig.fsa.baseUrl.replace(/\/$/, "");
+    const url = `${base}/Establishments/${fsaId}`;
+    const response = await fetch(url, { headers: FSA_HEADERS });
+    if (!response.ok) {
+      return null;
+    }
+
     const json: unknown = await response.json();
-    const parsed = fsaDetailResponseSchema.parse(json);
+    const root =
+      typeof json === "object" && json !== null && "scores" in json
+        ? json
+        : typeof json === "object" &&
+            json !== null &&
+            "establishment" in json &&
+            typeof (json as { establishment: unknown }).establishment === "object"
+          ? (json as { establishment: unknown }).establishment
+          : json;
+
+    const parsed = fsaDetailResponseSchema.parse(root);
     const breakdown = scoresFromFsaApi(parsed.scores);
     const hasAny =
       breakdown.hygiene !== null ||
@@ -91,11 +101,19 @@ export async function ensureLeadFsaScores(
     return existing;
   }
 
-  const fetched = await fetchEstablishmentScores(fsaId);
-  if (!fetched) {
+  try {
+    const fetched = await fetchEstablishmentScores(fsaId);
+    if (!fetched) {
+      return existing;
+    }
+
+    try {
+      await updateLeadFsaScores(leadId, fetched);
+    } catch {
+      /* DB columns may be missing on older deploys — still use fetched scores in-memory */
+    }
+    return fetched;
+  } catch {
     return existing;
   }
-
-  await updateLeadFsaScores(leadId, fetched);
-  return fetched;
 }

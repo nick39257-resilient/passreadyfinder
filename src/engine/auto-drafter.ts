@@ -4,7 +4,7 @@ import {
   findLocalCompetitors,
 } from "./intelligence/competitors.js";
 import {
-  getConsultantTip,
+  resolveConsultantTip,
   scoresFromRow,
 } from "./intelligence/carrot.js";
 import { calculateRiskScore } from "./risk-scorer.js";
@@ -137,7 +137,7 @@ export async function runAutoDrafter(options?: {
         countLocalPassReadyUsers(lead.postcode),
       ]);
       const fsaScores = await ensureLeadFsaScores(lead.id, lead.fsa_id, scoresFromRow(lead));
-      const consultantTip = getConsultantTip(fsaScores);
+      const consultantTip = resolveConsultantTip(fsaScores);
       const draft = await generateDraftForLead(lead, llmClient, {
         templateRating: RESCUE_TEMPLATE_RATING,
         hookContext: { competitors, localPassReadyCount },

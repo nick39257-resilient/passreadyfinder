@@ -22,19 +22,12 @@ import {
 import { getDeliverabilityStatus } from "../engine/deliverability.js";
 import { getComplianceTipOfDay } from "../engine/intelligence/compliance.js";
 import { getSystemActivity } from "../engine/intelligence/activity.js";
-import { getConsultantTip, scoresFromRow } from "../engine/intelligence/carrot.js";
-import { ensureLeadFsaScores } from "../engine/finder/fsa-detail.js";
-import {
-  countLocalPassReadyUsers,
-  findLocalCompetitors,
-} from "../engine/intelligence/competitors.js";
-import {
-  createLlmClient,
-  generateDraftForLead,
-  saveDraftMessage,
-} from "../engine/drafter.js";
 import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
 import { parseArea, parseTargetRating } from "../types/segmentation.js";
+import {
+  formatRouteError,
+  quickDraftLeadById,
+} from "./quick-draft-handler.js";
 import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
 import { startJob } from "./job-runner.js";
 
@@ -184,49 +177,21 @@ export async function createApp(options?: {
     }
 
     try {
-      const row = await getLeadById(id);
-      if (!row) {
-        res.status(404).json({ error: "Lead not found" });
-        return;
-      }
-      if (row.contacted_at) {
-        res.status(409).json({ error: "Lead already contacted — outreach blocked" });
-        return;
-      }
-
-      const [competitors, localPassReadyCount] = await Promise.all([
-        findLocalCompetitors({
-          id: row.id,
-          postcode: row.postcode,
-          business_type: row.business_type,
-        }),
-        countLocalPassReadyUsers(row.postcode),
-      ]);
-
-      const fsaScores = await ensureLeadFsaScores(row.id, row.fsa_id, scoresFromRow(row));
-      const consultantTip = getConsultantTip(fsaScores);
-
-      const llm = createLlmClient();
-      const draft = await generateDraftForLead(
-        {
-          id: row.id,
-          business_name: row.business_name,
-          address: row.address,
-          postcode: row.postcode,
-          fsa_rating: row.fsa_rating,
-        },
-        llm,
-        {
-          templateRating: row.fsa_rating === 2 ? 2 : row.fsa_rating,
-          hookContext: { competitors, localPassReadyCount },
-          consultantTip,
-        },
-      );
-      await saveDraftMessage(id, draft);
+      const draft = await quickDraftLeadById(id);
       res.json({ ok: true, draft });
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Failed to quick-draft lead" });
+      const message = formatRouteError(err);
+      console.error("Quick-draft failed:", message, err);
+      if (message === "Lead not found") {
+        res.status(404).json({ error: message });
+        return;
+      }
+      if (message.includes("already contacted")) {
+        res.status(409).json({ error: message });
+        return;
+      }
+      const status = message.includes("not configured") ? 503 : 500;
+      res.status(status).json({ error: message });
     }
   });
 

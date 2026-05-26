@@ -136,9 +136,9 @@ function buildUserPrompt(
       `Internal only (never mention in the message): FSA rating ${lead.fsa_rating}/5 — calibrate warmth only; no stars, scores, or inspection talk.`,
     );
   }
-  if (consultantTip) {
+  if (consultantTip?.trim()) {
     lines.push(
-      `Optional practical note (middle of message only, never in opening, never judgmental): ${consultantTip}`,
+      `Optional practical note (middle of message only, never in opening, never judgmental): ${consultantTip.trim()}`,
     );
   }
   lines.push(`Required closing link (use exactly): ${waMeLink}`);
@@ -209,9 +209,9 @@ export async function generateDraftForLead(
   const hookLines = options?.hookContext
     ? buildDraftHookGuidance(options.hookContext)
     : [];
-  if (options?.consultantTip) {
+  if (options?.consultantTip?.trim()) {
     hookLines.push(
-      `Optional practical note (middle of message only, never opening, never judgmental): ${options.consultantTip}`,
+      `Optional practical note (middle of message only, never opening, never judgmental): ${options.consultantTip.trim()}`,
     );
   }
 
