@@ -32,14 +32,14 @@ services:
       - key: CONTROL_PANEL_SECRET
         sync: false
 
-  # FindLeads — scrape & score once per UTC day (hourly tick + daily slot gate in find-cron)
+  # FindLeads — scrape & score once per day at 03:00 UTC
   - type: cron
     name: passreadyfinder-find
     runtime: node
     plan: starter
     repo: https://github.com/nick39257-resilient/passreadyfinder
     branch: main
-    schedule: "0 * * * *"
+    schedule: "0 3 * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install
     startCommand: npm run find-cron
     envVars:
