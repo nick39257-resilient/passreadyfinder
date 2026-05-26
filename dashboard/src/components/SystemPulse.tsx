@@ -60,7 +60,7 @@ export function SystemPulse({
             setShowError((v) => !v);
           }
         }}
-        className={`flex min-h-[44px] items-center gap-2 rounded-xl border px-3 py-2 ${styles.ring} ${
+        className={`flex min-h-[40px] items-center gap-2 rounded-lg border px-2.5 py-1.5 ${styles.ring} ${
           isError ? "cursor-pointer" : "cursor-default"
         } bg-slate-900/90`}
         aria-label={`System status: ${label}`}

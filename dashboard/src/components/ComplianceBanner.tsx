@@ -1,10 +1,10 @@
 export function ComplianceBanner({ tip }: { tip: string }) {
   return (
-    <aside className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-950/30 px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+    <aside className="mb-3 rounded-xl border border-amber-500/20 bg-amber-950/20 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-500/90">
         Compliance insight
       </p>
-      <p className="mt-1 text-sm leading-snug text-amber-100">{tip}</p>
+      <p className="mt-0.5 text-xs leading-snug text-amber-100/90">{tip}</p>
     </aside>
   );
 }

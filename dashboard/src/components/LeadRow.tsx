@@ -1,7 +1,15 @@
 import { useRef, useState } from "react";
 import type { ApiLead } from "../api/leads";
-import { riskPillStyles, statusPillStyles } from "../lib/risk-styles";
+import {
+  getLeadReasonBullets,
+  priorityCardStyles,
+  priorityFromBand,
+  priorityLabel,
+  statusDisplayLabel,
+} from "../lib/lead-insights";
+import { statusPillStyles } from "../lib/risk-styles";
 import type { RiskBand } from "./ActionCard";
+import { RiskScoreBadge } from "./RiskScoreBadge";
 
 const SWIPE_THRESHOLD = 72;
 
@@ -19,15 +27,24 @@ export function LeadRow({
   busy?: boolean;
 }) {
   const band = lead.riskBand as RiskBand;
+  const tier = priorityFromBand(band);
+  const styles = priorityCardStyles[tier];
+  const reasons = getLeadReasonBullets(lead, 2);
   const startX = useRef(0);
   const [offset, setOffset] = useState(0);
   const [hint, setHint] = useState<"left" | "right" | null>(null);
 
-  const statusStyle =
-    statusPillStyles[lead.status] ?? "bg-slate-700 text-slate-200";
+  const statusStyle = statusPillStyles[lead.status] ?? "bg-slate-700 text-slate-200";
 
   return (
-    <li className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
+    <li
+      className={`relative overflow-hidden rounded-2xl border bg-slate-900/70 ring-1 ring-slate-800/80 ${styles.border} ${styles.glow}`}
+    >
+      <div
+        className={`pointer-events-none absolute inset-0 bg-gradient-to-r ${styles.accent}`}
+        aria-hidden
+      />
+
       <div
         className="pointer-events-none absolute inset-0 flex items-center justify-between px-4 text-xs font-bold"
         aria-hidden
@@ -44,7 +61,7 @@ export function LeadRow({
         type="button"
         onClick={onRowTap}
         disabled={busy}
-        className="relative flex min-h-[56px] w-full touch-pan-y items-center gap-2 bg-slate-900/95 px-3 py-3 text-left transition-transform"
+        className="relative flex w-full touch-pan-y gap-2.5 px-3 py-3 text-left transition-transform active:bg-slate-800/30"
         style={{ transform: `translateX(${offset}px)` }}
         onTouchStart={(e) => {
           startX.current = e.touches[0]?.clientX ?? 0;
@@ -71,31 +88,41 @@ export function LeadRow({
         }}
       >
         <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-semibold leading-tight">{lead.businessName}</p>
-          <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
-            {lead.signals.ehoScraped ? (
-              <span title="EHO scraped">🔍 EHO</span>
-            ) : null}
-            {lead.signals.predictiveScore ? (
-              <span title="Predictive score">🧠 Score</span>
-            ) : null}
-            {lead.signals.draftReady ? (
-              <span title="Draft ready">🤖 Draft</span>
-            ) : null}
+          <p className="truncate text-[15px] font-semibold leading-tight text-slate-50">
+            {lead.businessName}
+          </p>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <span
+              className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${statusStyle}`}
+            >
+              {statusDisplayLabel(lead.status)}
+            </span>
+            <span
+              className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ring-1 ${styles.badge}`}
+            >
+              {priorityLabel(tier)}
+            </span>
           </div>
+
+          {reasons.length > 0 ? (
+            <ul className="mt-2 space-y-0.5">
+              {reasons.map((reason) => (
+                <li
+                  key={reason}
+                  className="flex items-start gap-1.5 text-xs leading-snug text-slate-400"
+                >
+                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-500/70" />
+                  <span>{reason}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1.5 text-xs text-slate-500">{lead.postcode}</p>
+          )}
         </div>
 
-        <span
-          className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-bold tabular-nums ring-1 ${riskPillStyles[band]}`}
-        >
-          {lead.riskScore}
-        </span>
-
-        <span
-          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusStyle}`}
-        >
-          {lead.status}
-        </span>
+        <RiskScoreBadge score={lead.riskScore} band={band} />
       </button>
     </li>
   );

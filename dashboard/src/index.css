@@ -1,1 +1,18 @@
 @import "tailwindcss";
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply min-h-screen antialiased text-slate-100;
+    background: linear-gradient(
+      165deg,
+      #0a1628 0%,
+      #0c1a22 38%,
+      #081612 100%
+    );
+    background-attachment: fixed;
+  }
+}
