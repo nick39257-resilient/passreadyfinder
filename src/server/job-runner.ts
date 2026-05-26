@@ -1,6 +1,7 @@
 import { runFindLeadsJob } from "../engine/find-leads-job.js";
 import { runQueueDrafter } from "../engine/queue-drafter.js";
 import { runSender } from "../engine/sender.js";
+import { appendEngineLog } from "../engine/store/engine-log-repository.js";
 import {
   getJob,
   updateJob,
@@ -59,6 +60,18 @@ async function runJobBody(
   }
 }
 
+async function logSendJobOutcome(result: unknown): Promise<void> {
+  const r = result as { sent?: number } | null;
+  const sent = r?.sent;
+  if (typeof sent === "number" && sent > 0) {
+    await appendEngineLog({
+      source: "send",
+      message: `Sent ${sent} message${sent === 1 ? "" : "s"}`,
+      level: "info",
+    });
+  }
+}
+
 /** Fire-and-forget background job on the always-on server. */
 export function startJob(jobId: string, type: JobType): void {
   void (async () => {
@@ -69,6 +82,9 @@ export function startJob(jobId: string, type: JobType): void {
         progress: "Complete",
         result,
       });
+      if (type === "send") {
+        await logSendJobOutcome(result);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`Job ${jobId} (${type}) failed:`, err);

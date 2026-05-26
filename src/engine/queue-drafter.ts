@@ -24,6 +24,7 @@ import {
   saveDraftMessage,
   type LeadForDraft,
 } from "./drafter.js";
+import { logEngineError, logQueueDrafterResult } from "./intelligence/system-status.js";
 import { getDb, runMigrations } from "./store/db.js";
 
 /** 2-Star Rescue consultant tone for high-risk outreach */
@@ -242,30 +243,37 @@ export async function runQueueDrafter(options?: {
 
   const llmClient = createLlmClient();
 
-  for (let i = 0; i < selected.length; i++) {
-    if (i > 0) {
-      await throttleBetweenLeads();
+  try {
+    for (let i = 0; i < selected.length; i++) {
+      if (i > 0) {
+        await throttleBetweenLeads();
+      }
+
+      const lead = selected[i];
+      console.log(`→ ${i + 1}/${selected.length}: ${lead.business_name}`);
+
+      const outcome = await processLeadWithRetry(lead, llmClient);
+
+      if (outcome.ok) {
+        result.drafted++;
+        console.log(`✓ drafted → ${lead.business_name}\n`);
+      } else {
+        result.errors.push({
+          leadId: lead.id,
+          businessName: lead.business_name,
+          error: outcome.error,
+        });
+        console.error(`✗ ${lead.business_name}: ${outcome.error}\n`);
+      }
     }
 
-    const lead = selected[i];
-    console.log(`→ ${i + 1}/${selected.length}: ${lead.business_name}`);
-
-    const outcome = await processLeadWithRetry(lead, llmClient);
-
-    if (outcome.ok) {
-      result.drafted++;
-      console.log(`✓ drafted → ${lead.business_name}\n`);
-    } else {
-      result.errors.push({
-        leadId: lead.id,
-        businessName: lead.business_name,
-        error: outcome.error,
-      });
-      console.error(`✗ ${lead.business_name}: ${outcome.error}\n`);
-    }
+    await logQueueDrafterResult(result);
+    return result;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await logEngineError("draft", "QueueDrafter batch failed", message);
+    throw err;
   }
-
-  return result;
 }
 
 /** @deprecated Use runQueueDrafter */

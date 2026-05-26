@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchActivity } from "./api/activity";
 import { fetchFunnel, type FunnelStats } from "./api/funnel";
 import { startDraftJob, startFindJob } from "./api/jobs";
 import { fetchLeads, fetchLeadDetail, quickDraftLead, type ApiLead } from "./api/leads";
+import {
+  fetchSystemStatus,
+  type SystemPulseState,
+  type SystemStatusFeedItem,
+} from "./api/status";
+import { ActivityFeed } from "./components/ActivityFeed";
 import { ComplianceBanner } from "./components/ComplianceBanner";
 import { ExecutiveFunnel } from "./components/ExecutiveFunnel";
 import { FixedActionBar } from "./components/FixedActionBar";
 import { LeadDetailDrawer } from "./components/LeadDetailDrawer";
 import { LeadRow } from "./components/LeadRow";
-import { SystemActivityBar } from "./components/SystemActivityBar";
+import { SystemPulse } from "./components/SystemPulse";
 import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
 
 const STORAGE_AREA = "passready_area";
@@ -18,10 +23,12 @@ const STORAGE_SECRET = "control_secret";
 export function App() {
   const [leads, setLeads] = useState<ApiLead[]>([]);
   const [funnel, setFunnel] = useState<FunnelStats | null>(null);
+  const [pulse, setPulse] = useState<SystemPulseState>("idle");
+  const [pulseLabel, setPulseLabel] = useState("Idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [activityFeed, setActivityFeed] = useState<SystemStatusFeedItem[]>([]);
+  const [needsReviewCount, setNeedsReviewCount] = useState(0);
   const [complianceTip, setComplianceTip] = useState("");
-  const [activity, setActivity] = useState<Awaited<ReturnType<typeof fetchActivity>>["items"]>(
-    [],
-  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedLead, setSelectedLead] = useState<ApiLead | null>(null);
@@ -34,15 +41,19 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
-      const [leadList, funnelStats, activityData] = await Promise.all([
+      const [leadList, funnelStats, status] = await Promise.all([
         fetchLeads(),
         fetchFunnel(),
-        fetchActivity(),
+        fetchSystemStatus(),
       ]);
       setLeads(leadList);
       setFunnel(funnelStats);
-      setActivity(activityData.items);
-      setComplianceTip(activityData.complianceTip);
+      setPulse(status.pulse);
+      setPulseLabel(status.pulseLabel);
+      setErrorMessage(status.errorMessage);
+      setActivityFeed(status.feed);
+      setNeedsReviewCount(status.needsReviewCount);
+      setComplianceTip(status.complianceTip);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
@@ -53,6 +64,23 @@ export function App() {
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void fetchSystemStatus()
+        .then((status) => {
+          setPulse(status.pulse);
+          setPulseLabel(status.pulseLabel);
+          setErrorMessage(status.errorMessage);
+          setActivityFeed(status.feed);
+          setNeedsReviewCount(status.needsReviewCount);
+        })
+        .catch(() => {
+          /* keep last known status on poll failure */
+        });
+    }, 12_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const visibleLeads = leads.filter((lead) => !isLeadHidden(lead.id));
   void hiddenVersion;
@@ -135,25 +163,33 @@ export function App() {
 
   return (
     <div className="mx-auto min-h-screen max-w-lg px-4 pb-28 pt-6">
-      <header className="mb-4 flex items-end justify-between gap-3">
+      <header className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium uppercase tracking-wider text-emerald-400">
             PassReady
           </p>
           <h1 className="text-2xl font-bold">Command Center</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => void loadAll()}
-          disabled={loading}
-          className="min-h-[48px] rounded-xl border border-slate-700 px-4 text-sm font-semibold text-slate-300"
-        >
-          Refresh
-        </button>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <SystemPulse
+            pulse={pulse}
+            pulseLabel={pulseLabel}
+            errorMessage={errorMessage}
+            needsReviewCount={needsReviewCount}
+          />
+          <button
+            type="button"
+            onClick={() => void loadAll()}
+            disabled={loading}
+            className="min-h-[40px] rounded-xl border border-slate-700 px-3 text-xs font-semibold text-slate-400"
+          >
+            Refresh
+          </button>
+        </div>
       </header>
 
+      <ActivityFeed items={activityFeed} />
       <ExecutiveFunnel funnel={funnel} />
-      <SystemActivityBar items={activity} complianceTip={complianceTip} />
       {complianceTip ? <ComplianceBanner tip={complianceTip} /> : null}
 
       {loading ? <p className="text-base text-slate-400">Loading pipeline…</p> : null}

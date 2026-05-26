@@ -22,6 +22,7 @@ import {
 import { getDeliverabilityStatus } from "../engine/deliverability.js";
 import { getComplianceTipOfDay } from "../engine/intelligence/compliance.js";
 import { getSystemActivity } from "../engine/intelligence/activity.js";
+import { getSystemStatus } from "../engine/intelligence/system-status.js";
 import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
 import { parseArea, parseTargetRating } from "../types/segmentation.js";
 import { getDailySendQuota } from "../engine/daily-send-cap.js";
@@ -136,6 +137,15 @@ export async function createApp(options?: {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch activity" });
+    }
+  });
+
+  app.get("/api/status", async (_req, res) => {
+    try {
+      res.json(await getSystemStatus(5));
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch system status" });
     }
   });
 

@@ -1,4 +1,5 @@
 import type { FindJobParams } from "../types/segmentation.js";
+import { logEngineError, logFindLeadsResult } from "./intelligence/system-status.js";
 import { runFindPipeline, type PipelineResult } from "./pipeline.js";
 import { runMigrations } from "./store/db.js";
 
@@ -13,8 +14,16 @@ export async function runFindLeadsJob(options?: {
 }): Promise<FindLeadsJobResult> {
   await runMigrations();
   console.log("FindLeads: scrape → score → store (no drafting)\n");
-  return runFindPipeline({
-    skipEnrichment: options?.skipEnrichment,
-    segmentation: options?.segmentation,
-  });
+  try {
+    const result = await runFindPipeline({
+      skipEnrichment: options?.skipEnrichment,
+      segmentation: options?.segmentation,
+    });
+    await logFindLeadsResult({ stored: result.stored, fetched: result.fetched });
+    return result;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await logEngineError("find", "FindLeads failed", message);
+    throw err;
+  }
 }
