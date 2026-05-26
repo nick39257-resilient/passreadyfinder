@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchFunnel, type FunnelStats } from "./api/funnel";
-import { startDraftJob, startFindJob } from "./api/jobs";
+import { startDraftJob, startFindJob, startSendJob } from "./api/jobs";
 import { fetchLeads, fetchLeadDetail, quickDraftLead, type ApiLead } from "./api/leads";
+import { fetchSendPreview, type SendPreviewResponse } from "./api/send";
 import {
   fetchSystemStatus,
   type SystemPulseState,
   type SystemStatusFeedItem,
 } from "./api/status";
+import { ActionBanner } from "./components/ActionBanner";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { ComplianceBanner } from "./components/ComplianceBanner";
 import { FixedActionBar } from "./components/FixedActionBar";
@@ -15,7 +17,14 @@ import { LeadFilters } from "./components/LeadFilters";
 import { LeadRow } from "./components/LeadRow";
 import { OpportunityAlert } from "./components/OpportunityAlert";
 import { OutreachPipeline } from "./components/OutreachPipeline";
+import { SendConfirmModal } from "./components/SendConfirmModal";
 import { SystemPulse } from "./components/SystemPulse";
+import {
+  ensureControlSecret,
+  getControlSecret,
+  setControlSecret,
+} from "./lib/control-secret";
+import { pollJobUntilDone } from "./lib/job-poll";
 import {
   type LeadFilterKey,
   matchesLeadFilter,
@@ -24,7 +33,10 @@ import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
 
 const STORAGE_AREA = "passready_area";
 const STORAGE_RATING = "passready_rating";
-const STORAGE_SECRET = "control_secret";
+
+function canQuickDraftLead(lead: ApiLead): boolean {
+  return !["contacted", "opted_in", "nurture"].includes(lead.status);
+}
 
 function countByFilter(leads: ApiLead[]): Record<LeadFilterKey, number> {
   const keys: LeadFilterKey[] = ["all", "new", "drafted", "approved", "high"];
@@ -50,6 +62,14 @@ export function App() {
   const [actionBusy, setActionBusy] = useState(false);
   const [hiddenVersion, setHiddenVersion] = useState(0);
   const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{
+    message: string;
+    tone: "info" | "success" | "error";
+  } | null>(null);
+  const [jobMessage, setJobMessage] = useState<string | null>(null);
+  const [sendPreview, setSendPreview] = useState<SendPreviewResponse | null>(null);
+  const [sendModalOpen, setSendModalOpen] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -90,7 +110,7 @@ export function App() {
           setNeedsReviewCount(status.needsReviewCount);
         })
         .catch(() => {
-          /* keep last known status on poll failure */
+          /* keep last known status */
         });
     }, 12_000);
     return () => window.clearInterval(interval);
@@ -109,40 +129,83 @@ export function App() {
     [leads, hiddenVersion],
   );
 
-  const getSecret = () => sessionStorage.getItem(STORAGE_SECRET) ?? "";
+  const runBackgroundJob = useCallback(
+    async (jobId: string, label: string) => {
+      setActionBusy(true);
+      setJobMessage(label);
+      try {
+        const { promise } = pollJobUntilDone(jobId, (job) => {
+          setJobMessage(job.progress || `${label} (${job.status})`);
+        });
+        await promise;
+        setBanner({ tone: "success", message: "Job finished successfully." });
+        await loadAll();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Job failed";
+        setBanner({ tone: "error", message: msg });
+      } finally {
+        setActionBusy(false);
+        window.setTimeout(() => setJobMessage(null), 5000);
+      }
+    },
+    [loadAll],
+  );
 
   const openLeadDrawer = async (lead: ApiLead) => {
     setSelectedLead(lead);
+    setDrawerError(null);
     setDrawerLoading(true);
     try {
       const detail = await fetchLeadDetail(lead.id);
       setSelectedLead(detail);
     } catch {
-      /* keep list row data if detail fetch fails */
+      /* keep list row data */
     } finally {
       setDrawerLoading(false);
     }
   };
 
-  const handleQuickDraft = async (lead: ApiLead) => {
-    setBusyId(lead.id);
+  const handleQuickDraft = async (lead: ApiLead, options?: { keepDrawerOpen?: boolean }) => {
+    setDrawerError(null);
+    let secret: string;
     try {
-      await quickDraftLead(lead.id, getSecret());
+      secret = ensureControlSecret(getControlSecret());
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Secret required";
+      setDrawerError(msg);
+      setBanner({ tone: "error", message: msg });
+      return;
+    }
+
+    if (!canQuickDraftLead(lead)) {
+      const msg = "Already sent — mark as replied before re-drafting.";
+      setDrawerError(msg);
+      setBanner({ tone: "error", message: msg });
+      return;
+    }
+
+    setBusyId(lead.id);
+    setJobMessage(`Drafting ${lead.businessName}… (30–90 sec)`);
+    try {
+      await quickDraftLead(lead.id, secret);
       await loadAll();
+      setBanner({
+        tone: "success",
+        message: `Draft saved for ${lead.businessName}. Review in queue or approve to send.`,
+      });
+      if (!options?.keepDrawerOpen) {
+        setSelectedLead(null);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Quick draft failed";
-      if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
-        const secret = window.prompt("Enter CONTROL_PANEL_SECRET for quick-draft:");
-        if (secret?.trim()) {
-          sessionStorage.setItem(STORAGE_SECRET, secret.trim());
-          await quickDraftLead(lead.id, secret.trim());
-          await loadAll();
-          return;
-        }
+      setDrawerError(msg);
+      setBanner({ tone: "error", message: msg });
+      if (!selectedLead || selectedLead.id !== lead.id) {
+        void openLeadDrawer(lead);
       }
-      window.alert(msg);
     } finally {
       setBusyId(null);
+      window.setTimeout(() => setJobMessage(null), 4000);
     }
   };
 
@@ -159,34 +222,92 @@ export function App() {
     localStorage.setItem(STORAGE_AREA, area);
     localStorage.setItem(STORAGE_RATING, String(rating));
 
-    setActionBusy(true);
     try {
-      await startFindJob(area, rating, getSecret());
-      await loadAll();
-      window.alert("Find job started — check engine room for progress.");
+      const secret = ensureControlSecret(getControlSecret());
+      setActionBusy(true);
+      const jobId = await startFindJob(area, rating, secret);
+      await runBackgroundJob(jobId, "Finding leads…");
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Find failed");
-    } finally {
       setActionBusy(false);
     }
   };
 
   const handleDraft = async () => {
     const rating = Number(localStorage.getItem(STORAGE_RATING) ?? "2");
-    setActionBusy(true);
     try {
-      await startDraftJob(rating, getSecret());
-      await loadAll();
-      window.alert("Draft job started.");
+      const secret = ensureControlSecret(getControlSecret());
+      setActionBusy(true);
+      const jobId = await startDraftJob(rating, secret);
+      await runBackgroundJob(jobId, "Drafting messages…");
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Draft failed");
+      setActionBusy(false);
+    }
+  };
+
+  const handleSendOpen = async () => {
+    try {
+      const secret = ensureControlSecret(getControlSecret());
+      setActionBusy(true);
+      const preview = await fetchSendPreview(secret);
+      if (preview.sendLocked) {
+        setBanner({
+          tone: "error",
+          message: preview.reason ?? "Sending locked due to bounce rate.",
+        });
+        return;
+      }
+      if (preview.sendableCount === 0 || !preview.confirmToken) {
+        setBanner({
+          tone: "info",
+          message:
+            preview.dailyCapReached
+              ? "Daily send cap reached — try again tomorrow."
+              : "No approved leads ready to send. Approve drafts in Review first.",
+        });
+        return;
+      }
+      setSendPreview(preview);
+      setSendModalOpen(true);
+    } catch (err) {
+      setBanner({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Send preview failed",
+      });
     } finally {
       setActionBusy(false);
     }
   };
 
+  const handleSendConfirm = async () => {
+    if (!sendPreview?.confirmToken) {
+      return;
+    }
+    try {
+      const secret = ensureControlSecret(getControlSecret());
+      setSendModalOpen(false);
+      setActionBusy(true);
+      const jobId = await startSendJob(
+        sendPreview.confirmToken,
+        sendPreview.sendableCount,
+        secret,
+      );
+      setSendPreview(null);
+      await runBackgroundJob(jobId, "Sending approved emails…");
+    } catch (err) {
+      setBanner({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Send failed",
+      });
+      setActionBusy(false);
+    }
+  };
+
+  const selectedCanDraft = selectedLead ? canQuickDraftLead(selectedLead) : false;
+
   return (
-    <div className="mx-auto min-h-screen max-w-lg px-3 pb-[5.75rem] pt-5 sm:px-4">
+    <div className="mx-auto min-h-screen max-w-lg px-3 pb-[6.5rem] pt-5 sm:px-4">
       <header className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-500/90">
@@ -202,16 +323,44 @@ export function App() {
             errorMessage={errorMessage}
             needsReviewCount={needsReviewCount}
           />
-          <button
-            type="button"
-            onClick={() => void loadAll()}
-            disabled={loading}
-            className="min-h-[36px] rounded-lg border border-slate-700/80 bg-slate-900/60 px-2.5 text-[11px] font-semibold text-slate-400"
-          >
-            Refresh
-          </button>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                const s = window.prompt("CONTROL_PANEL_SECRET (saved in this browser):");
+                if (s?.trim()) {
+                  setControlSecret(s);
+                  setBanner({ tone: "success", message: "Control secret saved for this browser." });
+                }
+              }}
+              className="min-h-[36px] rounded-lg border border-slate-700/80 bg-slate-900/60 px-2 text-[10px] font-semibold text-slate-500"
+              title="Set API secret"
+            >
+              Key
+            </button>
+            <button
+              type="button"
+              onClick={() => void loadAll()}
+              disabled={loading}
+              className="min-h-[36px] rounded-lg border border-slate-700/80 bg-slate-900/60 px-2.5 text-[11px] font-semibold text-slate-400"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
       </header>
+
+      {banner ? (
+        <ActionBanner
+          message={banner.message}
+          tone={banner.tone}
+          onDismiss={() => setBanner(null)}
+        />
+      ) : null}
+
+      {jobMessage ? (
+        <ActionBanner message={jobMessage} tone="info" />
+      ) : null}
 
       {!loading && !error ? <OpportunityAlert leads={leads} /> : null}
       <OutreachPipeline funnel={funnel} />
@@ -252,36 +401,70 @@ export function App() {
               key={lead.id}
               lead={lead}
               busy={busyId === lead.id}
+              canQuickDraft={canQuickDraftLead(lead)}
               onRowTap={() => void openLeadDrawer(lead)}
+              onQuickDraft={() => void handleQuickDraft(lead)}
               onSwipeLeft={() => {
                 snoozeLead(lead.id);
                 setHiddenVersion((v) => v + 1);
               }}
-              onSwipeRight={() => void handleQuickDraft(lead)}
+              onSwipeRight={() => {
+                if (canQuickDraftLead(lead)) {
+                  void handleQuickDraft(lead);
+                }
+              }}
             />
           ))}
         </ul>
       ) : null}
 
       <p className="mt-3 text-center text-[10px] text-slate-600">
-        Tap for detail · Swipe right quick-draft · Swipe left snooze 30d
+        Tap row for detail · Draft button or swipe right · Swipe left snooze 30d
       </p>
 
       <FixedActionBar
         disabled={actionBusy}
         onFind={() => void handleFind()}
         onDraft={() => void handleDraft()}
-        onSend={() => {
-          window.location.href = "/";
+        onSend={() => void handleSendOpen()}
+      />
+
+      <SendConfirmModal
+        open={sendModalOpen}
+        approvedCount={sendPreview?.approvedCount ?? 0}
+        sendableCount={sendPreview?.sendableCount ?? 0}
+        dailyCap={sendPreview?.dailyQuota}
+        onConfirm={() => void handleSendConfirm()}
+        onCancel={() => {
+          setSendModalOpen(false);
+          setSendPreview(null);
         }}
+        busy={actionBusy}
       />
 
       {selectedLead ? (
         <LeadDetailDrawer
           lead={selectedLead}
           busy={busyId === selectedLead.id || drawerLoading}
-          onClose={() => setSelectedLead(null)}
-          onQuickDraft={() => void handleQuickDraft(selectedLead)}
+          busyLabel={
+            busyId === selectedLead.id
+              ? "Drafting with AI… (30–90 sec)"
+              : drawerLoading
+                ? "Loading FSA data…"
+                : "Working…"
+          }
+          draftDisabled={!selectedCanDraft}
+          draftDisabledReason={
+            selectedCanDraft
+              ? undefined
+              : "Already sent — mark as replied before re-drafting."
+          }
+          errorMessage={drawerError}
+          onClose={() => {
+            setSelectedLead(null);
+            setDrawerError(null);
+          }}
+          onQuickDraft={() => void handleQuickDraft(selectedLead, { keepDrawerOpen: true })}
           onSnooze={() => {
             snoozeLead(selectedLead.id);
             setSelectedLead(null);

@@ -1,4 +1,5 @@
 import type { RiskBand } from "../components/ActionCard";
+import { authHeaders } from "../lib/auth-headers.js";
 
 export interface RiskComponents {
   ratingPressure: number;
@@ -72,19 +73,23 @@ export async function fetchLeadDetail(leadId: number): Promise<ApiLead> {
   return data.lead;
 }
 
-export async function quickDraftLead(leadId: number, secret?: string): Promise<void> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (secret?.trim()) {
-    headers.Authorization = `Bearer ${secret.trim()}`;
-  }
-
+export async function quickDraftLead(leadId: number, secret?: string): Promise<string> {
   const res = await fetch(`/api/leads/${leadId}/quick-draft`, {
     method: "POST",
-    headers,
+    headers: authHeaders(secret),
   });
 
+  const body = (await res.json().catch(() => ({}))) as { ok?: boolean; draft?: string; error?: string };
+
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    if (res.status === 401) {
+      throw new Error(
+        body.error ??
+          "Unauthorized — set CONTROL_PANEL_SECRET in Render and enter it when prompted.",
+      );
+    }
     throw new Error(body.error ?? `Quick draft failed (${res.status})`);
   }
+
+  return body.draft?.trim() ?? "";
 }

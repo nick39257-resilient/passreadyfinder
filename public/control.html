@@ -345,8 +345,12 @@
         }
       }
 
-      function openSendModal(count) {
-        sendModalText.textContent = `About to send ${count} email${count === 1 ? "" : "s"}. Confirm?`;
+      function openSendModal(sendableCount, approvedCount) {
+        const batch =
+          sendableCount < approvedCount
+            ? `${sendableCount} of ${approvedCount} approved (daily cap)`
+            : `${sendableCount}`;
+        sendModalText.textContent = `About to send ${batch} email${sendableCount === 1 ? "" : "s"}. Confirm?`;
         sendModal.classList.remove("hidden");
         sendModal.classList.add("flex");
       }
@@ -394,13 +398,18 @@
             return;
           }
 
-          if (data.approvedCount === 0) {
-            showJob("No approved leads to send", false);
+          if (data.sendableCount === 0 || data.approvedCount === 0) {
+            showJob(
+              data.dailyCapReached
+                ? "Daily send cap reached — try again tomorrow"
+                : "No approved leads to send",
+              false,
+            );
             return;
           }
 
           sendPreview = data;
-          openSendModal(data.approvedCount);
+          openSendModal(data.sendableCount, data.approvedCount);
         } catch (err) {
           showJob(err.message || "Preview failed", false);
         }
@@ -414,7 +423,7 @@
         await startJob("/api/jobs/send", {
           body: JSON.stringify({
             confirmToken: sendPreview.confirmToken,
-            expectedCount: sendPreview.approvedCount,
+            expectedCount: sendPreview.sendableCount,
           }),
         });
       });

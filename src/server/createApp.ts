@@ -372,15 +372,19 @@ export async function createApp(options?: {
         return;
       }
 
-      const currentCount = await countApprovedLeads();
-      if (currentCount === 0) {
+      const approvedCount = await countApprovedLeads();
+      const dailyQuota = await getDailySendQuota();
+      const sendableCount = Math.min(approvedCount, dailyQuota.remaining);
+
+      if (approvedCount === 0 || sendableCount === 0) {
         res.status(400).json({ error: "No approved leads to send" });
         return;
       }
-      if (currentCount !== expectedCount) {
+      if (sendableCount !== expectedCount) {
         res.status(409).json({
-          error: `Approved count changed (${expectedCount} → ${currentCount}). Preview again.`,
-          approvedCount: currentCount,
+          error: `Send batch size changed (${expectedCount} → ${sendableCount}). Preview again.`,
+          approvedCount,
+          sendableCount,
         });
         return;
       }
