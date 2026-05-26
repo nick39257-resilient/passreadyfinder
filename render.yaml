@@ -1,8 +1,12 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Sync: Dashboard → Blueprints → Connect repo → Apply
 services:
   - type: web
     name: passreadyfinder
     runtime: node
     plan: starter
+    repo: https://github.com/nick39257-resilient/passreadyfinder
+    branch: main
     buildCommand: npm install && npm install --prefix dashboard && npm run build
     startCommand: npm start
     healthCheckPath: /health
@@ -28,11 +32,13 @@ services:
       - key: CONTROL_PANEL_SECRET
         sync: false
 
-  # Finder — scrape & score leads once per UTC day (hourly tick + daily slot gate)
+  # FindLeads — scrape & score once per UTC day (hourly tick + daily slot gate in find-cron)
   - type: cron
     name: passreadyfinder-find
     runtime: node
     plan: starter
+    repo: https://github.com/nick39257-resilient/passreadyfinder
+    branch: main
     schedule: "0 * * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install
     startCommand: npm run find-cron
@@ -40,15 +46,23 @@ services:
       - key: NODE_VERSION
         value: "20"
       - key: TURSO_DATABASE_URL
-        sync: false
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_DATABASE_URL
       - key: TURSO_AUTH_TOKEN
-        sync: false
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_AUTH_TOKEN
 
-  # QueueDrafter — small staggered batches every 30 min (never blocks on full queue)
+  # QueueDrafter — 2 leads per run, every 30 min
   - type: cron
     name: passreadyfinder-queue-draft
     runtime: node
     plan: starter
+    repo: https://github.com/nick39257-resilient/passreadyfinder
+    branch: main
     schedule: "*/30 * * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install
     startCommand: npm run queue-draft
@@ -56,12 +70,27 @@ services:
       - key: NODE_VERSION
         value: "20"
       - key: TURSO_DATABASE_URL
-        sync: false
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_DATABASE_URL
       - key: TURSO_AUTH_TOKEN
-        sync: false
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_AUTH_TOKEN
       - key: OPENAI_API_KEY
-        sync: false
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OPENAI_API_KEY
       - key: OPENAI_BASE_URL
-        value: https://generativelanguage.googleapis.com/v1beta/openai/
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OPENAI_BASE_URL
       - key: WHATSAPP_NUMBER
-        sync: false
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: WHATSAPP_NUMBER
