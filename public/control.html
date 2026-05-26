@@ -20,7 +20,15 @@
         <p class="text-sm font-medium uppercase tracking-wider text-emerald-400">PassReady</p>
         <h1 class="text-2xl font-bold">Control panel</h1>
         <p class="mt-1 text-sm text-slate-400">Runs on server — safe to close this tab</p>
+        <a
+          href="/dashboard"
+          class="mt-3 flex min-h-[48px] items-center justify-center rounded-2xl border border-emerald-500/40 bg-emerald-950/30 text-sm font-semibold text-emerald-300 active:scale-[0.98]"
+        >
+          Open Command Center (mobile dashboard) →
+        </a>
       </header>
+
+      <p id="compliance-tip" class="mb-4 hidden rounded-xl border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"></p>
 
       <section id="stats" class="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-6"></section>
 
@@ -152,6 +160,7 @@
 
       const statsEl = document.getElementById("stats");
       const deliverabilityBanner = document.getElementById("deliverability-banner");
+      const complianceTipEl = document.getElementById("compliance-tip");
       const areaInput = document.getElementById("filter-area");
       const ratingSelect = document.getElementById("filter-rating");
       const btnSend = document.getElementById("btn-send");
@@ -238,6 +247,19 @@
           renderStats(data);
         } catch {
           statsEl.innerHTML = `<p class="col-span-3 text-center text-sm text-red-400 sm:col-span-6">Could not load stats</p>`;
+        }
+
+        try {
+          const actRes = await fetch("/api/activity");
+          if (actRes.ok) {
+            const act = await actRes.json();
+            if (complianceTipEl && act.complianceTip) {
+              complianceTipEl.textContent = "💡 " + act.complianceTip;
+              complianceTipEl.classList.remove("hidden");
+            }
+          }
+        } catch {
+          /* optional */
         }
       }
 

@@ -1,7 +1,8 @@
 import OpenAI from "openai";
 import { productConfig } from "../config/product.config.js";
 import type { DraftJobParams, TargetRating } from "../types/segmentation.js";
-import { draftMessageSchema } from "../validation/draft.schemas.js";
+import type { DraftHookContext } from "./intelligence/draft-hooks.js";
+import { buildDraftHookGuidance } from "./intelligence/draft-hooks.js";
 import { geminiChatCompletionSchema } from "../validation/gemini.schemas.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
@@ -101,7 +102,11 @@ export function ratingToneGuidance(rating: number | null): string {
   return "Consultant tone: supportive ally focused on inspection readiness.";
 }
 
-function buildSystemPrompt(waMeLink: string, rating: number | null): string {
+function buildSystemPrompt(
+  waMeLink: string,
+  rating: number | null,
+  hookLines: string[] = [],
+): string {
   return [
     "You are a PassReady consultant drafting a short, conversational email to a UK takeaway owner.",
     "Explicitly consider their FSA star rating before writing.",
@@ -109,6 +114,7 @@ function buildSystemPrompt(waMeLink: string, rating: number | null): string {
     "Pitch PassReady—a digital EHO compliance tool (English, Urdu, Bengali, Polish). Be an ally, never accusatory.",
     "Maximum 125 words. No images. No attachments. Plain, internal-style tone.",
     ...productConfig.outreach.pitchGuidelines,
+    ...hookLines,
     `End the message with this exact link: ${waMeLink}`,
     "Do not add any other links or calls-to-action.",
   ].join("\n");
@@ -176,13 +182,16 @@ export async function saveDraftMessage(leadId: number, message: string): Promise
 export async function generateDraftForLead(
   lead: LeadForDraft,
   client?: OpenAI,
-  options?: { templateRating?: number | null },
+  options?: { templateRating?: number | null; hookContext?: DraftHookContext },
 ): Promise<string> {
   const city = extractCity(lead);
   const waMeLink = buildWaMeLink(lead.business_name);
   const llm = client ?? createLlmClient();
   const toneRating =
     options?.templateRating !== undefined ? options.templateRating : lead.fsa_rating;
+  const hookLines = options?.hookContext
+    ? buildDraftHookGuidance(options.hookContext)
+    : [];
 
   let completion;
   try {
@@ -190,7 +199,7 @@ export async function generateDraftForLead(
       model: GEMINI_MODEL,
       temperature: 0.7,
       messages: [
-        { role: "system", content: buildSystemPrompt(waMeLink, toneRating) },
+        { role: "system", content: buildSystemPrompt(waMeLink, toneRating, hookLines) },
         { role: "user", content: buildUserPrompt(lead, city, waMeLink) },
       ],
     });

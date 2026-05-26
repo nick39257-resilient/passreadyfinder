@@ -1,102 +1,201 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchLeads, type ApiLead } from "./api/leads";
-import { ActionCard } from "./components/ActionCard";
+import { fetchActivity } from "./api/activity";
+import { fetchFunnel, type FunnelStats } from "./api/funnel";
+import { startDraftJob, startFindJob } from "./api/jobs";
+import { fetchLeads, quickDraftLead, type ApiLead } from "./api/leads";
+import { ComplianceBanner } from "./components/ComplianceBanner";
+import { ExecutiveFunnel } from "./components/ExecutiveFunnel";
+import { FixedActionBar } from "./components/FixedActionBar";
+import { LeadRow } from "./components/LeadRow";
+import { RiskDeepDiveModal } from "./components/RiskDeepDiveModal";
+import { SystemActivityBar } from "./components/SystemActivityBar";
+import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
 
-function formatLeadDetail(lead: ApiLead): string {
-  const rating = lead.fsaRating === null ? "Unrated" : `${lead.fsaRating}★ FSA`;
-  return `${lead.postcode} · ${rating}`;
-}
+const STORAGE_AREA = "passready_area";
+const STORAGE_RATING = "passready_rating";
+const STORAGE_SECRET = "control_secret";
 
 export function App() {
   const [leads, setLeads] = useState<ApiLead[]>([]);
+  const [funnel, setFunnel] = useState<FunnelStats | null>(null);
+  const [complianceTip, setComplianceTip] = useState("");
+  const [activity, setActivity] = useState<Awaited<ReturnType<typeof fetchActivity>>["items"]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedLead, setSelectedLead] = useState<ApiLead | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [hiddenVersion, setHiddenVersion] = useState(0);
 
-  const loadLeads = useCallback(async () => {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     try {
-      setLeads(await fetchLeads());
+      const [leadList, funnelStats, activityData] = await Promise.all([
+        fetchLeads(),
+        fetchFunnel(),
+        fetchActivity(),
+      ]);
+      setLeads(leadList);
+      setFunnel(funnelStats);
+      setActivity(activityData.items);
+      setComplianceTip(activityData.complianceTip);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load leads");
+      setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadLeads();
-  }, [loadLeads]);
+    void loadAll();
+  }, [loadAll]);
+
+  const visibleLeads = leads.filter((lead) => !isLeadHidden(lead.id));
+  void hiddenVersion;
+
+  const getSecret = () => sessionStorage.getItem(STORAGE_SECRET) ?? "";
+
+  const handleQuickDraft = async (lead: ApiLead) => {
+    setBusyId(lead.id);
+    try {
+      await quickDraftLead(lead.id, getSecret());
+      await loadAll();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Quick draft failed";
+      if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
+        const secret = window.prompt("Enter CONTROL_PANEL_SECRET for quick-draft:");
+        if (secret?.trim()) {
+          sessionStorage.setItem(STORAGE_SECRET, secret.trim());
+          await quickDraftLead(lead.id, secret.trim());
+          await loadAll();
+          return;
+        }
+      }
+      window.alert(msg);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleFind = async () => {
+    const area =
+      localStorage.getItem(STORAGE_AREA) ??
+      window.prompt("Local authority area (e.g. Preston)", "Preston") ??
+      "Preston";
+    const rating = Number(
+      localStorage.getItem(STORAGE_RATING) ??
+        window.prompt("FSA rating target (2-5)", "2") ??
+        "2",
+    );
+    localStorage.setItem(STORAGE_AREA, area);
+    localStorage.setItem(STORAGE_RATING, String(rating));
+
+    setActionBusy(true);
+    try {
+      await startFindJob(area, rating, getSecret());
+      await loadAll();
+      window.alert("Find job started — check Engine room for progress.");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Find failed");
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleDraft = async () => {
+    const rating = Number(localStorage.getItem(STORAGE_RATING) ?? "2");
+    setActionBusy(true);
+    try {
+      await startDraftJob(rating, getSecret());
+      await loadAll();
+      window.alert("Draft job started.");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Draft failed");
+    } finally {
+      setActionBusy(false);
+    }
+  };
 
   return (
-    <div className="mx-auto min-h-screen max-w-lg px-4 py-6">
-      <header className="mb-6 flex items-end justify-between gap-3">
+    <div className="mx-auto min-h-screen max-w-lg px-4 pb-28 pt-6">
+      <header className="mb-4 flex items-end justify-between gap-3">
         <div>
           <p className="text-sm font-medium uppercase tracking-wider text-emerald-400">
             PassReady
           </p>
-          <h1 className="text-2xl font-bold">Insights</h1>
+          <h1 className="text-2xl font-bold">Command Center</h1>
         </div>
-        {!loading ? (
-          <button
-            type="button"
-            onClick={() => void loadLeads()}
-            className="min-h-[48px] rounded-xl border border-slate-700 px-4 text-sm font-semibold text-slate-300 active:scale-[0.98]"
-            aria-label="Refresh leads"
-          >
-            Refresh
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={() => void loadAll()}
+          disabled={loading}
+          className="min-h-[48px] rounded-xl border border-slate-700 px-4 text-sm font-semibold text-slate-300"
+        >
+          Refresh
+        </button>
       </header>
 
-      {loading ? (
-        <p className="text-base text-slate-400">Loading leads…</p>
-      ) : null}
+      <ExecutiveFunnel funnel={funnel} />
+      <SystemActivityBar items={activity} complianceTip={complianceTip} />
+      {complianceTip ? <ComplianceBanner tip={complianceTip} /> : null}
+
+      {loading ? <p className="text-base text-slate-400">Loading pipeline…</p> : null}
 
       {!loading && error ? (
-        <div className="rounded-3xl border border-red-500/30 bg-red-950/30 p-5">
-          <p className="text-base text-red-200">{error}</p>
+        <div className="rounded-2xl border border-red-500/30 bg-red-950/30 p-4">
+          <p className="text-red-200">{error}</p>
           <button
             type="button"
-            onClick={() => void loadLeads()}
-            className="mt-4 min-h-[48px] rounded-xl bg-red-600 px-4 text-sm font-bold text-white"
+            onClick={() => void loadAll()}
+            className="mt-3 min-h-[48px] rounded-xl bg-red-600 px-4 text-sm font-bold text-white"
           >
-            Try again
+            Retry
           </button>
         </div>
       ) : null}
 
-      {!loading && !error && leads.length === 0 ? (
-        <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
-          <p className="text-base text-slate-300">No leads yet.</p>
-          <p className="mt-2 text-sm text-slate-500">
-            Run Find Leads from the{" "}
-            <a href="/" className="font-semibold text-emerald-400 underline">
-              control panel
-            </a>
-            .
-          </p>
-        </div>
+      {!loading && !error && visibleLeads.length === 0 ? (
+        <p className="text-sm text-slate-400">
+          No active leads — run Find or clear snoozed/dismissed leads in browser storage.
+        </p>
       ) : null}
 
-      {!loading && !error && leads.length > 0 ? (
-        <ul className="space-y-4">
-          {leads.map((lead) => (
-            <li key={lead.id}>
-              <ActionCard
-                businessName={lead.businessName}
-                detail={formatLeadDetail(lead)}
-                riskScore={lead.riskScore}
-                riskBand={lead.riskBand}
-                actionLabel="Open control panel"
-                onAction={() => {
-                  window.location.href = "/";
-                }}
-              />
-            </li>
+      {!loading && !error && visibleLeads.length > 0 ? (
+        <ul className="space-y-2">
+          {visibleLeads.map((lead) => (
+            <LeadRow
+              key={lead.id}
+              lead={lead}
+              busy={busyId === lead.id}
+              onRiskTap={() => setSelectedLead(lead)}
+              onSwipeLeft={() => {
+                snoozeLead(lead.id);
+                setHiddenVersion((v) => v + 1);
+              }}
+              onSwipeRight={() => void handleQuickDraft(lead)}
+            />
           ))}
         </ul>
+      ) : null}
+
+      <p className="mt-4 text-center text-xs text-slate-500">
+        Swipe right to quick-draft · Swipe left to snooze 24h · Tap risk score for deep-dive
+      </p>
+
+      <FixedActionBar
+        disabled={actionBusy}
+        onFind={() => void handleFind()}
+        onDraft={() => void handleDraft()}
+        onSend={() => {
+          window.location.href = "/";
+        }}
+      />
+
+      {selectedLead ? (
+        <RiskDeepDiveModal lead={selectedLead} onClose={() => setSelectedLead(null)} />
       ) : null}
     </div>
   );

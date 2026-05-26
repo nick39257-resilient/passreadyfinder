@@ -19,10 +19,25 @@ import {
   getLeadStatusCounts,
 } from "../engine/store/stats-repository.js";
 import { getDeliverabilityStatus } from "../engine/deliverability.js";
-import { calculateRiskScore } from "../engine/risk-scorer.js";
-import { getAllLeads } from "../engine/store/leads-repository.js";
-import type { LeadRow } from "../engine/store/leads-repository.js";
+import { getComplianceTipOfDay } from "../engine/intelligence/compliance.js";
+import { getSystemActivity } from "../engine/intelligence/activity.js";
+import {
+  countLocalPassReadyUsers,
+  findLocalCompetitors,
+} from "../engine/intelligence/competitors.js";
+import {
+  createLlmClient,
+  generateDraftForLead,
+  saveDraftMessage,
+} from "../engine/drafter.js";
+import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
+import {
+  countApprovedLeads,
+  getFunnelStats,
+  getLeadStatusCounts,
+} from "../engine/store/stats-repository.js";
 import { parseArea, parseTargetRating } from "../types/segmentation.js";
+import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
 import { startJob } from "./job-runner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,37 +45,6 @@ const projectRoot = path.join(__dirname, "../..");
 const publicDir = path.join(projectRoot, "public");
 const dashboardDir = path.join(projectRoot, "dashboard/dist");
 const dashboardIndex = path.join(dashboardDir, "index.html");
-
-function leadRowToApiLead(row: LeadRow) {
-  const risk = calculateRiskScore({
-    fsaRating: row.fsa_rating,
-    fsaLastInspectionDate: row.fsa_last_inspection_date,
-    phone: row.phone,
-    website: row.website,
-  });
-
-  return {
-    id: row.id,
-    fsaId: row.fsa_id,
-    businessName: row.business_name,
-    businessType: row.business_type,
-    address: row.address,
-    postcode: row.postcode,
-    latitude: row.latitude,
-    longitude: row.longitude,
-    fsaRating: row.fsa_rating,
-    fsaLastInspectionDate: row.fsa_last_inspection_date,
-    phone: row.phone,
-    website: row.website,
-    onDeliveryApp: row.on_delivery_app,
-    leadScore: row.lead_score,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    riskScore: risk.score,
-    riskBand: risk.band,
-    riskComponents: risk.components,
-  };
-}
 
 function mountDashboard(app: express.Express): void {
   if (!fs.existsSync(dashboardIndex)) {
@@ -135,23 +119,92 @@ export async function createApp(options?: {
     try {
       const counts = await getLeadStatusCounts();
       const deliverability = await getDeliverabilityStatus();
-      res.json({ ...counts, deliverability });
+      const funnel = await getFunnelStats();
+      res.json({ ...counts, deliverability, funnel });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch stats" });
     }
   });
 
+  app.get("/api/funnel", async (_req, res) => {
+    try {
+      res.json(await getFunnelStats());
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch funnel" });
+    }
+  });
+
+  app.get("/api/activity", async (_req, res) => {
+    try {
+      const items = await getSystemActivity();
+      res.json({ items, complianceTip: getComplianceTipOfDay() });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch activity" });
+    }
+  });
+
   app.get("/api/leads", async (_req, res) => {
     try {
       const rows = await getAllLeads();
-      const leads = rows
-        .map(leadRowToApiLead)
-        .sort((a, b) => b.riskScore - a.riskScore || b.id - a.id);
+      const leads = await Promise.all(rows.map((row) => mapLeadRowToApiLead(row)));
+      leads.sort((a, b) => b.riskScore - a.riskScore || b.id - a.id);
       res.json({ leads });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch leads" });
+    }
+  });
+
+  app.post("/api/leads/:id/quick-draft", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+
+    try {
+      const row = await getLeadById(id);
+      if (!row) {
+        res.status(404).json({ error: "Lead not found" });
+        return;
+      }
+      if (row.contacted_at) {
+        res.status(409).json({ error: "Lead already contacted — outreach blocked" });
+        return;
+      }
+
+      const [competitors, localPassReadyCount] = await Promise.all([
+        findLocalCompetitors({
+          id: row.id,
+          postcode: row.postcode,
+          business_type: row.business_type,
+        }),
+        countLocalPassReadyUsers(row.postcode),
+      ]);
+
+      const llm = createLlmClient();
+      const draft = await generateDraftForLead(
+        {
+          id: row.id,
+          business_name: row.business_name,
+          address: row.address,
+          postcode: row.postcode,
+          fsa_rating: row.fsa_rating,
+        },
+        llm,
+        {
+          templateRating: row.fsa_rating === 2 ? 2 : row.fsa_rating,
+          hookContext: { competitors, localPassReadyCount },
+        },
+      );
+      await saveDraftMessage(id, draft);
+      res.json({ ok: true, draft });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to quick-draft lead" });
     }
   });
 

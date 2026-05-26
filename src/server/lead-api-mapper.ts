@@ -1,0 +1,114 @@
+import {
+  buildInspectionSummary,
+  daysSinceInspection,
+} from "../engine/intelligence/compliance.js";
+import {
+  countLocalPassReadyUsers,
+  findLocalCompetitors,
+} from "../engine/intelligence/competitors.js";
+import { calculateRiskScore } from "../engine/risk-scorer.js";
+import type { LeadRow } from "../engine/store/leads-repository.js";
+
+export interface LeadDataSignals {
+  ehoScraped: boolean;
+  predictiveScore: boolean;
+  draftReady: boolean;
+}
+
+export interface ApiLeadDetail {
+  id: number;
+  fsaId: number;
+  businessName: string;
+  businessType: string;
+  address: string;
+  postcode: string;
+  latitude: number;
+  longitude: number;
+  fsaRating: number | null;
+  fsaLastInspectionDate: string | null;
+  phone: string | null;
+  website: string | null;
+  onDeliveryApp: string;
+  leadScore: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  riskScore: number;
+  riskBand: string;
+  riskComponents: ReturnType<typeof calculateRiskScore>["components"];
+  signals: LeadDataSignals;
+  daysSinceInspection: number | null;
+  inspectionSummary: string;
+  competitors: Awaited<ReturnType<typeof findLocalCompetitors>>;
+  localPassReadyCount: number;
+}
+
+function readStatus(row: LeadRow & { status?: string }): string {
+  return row.status ?? "new";
+}
+
+function readDraftMessage(row: LeadRow & { draft_message?: string | null }): string | null {
+  return row.draft_message ?? null;
+}
+
+function deriveSignals(
+  row: LeadRow & { status?: string; draft_message?: string | null },
+  riskScore: number,
+): LeadDataSignals {
+  const status = readStatus(row);
+  const hasEnrichment = Boolean(row.phone?.trim() || row.website?.trim());
+  return {
+    ehoScraped: hasEnrichment || row.lead_score > 0,
+    predictiveScore: riskScore >= 25,
+    draftReady: status === "drafted" || Boolean(readDraftMessage(row)),
+  };
+}
+
+export async function mapLeadRowToApiLead(row: LeadRow): Promise<ApiLeadDetail> {
+  const risk = calculateRiskScore({
+    fsaRating: row.fsa_rating,
+    fsaLastInspectionDate: row.fsa_last_inspection_date,
+    phone: row.phone,
+    website: row.website,
+  });
+
+  const [competitors, localPassReadyCount] = await Promise.all([
+    findLocalCompetitors({
+      id: row.id,
+      postcode: row.postcode,
+      business_type: row.business_type,
+    }),
+    countLocalPassReadyUsers(row.postcode),
+  ]);
+
+  return {
+    id: row.id,
+    fsaId: row.fsa_id,
+    businessName: row.business_name,
+    businessType: row.business_type,
+    address: row.address,
+    postcode: row.postcode,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    fsaRating: row.fsa_rating,
+    fsaLastInspectionDate: row.fsa_last_inspection_date,
+    phone: row.phone,
+    website: row.website,
+    onDeliveryApp: row.on_delivery_app,
+    leadScore: row.lead_score,
+    status: readStatus(row),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    riskScore: risk.score,
+    riskBand: risk.band,
+    riskComponents: risk.components,
+    signals: deriveSignals(row, risk.score),
+    daysSinceInspection: daysSinceInspection(row.fsa_last_inspection_date),
+    inspectionSummary: buildInspectionSummary(
+      row.fsa_rating,
+      row.fsa_last_inspection_date,
+    ),
+    competitors,
+    localPassReadyCount,
+  };
+}

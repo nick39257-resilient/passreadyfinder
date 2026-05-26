@@ -98,6 +98,10 @@ export interface LeadRow {
   website: string | null;
   on_delivery_app: DeliveryAppStatus;
   lead_score: number;
+  status?: string;
+  draft_message?: string | null;
+  contacted_at?: string | null;
+  touch_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -106,6 +110,18 @@ export async function getAllLeads(): Promise<LeadRow[]> {
   const db = getDb();
   const result = await db.execute(`SELECT * FROM leads`);
   return result.rows as unknown as LeadRow[];
+}
+
+export async function getLeadById(id: number): Promise<LeadRow | null> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `SELECT * FROM leads WHERE id = ?`,
+    args: [id],
+  });
+  if (result.rows.length === 0) {
+    return null;
+  }
+  return result.rows[0] as unknown as LeadRow;
 }
 
 export async function getTopLeads(limit: number): Promise<LeadRow[]> {

@@ -118,6 +118,15 @@ export async function getJob(id: string): Promise<JobRecord | null> {
   return result.rows[0] as unknown as JobRecord;
 }
 
+export async function getRecentJobs(limit = 8): Promise<JobRecord[]> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `SELECT * FROM jobs ORDER BY updated_at DESC LIMIT ?`,
+    args: [limit],
+  });
+  return result.rows as unknown as JobRecord[];
+}
+
 export async function getLatestJob(type?: JobType): Promise<JobRecord | null> {
   const db = getDb();
   const result = type

@@ -1,4 +1,8 @@
 import { productConfig } from "../config/product.config.js";
+import {
+  countLocalPassReadyUsers,
+  findLocalCompetitors,
+} from "./intelligence/competitors.js";
 import { calculateRiskScore } from "./risk-scorer.js";
 import {
   createLlmClient,
@@ -15,6 +19,8 @@ const RISK_SCORE_THRESHOLD = 75;
 const RESCUE_TEMPLATE_RATING = 2;
 
 interface LeadForAutoDraft extends LeadForDraft {
+  postcode: string;
+  business_type: string;
   fsa_last_inspection_date: string | null;
   phone: string | null;
   website: string | null;
@@ -35,6 +41,7 @@ async function fetchEligibleNewLeads(): Promise<LeadForAutoDraft[]> {
         business_name,
         address,
         postcode,
+        business_type,
         fsa_rating,
         fsa_last_inspection_date,
         phone,
@@ -108,8 +115,17 @@ export async function runAutoDrafter(options?: {
   for (let i = 0; i < selected.length; i++) {
     const lead = selected[i];
     try {
+      const [competitors, localPassReadyCount] = await Promise.all([
+        findLocalCompetitors({
+          id: lead.id,
+          postcode: lead.postcode,
+          business_type: lead.business_type,
+        }),
+        countLocalPassReadyUsers(lead.postcode),
+      ]);
       const draft = await generateDraftForLead(lead, llmClient, {
         templateRating: RESCUE_TEMPLATE_RATING,
+        hookContext: { competitors, localPassReadyCount },
       });
       await saveDraftMessage(lead.id, draft);
       result.drafted++;

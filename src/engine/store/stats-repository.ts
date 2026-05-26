@@ -56,4 +56,30 @@ export async function countApprovedLeads(): Promise<number> {
   return Number(result.rows[0]?.count ?? 0);
 }
 
+export interface FunnelStats {
+  identified: number;
+  drafted: number;
+  approved: number;
+  converted: number;
+}
+
+export async function getFunnelStats(): Promise<FunnelStats> {
+  const db = getDb();
+  const result = await db.execute(`
+    SELECT
+      COUNT(*) AS identified,
+      SUM(CASE WHEN status IN ('drafted', 'approved', 'contacted', 'nurture', 'opted_in') THEN 1 ELSE 0 END) AS drafted,
+      SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved,
+      SUM(CASE WHEN status IN ('contacted', 'opted_in') THEN 1 ELSE 0 END) AS converted
+    FROM leads
+  `);
+  const row = result.rows[0];
+  return {
+    identified: Number(row?.identified ?? 0),
+    drafted: Number(row?.drafted ?? 0),
+    approved: Number(row?.approved ?? 0),
+    converted: Number(row?.converted ?? 0),
+  };
+}
+
 export { TRACKED_STATUSES };
