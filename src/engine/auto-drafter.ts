@@ -156,10 +156,6 @@ export async function runAutoDrafter(options?: {
       });
       console.error(`✗ ${lead.business_name}: ${message}\n`);
     }
-
-    if (i < selected.length - 1) {
-      await new Promise((r) => setTimeout(r, 3000));
-    }
   }
 
   return result;

@@ -5,6 +5,7 @@ import type { DraftHookContext } from "./intelligence/draft-hooks.js";
 import { buildDraftHookGuidance } from "./intelligence/draft-hooks.js";
 import { draftMessageSchema } from "../validation/draft.schemas.js";
 import { geminiChatCompletionSchema } from "../validation/gemini.schemas.js";
+import { geminiApiQueue } from "./rate-limit-queue.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
 
@@ -217,21 +218,28 @@ export async function generateDraftForLead(
 
   let completion;
   try {
-    completion = await llm.chat.completions.create({
-      model: GEMINI_MODEL,
-      temperature: 0.7,
-      messages: [
-        { role: "system", content: buildSystemPrompt(waMeLink, toneRating, hookLines) },
-        {
-          role: "user",
-          content: buildUserPrompt(lead, city, waMeLink, options?.consultantTip),
-        },
-      ],
-    });
+    completion = await geminiApiQueue.run(() =>
+      llm.chat.completions.create({
+        model: GEMINI_MODEL,
+        temperature: 0.7,
+        messages: [
+          { role: "system", content: buildSystemPrompt(waMeLink, toneRating, hookLines) },
+          {
+            role: "user",
+            content: buildUserPrompt(lead, city, waMeLink, options?.consultantTip),
+          },
+        ],
+      }),
+    );
   } catch (err) {
     if (err instanceof OpenAI.APIError && err.status === 404) {
       throw new Error(
         `404 from Gemini: model "${GEMINI_MODEL}" not found. Check available models at /v1beta/openai/models.`,
+      );
+    }
+    if (err instanceof OpenAI.APIError && err.status === 429) {
+      throw new Error(
+        `Gemini rate limited (429) after retries — wait and try again, or reduce draft batch size.`,
       );
     }
     throw err;
@@ -287,10 +295,6 @@ export async function runDrafter(options?: DraftJobParams): Promise<DraftRunResu
         error: message,
       });
       console.error(`✗ ${lead.business_name}: ${message}\n`);
-    }
-
-    if (i < leads.length - 1) {
-      await new Promise((r) => setTimeout(r, 3000));
     }
   }
 

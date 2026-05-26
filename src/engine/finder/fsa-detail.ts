@@ -1,12 +1,9 @@
 import { z } from "zod";
 import { productConfig } from "../../config/product.config.js";
 import type { FsaBreakdownScores } from "../intelligence/carrot.js";
+import { isRateLimited } from "../rate-limit-queue.js";
 import { getDb } from "../store/db.js";
-
-const FSA_HEADERS = {
-  "x-api-version": "2",
-  Accept: "application/json",
-};
+import { fsaFetchUrl } from "./fsa-http.js";
 
 const fsaDetailScoresSchema = z.object({
   Hygiene: z.number().nullable().optional(),
@@ -42,7 +39,7 @@ export async function fetchEstablishmentScores(fsaId: number): Promise<FsaBreakd
   try {
     const base = productConfig.fsa.baseUrl.replace(/\/$/, "");
     const url = `${base}/Establishments/${fsaId}`;
-    const response = await fetch(url, { headers: FSA_HEADERS });
+    const response = await fsaFetchUrl(url);
     if (!response.ok) {
       return null;
     }
@@ -65,7 +62,10 @@ export async function fetchEstablishmentScores(fsaId: number): Promise<FsaBreakd
       breakdown.structural !== null ||
       breakdown.management !== null;
     return hasAny ? breakdown : null;
-  } catch {
+  } catch (err) {
+    if (isRateLimited(err)) {
+      throw err;
+    }
     return null;
   }
 }

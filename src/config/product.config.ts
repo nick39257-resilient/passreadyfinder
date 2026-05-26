@@ -45,6 +45,11 @@ export const productConfig = {
   fsa: {
     baseUrl: "https://api.ratings.food.gov.uk",
     pageSize: 200,
+    /** Minimum ms between FSA HTTP calls (serialized queue). */
+    requestDelayMs: 800,
+    /** Base pause when FSA returns 429 before retry (multiplied by attempt). */
+    rateLimitPauseMs: 10_000,
+    maxRetries: 4,
   },
 
   /** Overpass API settings */
@@ -74,6 +79,11 @@ export const productConfig = {
       "Curious if this might help [Business Name] like it did our kitchen — happy to show you",
     /** Leads to draft per `npm run draft` run */
     draftBatchSize: 5,
+    /** Minimum ms between Gemini calls (serialized queue). */
+    geminiRequestDelayMs: 4000,
+    /** Base pause when Gemini returns 429 before retry (multiplied by attempt). */
+    geminiRateLimitPauseMs: 15_000,
+    geminiMaxRetries: 4,
     /** Auto-pause sending if bounce rate exceeds this (0–1) over recent sends */
     bounceRatePauseThreshold: 0.02,
     /** Max outreach emails per lead before moving to nurture */

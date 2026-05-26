@@ -5,31 +5,7 @@ import {
   fsaBusinessTypesResponseSchema,
   fsaEstablishmentsResponseSchema,
 } from "../../validation/fsa.schemas.js";
-
-const FSA_HEADERS = {
-  "x-api-version": "2",
-  Accept: "application/json",
-};
-
-function fsaUrl(path: string, params?: Record<string, string | number>): string {
-  const url = new URL(path, productConfig.fsa.baseUrl);
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
-      url.searchParams.set(key, String(value));
-    }
-  }
-  return url.toString();
-}
-
-async function fsaFetch<T>(path: string, params?: Record<string, string | number>): Promise<T> {
-  const response = await fetch(fsaUrl(path, params), { headers: FSA_HEADERS });
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`FSA API error ${response.status} for ${path}: ${body}`);
-  }
-  const json: unknown = await response.json();
-  return json as T;
-}
+import { fsaFetch } from "./fsa-http.js";
 
 function parseFsaResponse<T>(schema: { parse: (data: unknown) => T }, data: unknown): T {
   return schema.parse(data);

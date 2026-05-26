@@ -13,6 +13,7 @@ import {
   resolveLocalAuthorityId,
 } from "./finder/fsa-finder.js";
 import { fetchEstablishmentScores } from "./finder/fsa-detail.js";
+import { isRateLimited } from "./rate-limit-queue.js";
 import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
 import { calculateLeadScore } from "./score/scorer.js";
 import { getDb, runMigrations } from "./store/db.js";
@@ -177,9 +178,13 @@ export async function runFindPipeline(options?: {
           ],
         });
       }
-      await new Promise((r) => setTimeout(r, 120));
-    } catch {
-      /* scores optional — FHIS/rescore may omit them */
+    } catch (err) {
+      if (isRateLimited(err)) {
+        console.warn(
+          `  FSA sub-scores skipped for ${lead.businessName} (rate limit after retries)`,
+        );
+      }
+      /* other errors — FHIS/rescore may omit scores */
     }
   }
   console.log(`  Stored ${scored.length} leads (idempotent upsert on fsa_id).`);
