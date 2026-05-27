@@ -21,6 +21,8 @@ services:
         sync: false
       - key: OPENAI_BASE_URL
         value: https://generativelanguage.googleapis.com/v1beta/openai/
+      - key: GEMINI_DRAFT_MODEL
+        value: gemini-3.1-flash-lite
       - key: WHATSAPP_NUMBER
         sync: false
       - key: RESEND_API_KEY
@@ -89,6 +91,11 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: OPENAI_BASE_URL
+      - key: GEMINI_DRAFT_MODEL
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: GEMINI_DRAFT_MODEL
       - key: WHATSAPP_NUMBER
         fromService:
           type: web

@@ -20,6 +20,7 @@ import {
   outreachHaltedSqlArgs,
   outreachHaltedSqlInClause,
 } from "./outreach-halt.js";
+import { getGeminiDraftModel } from "./gemini-draft-model.js";
 import { geminiApiQueue } from "./rate-limit-queue.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
@@ -81,8 +82,6 @@ export function extractCity(lead: LeadForDraft, areaFallback?: string): string {
   return "your area";
 }
 
-const GEMINI_MODEL = "gemini-2.5-flash";
-
 export function createLlmClient(): OpenAI {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
@@ -104,7 +103,8 @@ export function createLlmClient(): OpenAI {
 
 function logLlmConfig(): void {
   const baseURL = process.env.OPENAI_BASE_URL?.trim() ?? "";
-  console.log(`LLM: ${GEMINI_MODEL} @ ${baseURL}`);
+  const model = getGeminiDraftModel();
+  console.log(`LLM: ${model} @ ${baseURL}`);
   console.log(`API key: ${process.env.OPENAI_API_KEY ? "set" : "missing"}\n`);
 }
 
@@ -270,11 +270,12 @@ export async function generateDraftForLead(
     options?.templateRating !== undefined ? options.templateRating : lead.fsa_rating;
   const hookLines = options?.hookContext ? buildDraftHookGuidance(options.hookContext) : [];
 
+  const model = getGeminiDraftModel();
   let completion;
   try {
     completion = await geminiApiQueue.run(() =>
       llm.chat.completions.create({
-        model: GEMINI_MODEL,
+        model,
         temperature: 0.7,
         messages: [
           {
@@ -291,7 +292,7 @@ export async function generateDraftForLead(
   } catch (err) {
     if (err instanceof OpenAI.APIError && err.status === 404) {
       throw new Error(
-        `404 from Gemini: model "${GEMINI_MODEL}" not found. Check available models at /v1beta/openai/models.`,
+        `404 from Gemini: model "${model}" not found. Check available models at /v1beta/openai/models.`,
       );
     }
     if (err instanceof OpenAI.APIError && err.status === 429) {

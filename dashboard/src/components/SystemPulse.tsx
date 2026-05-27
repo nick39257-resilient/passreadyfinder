@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { SystemPulseState } from "../api/status";
 
 const PULSE_STYLES: Record<
@@ -37,13 +36,14 @@ export function SystemPulse({
   pulseLabel,
   errorMessage,
   needsReviewCount,
+  onDismissError,
 }: {
   pulse: SystemPulseState;
   pulseLabel: string;
   errorMessage: string | null;
   needsReviewCount: number;
+  onDismissError?: () => void;
 }) {
-  const [showError, setShowError] = useState(false);
   const styles = PULSE_STYLES[pulse];
   const isError = pulse === "error" && Boolean(errorMessage);
   const label =
@@ -52,35 +52,25 @@ export function SystemPulse({
       : pulseLabel;
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => {
-          if (isError) {
-            setShowError((v) => !v);
-          }
-        }}
-        className={`flex min-h-[40px] items-center gap-2 rounded-lg border px-2.5 py-1.5 ${styles.ring} ${
-          isError ? "cursor-pointer" : "cursor-default"
-        } bg-slate-900/90`}
-        aria-label={`System status: ${label}`}
-        aria-expanded={isError ? showError : undefined}
-      >
-        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${styles.dot}`} aria-hidden />
-        <span className={`text-xs font-semibold uppercase tracking-wide ${styles.text}`}>
-          {label}
-        </span>
-      </button>
-
-      {isError && showError ? (
-        <div
-          role="alert"
-          className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-red-500/40 bg-red-950/95 p-3 text-left shadow-lg"
-        >
-          <p className="text-xs font-semibold uppercase tracking-wide text-red-300">Error</p>
-          <p className="mt-1 text-sm text-red-100">{errorMessage}</p>
-        </div>
-      ) : null}
-    </div>
+    <button
+      type="button"
+      onClick={() => {
+        if (isError) {
+          onDismissError?.();
+        }
+      }}
+      className={`flex min-h-[40px] items-center gap-2 rounded-lg border px-2.5 py-1.5 ${styles.ring} ${
+        isError ? "cursor-pointer" : "cursor-default"
+      } bg-slate-900/90`}
+      aria-label={
+        isError ? `Dismiss error: ${errorMessage}` : `System status: ${label}`
+      }
+      title={isError ? errorMessage ?? "Tap to dismiss" : undefined}
+    >
+      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${styles.dot}`} aria-hidden />
+      <span className={`text-xs font-semibold uppercase tracking-wide ${styles.text}`}>
+        {label}
+      </span>
+    </button>
   );
 }

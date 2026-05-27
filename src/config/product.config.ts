@@ -61,7 +61,7 @@ export const productConfig = {
 
   /**
    * Phase B outreach — pitch copy, links, and channel settings.
-   * Model name and API keys live in .env (prices move fast).
+   * Drafting model: GEMINI_DRAFT_MODEL in .env (see gemini-draft-model.ts). API keys in .env.
    */
   outreach: {
     /** English-only for now (Phase C adds Urdu/Bengali/Polish) */

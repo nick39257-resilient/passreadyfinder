@@ -29,7 +29,18 @@ export async function getDailySendQuota(date: Date = new Date()): Promise<DailyS
   };
 }
 
-/** Matches SQLite `date('now')` used in countSendsTodayUtc (UTC calendar day). */
-export function getDailyCapResetDescription(): string {
-  return "midnight UTC";
+/** Next UTC midnight, shown in UK local time (Europe/London, BST/GMT automatic). */
+export function getDailyCapResetDescription(now: Date = new Date()): string {
+  const nextUtcMidnight = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+  );
+  const ukTime = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(nextUtcMidnight));
+  return `${ukTime} UK time`;
 }

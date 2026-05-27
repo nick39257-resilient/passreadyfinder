@@ -4,7 +4,11 @@ import {
   getRecentEngineLogs,
   type EngineLogEntry,
 } from "../store/engine-log-repository.js";
-import { getLatestJob, getRecentJobs } from "../store/jobs-repository.js";
+import { getRecentJobs } from "../store/jobs-repository.js";
+import {
+  resolveEngineLogPulseError,
+  resolveRecentJobPulseError,
+} from "./pulse-status.js";
 import {
   getDailyCapResetDescription,
   getDailySendQuota,
@@ -57,23 +61,16 @@ function mapFeedEntry(row: EngineLogEntry): SystemStatusFeedItem {
   };
 }
 
-function formatFailedJobError(type: string, error: string | null): string {
-  const label = type === "find" ? "FindLeads" : type === "draft" ? "QueueDrafter" : "Send";
-  return error?.trim() ? `${label} failed: ${error}` : `${label} job failed`;
-}
-
 export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
   await runMigrations();
 
-  const [logs, latestError, statusCounts, recentJobs, latestJob, dailyQuota] =
-    await Promise.all([
-      getRecentEngineLogs(feedLimit),
-      getLatestEngineError(),
-      getLeadStatusCounts(),
-      getRecentJobs(12),
-      getLatestJob(),
-      getDailySendQuota(),
-    ]);
+  const [logs, latestError, statusCounts, recentJobs, dailyQuota] = await Promise.all([
+    getRecentEngineLogs(feedLimit),
+    getLatestEngineError(),
+    getLeadStatusCounts(),
+    getRecentJobs(20),
+    getDailySendQuota(),
+  ]);
 
   const needsReviewCount = statusCounts.drafted;
   const feed = logs.map(mapFeedEntry);
@@ -88,20 +85,16 @@ export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
     pulse = "scraping";
   } else if (runningDraft) {
     pulse = "drafting";
-  } else if (latestJob?.status === "failed") {
-    pulse = "error";
-    errorMessage = formatFailedJobError(latestJob.type, latestJob.error);
-  } else if (latestError) {
-    const errorAge = Date.now() - new Date(latestError.created_at).getTime();
-    const recentErrorMs = 24 * 60 * 60 * 1000;
-    if (errorAge < recentErrorMs) {
+  } else {
+    const jobError = resolveRecentJobPulseError(recentJobs);
+    const logError = resolveEngineLogPulseError(latestError);
+    const resolvedError = jobError ?? logError;
+    if (resolvedError) {
       pulse = "error";
-      errorMessage = latestError.detail?.trim()
-        ? `${latestError.message} — ${latestError.detail}`
-        : latestError.message;
+      errorMessage = resolvedError;
+    } else if (needsReviewCount > 0) {
+      pulse = "needs_review";
     }
-  } else if (needsReviewCount > 0) {
-    pulse = "needs_review";
   }
 
   return {

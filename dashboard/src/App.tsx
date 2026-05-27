@@ -16,6 +16,7 @@ import {
   type DailySendQuota,
   type SystemPulseState,
   type SystemStatusFeedItem,
+  type SystemStatusResponse,
 } from "./api/status";
 import { ActionBanner } from "./components/ActionBanner";
 import { ActivityFeed } from "./components/ActivityFeed";
@@ -86,6 +87,41 @@ export function App() {
   const [jobMessage, setJobMessage] = useState<string | null>(null);
   const [sendPreview, setSendPreview] = useState<SendPreviewResponse | null>(null);
   const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [pulseDismissed, setPulseDismissed] = useState(false);
+
+  const applySystemStatus = useCallback((status: SystemStatusResponse) => {
+    if (status.pulse !== "error") {
+      setPulseDismissed(false);
+    }
+    if (pulseDismissed && status.pulse === "error") {
+      setPulse("idle");
+      setPulseLabel("Idle");
+      setErrorMessage(null);
+    } else {
+      setPulse(status.pulse);
+      setPulseLabel(status.pulseLabel);
+      setErrorMessage(status.errorMessage);
+    }
+    setActivityFeed(status.feed);
+    setNeedsReviewCount(status.needsReviewCount);
+    setComplianceTip(status.complianceTip);
+    setDailyQuota(status.dailyQuota);
+    setDailyCapResetDescription(status.dailyCapResetDescription);
+  }, [pulseDismissed]);
+
+  const clearPulseError = useCallback(() => {
+    setPulseDismissed(false);
+    setPulse("idle");
+    setPulseLabel("Idle");
+    setErrorMessage(null);
+  }, []);
+
+  const dismissPulseError = useCallback(() => {
+    setPulseDismissed(true);
+    setPulse("idle");
+    setPulseLabel("Idle");
+    setErrorMessage(null);
+  }, []);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -98,20 +134,13 @@ export function App() {
       ]);
       setLeads(leadList);
       setFunnel(funnelStats);
-      setPulse(status.pulse);
-      setPulseLabel(status.pulseLabel);
-      setErrorMessage(status.errorMessage);
-      setActivityFeed(status.feed);
-      setNeedsReviewCount(status.needsReviewCount);
-      setComplianceTip(status.complianceTip);
-      setDailyQuota(status.dailyQuota);
-      setDailyCapResetDescription(status.dailyCapResetDescription);
+      applySystemStatus(status);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applySystemStatus]);
 
   useEffect(() => {
     void loadAll();
@@ -133,20 +162,14 @@ export function App() {
     const interval = window.setInterval(() => {
       void fetchSystemStatus()
         .then((status) => {
-          setPulse(status.pulse);
-          setPulseLabel(status.pulseLabel);
-          setErrorMessage(status.errorMessage);
-          setActivityFeed(status.feed);
-          setNeedsReviewCount(status.needsReviewCount);
-          setDailyQuota(status.dailyQuota);
-          setDailyCapResetDescription(status.dailyCapResetDescription);
+          applySystemStatus(status);
         })
         .catch(() => {
           /* keep last known status */
         });
     }, 12_000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [applySystemStatus]);
 
   const visibleLeads = useMemo(() => {
     void hiddenVersion;
@@ -170,6 +193,7 @@ export function App() {
           setJobMessage(job.progress || `${label} (${job.status})`);
         });
         await promise;
+        clearPulseError();
         setBanner({ tone: "success", message: "Job finished successfully." });
         await loadAll();
       } catch (err) {
@@ -180,7 +204,7 @@ export function App() {
         window.setTimeout(() => setJobMessage(null), 5000);
       }
     },
-    [loadAll],
+    [loadAll, clearPulseError],
   );
 
   const openLeadDrawer = async (lead: ApiLead) => {
@@ -399,6 +423,7 @@ export function App() {
             pulseLabel={pulseLabel}
             errorMessage={errorMessage}
             needsReviewCount={needsReviewCount}
+            onDismissError={dismissPulseError}
           />
           <div className="flex gap-1">
             <button

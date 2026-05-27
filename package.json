@@ -17,6 +17,8 @@
     "enrich": "npx tsx src/engine/enricher.ts",
     "smoke": "tsx scripts/smoke-test.mjs",
     "test:outreach-exclusions": "tsx scripts/test-outreach-exclusions.mjs",
+    "test:pulse-status": "tsx scripts/test-pulse-status.mjs",
+    "test:gemini-draft-model": "tsx scripts/test-gemini-draft-model.mjs",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && npm run dashboard:build",
     "dashboard:install": "npm install --prefix dashboard --include=dev",
