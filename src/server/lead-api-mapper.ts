@@ -37,6 +37,7 @@ export interface ApiLeadDetail {
   fsaLastInspectionDate: string | null;
   phone: string | null;
   website: string | null;
+  email: string | null;
   onDeliveryApp: string;
   leadScore: number;
   status: string;
@@ -117,6 +118,7 @@ export async function mapLeadRowToApiLead(
     fsaLastInspectionDate: row.fsa_last_inspection_date,
     phone: row.phone,
     website: row.website,
+    email: row.email ?? null,
     onDeliveryApp: row.on_delivery_app,
     leadScore: row.lead_score,
     status: readStatus(row),

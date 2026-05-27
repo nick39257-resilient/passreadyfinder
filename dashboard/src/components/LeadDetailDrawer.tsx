@@ -96,6 +96,11 @@ export function LeadDetailDrawer({
             <div className="min-w-0 flex-1">
               <h2 className="text-xl font-bold leading-tight">{lead.businessName}</h2>
               <p className="mt-1 text-xs text-slate-500">{lead.postcode}</p>
+              {lead.email ? (
+                <p className="mt-1 text-xs text-emerald-400/90">Email: {lead.email}</p>
+              ) : (
+                <p className="mt-1 text-xs text-amber-400/90">No business email yet — run Find leads to discover one</p>
+              )}
               {lead.rivalBadge ? (
                 <span className="mt-2 inline-block rounded-full border border-violet-500/40 bg-violet-950/40 px-3 py-1 text-xs font-semibold text-violet-200">
                   {lead.rivalBadge}
@@ -210,7 +215,7 @@ export function LeadDetailDrawer({
             </button>
             <button
               type="button"
-              disabled={busy || lead.status !== "drafted"}
+              disabled={busy || lead.status !== "drafted" || !lead.email?.trim()}
               onClick={onQueuePostbox}
               className="min-h-[52px] rounded-xl border border-amber-500/40 bg-amber-950/30 text-sm font-bold text-amber-100 disabled:opacity-50"
             >

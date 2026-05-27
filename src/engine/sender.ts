@@ -31,19 +31,26 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function isTestEmailFallbackEnabled(): boolean {
+  return process.env.ALLOW_TEST_EMAIL_FALLBACK?.trim().toLowerCase() === "true";
+}
+
 function resolveRecipient(lead: ApprovedLead): {
   to: string;
   usingTestFallback: boolean;
 } {
-  const testEmail = process.env.TEST_EMAIL_ADDRESS?.trim();
-  if (lead.email?.trim()) {
-    return { to: lead.email.trim(), usingTestFallback: false };
+  const businessEmail = lead.email?.trim();
+  if (businessEmail) {
+    return { to: businessEmail, usingTestFallback: false };
   }
-  if (testEmail) {
+
+  const testEmail = process.env.TEST_EMAIL_ADDRESS?.trim();
+  if (isTestEmailFallbackEnabled() && testEmail) {
     return { to: testEmail, usingTestFallback: true };
   }
+
   throw new Error(
-    `No email for ${lead.business_name} and TEST_EMAIL_ADDRESS is not set in .env`,
+    `No business email for ${lead.business_name} — skipped (set ALLOW_TEST_EMAIL_FALLBACK=true only for local testing).`,
   );
 }
 
@@ -75,6 +82,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
 
   const apiKey = requireEnv("RESEND_API_KEY");
   const fromEmail = requireEnv("FROM_EMAIL");
+  const testFallbackEnabled = isTestEmailFallbackEnabled();
   const testEmail = process.env.TEST_EMAIL_ADDRESS?.trim();
 
   const resend = new Resend(apiKey);
@@ -114,8 +122,8 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
     `Sending ${leads.length} approved lead(s) via Resend (${quota.sentToday}/${quota.cap} sent today, cap ${quota.cap})…`,
   );
   await report(`From: ${fromEmail}`);
-  if (testEmail) {
-    await report(`Test fallback: ${testEmail} (used when lead has no email)\n`);
+  if (testFallbackEnabled && testEmail) {
+    await report(`Test fallback enabled: ${testEmail} (only when lead has no business email)\n`);
   }
 
   for (let i = 0; i < leads.length; i++) {
@@ -131,7 +139,19 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
       const token = await ensureLeadUnsubscribeToken(lead.id);
       const unsubscribeUrl = buildUnsubscribeUrl(token);
 
-      const { to, usingTestFallback } = resolveRecipient(lead);
+      let to: string;
+      let usingTestFallback = false;
+      try {
+        const resolved = resolveRecipient(lead);
+        to = resolved.to;
+        usingTestFallback = resolved.usingTestFallback;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        result.skipped++;
+        await report(`  ⊘ skipped ${lead.business_name}: ${message}\n`);
+        continue;
+      }
+
       const sendAddress = normalizeOutreachEmail(to);
       if (sendAddress && (await isEmailSuppressed(sendAddress))) {
         result.skipped++;
@@ -140,7 +160,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
       }
 
       if (usingTestFallback) {
-        await report(`→ ${lead.business_name}: TEST ${to}`);
+        await report(`→ ${lead.business_name}: TEST FALLBACK ${to}`);
       } else {
         await report(`→ ${lead.business_name}: ${to}`);
       }

@@ -16,6 +16,7 @@
     "send": "tsx src/cli/send.ts",
     "send-cron": "tsx src/cli/send-cron.ts",
     "enrich": "npx tsx src/engine/enricher.ts",
+    "enrich-emails": "tsx src/cli/enrich-emails.ts",
     "smoke": "tsx scripts/smoke-test.mjs",
     "test:outreach-exclusions": "tsx scripts/test-outreach-exclusions.mjs",
     "test:pulse-status": "tsx scripts/test-pulse-status.mjs",

@@ -62,6 +62,8 @@ export async function queueLeadToPostbox(id: number): Promise<boolean> {
       WHERE id = ?
         AND status = 'drafted'
         AND draft_message IS NOT NULL
+        AND email IS NOT NULL
+        AND TRIM(email) != ''
     `,
     args: [id],
   });

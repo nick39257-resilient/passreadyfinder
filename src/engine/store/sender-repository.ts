@@ -38,6 +38,8 @@ export async function getApprovedLeads(limit?: number): Promise<ApprovedLead[]> 
       FROM leads
       WHERE status = 'approved'
         AND draft_message IS NOT NULL
+        AND email IS NOT NULL
+        AND TRIM(email) != ''
         AND COALESCE(touch_count, 0) < ?
         AND ${outreachHaltedSqlInClause()}
         AND ${emailNotSuppressedSql("leads")}
@@ -61,9 +63,7 @@ export async function filterLeadsAllowedToSend(
   let skippedSuppressed = 0;
 
   for (const lead of leads) {
-    const testAddress = normalizeOutreachEmail(
-      lead.email ?? process.env.TEST_EMAIL_ADDRESS ?? null,
-    );
+    const testAddress = normalizeOutreachEmail(lead.email);
     if (testAddress && (await isEmailSuppressed(testAddress))) {
       skippedSuppressed++;
       continue;

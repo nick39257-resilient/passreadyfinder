@@ -569,10 +569,23 @@ export async function createApp(options?: {
     }
 
     try {
+      const row = await getLeadById(id);
+      if (!row) {
+        res.status(404).json({ error: "Lead not found" });
+        return;
+      }
+      if (!row.email?.trim()) {
+        res.status(409).json({
+          error:
+            "No business email on file for this takeaway. Run Find leads (enrichment) or wait until a website email is discovered before adding to postbox.",
+        });
+        return;
+      }
+
       const ok = await queueLeadToPostbox(id);
       if (!ok) {
         res.status(409).json({
-          error: "Lead must be drafted before it can be queued to postbox",
+          error: "Lead must be drafted with a business email before it can be queued to postbox",
         });
         return;
       }

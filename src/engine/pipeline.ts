@@ -15,6 +15,7 @@ import {
 import { fetchEstablishmentScores } from "./finder/fsa-detail.js";
 import { isRateLimited } from "./rate-limit-queue.js";
 import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
+import { tryEnrichLeadEmailFromWebsite } from "./enrich/lead-email.js";
 import { calculateLeadScore } from "./score/scorer.js";
 import { getDb, runMigrations } from "./store/db.js";
 import {
@@ -218,6 +219,17 @@ export async function runFindPipeline(options?: {
           onDeliveryApp: osm.onDeliveryApp,
           leadScore,
         });
+
+        if (osm.website) {
+          const idRow = await getDb().execute({
+            sql: `SELECT id FROM leads WHERE fsa_id = ? LIMIT 1`,
+            args: [lead.fsaId],
+          });
+          const leadId = Number(idRow.rows[0]?.id);
+          if (Number.isInteger(leadId)) {
+            await tryEnrichLeadEmailFromWebsite(leadId, osm.website);
+          }
+        }
 
         enriched++;
         if (osm.phone) withPhone++;

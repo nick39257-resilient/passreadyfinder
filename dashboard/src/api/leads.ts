@@ -38,6 +38,7 @@ export interface ApiLead {
   fsaLastInspectionDate: string | null;
   phone: string | null;
   website: string | null;
+  email: string | null;
   leadScore: number;
   status: string;
   riskScore: number;

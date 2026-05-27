@@ -107,6 +107,7 @@ export interface LeadRow {
   fsa_score_management?: number | null;
   phone: string | null;
   website: string | null;
+  email?: string | null;
   on_delivery_app: DeliveryAppStatus;
   lead_score: number;
   status?: string;
