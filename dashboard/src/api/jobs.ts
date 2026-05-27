@@ -1,14 +1,25 @@
 import { authHeaders } from "../lib/auth-headers.js";
 
+export interface StartFindJobOptions {
+  area: string;
+  postcodePrefix?: string;
+  worstFirst?: boolean;
+  targetRating?: number;
+}
+
 export async function startFindJob(
-  area: string,
-  targetRating: number,
+  options: StartFindJobOptions,
   secret?: string,
 ): Promise<string> {
   const res = await fetch("/api/jobs/find", {
     method: "POST",
     headers: authHeaders(secret),
-    body: JSON.stringify({ area, targetRating }),
+    body: JSON.stringify({
+      area: options.area,
+      worstFirst: options.worstFirst ?? true,
+      ...(options.postcodePrefix ? { postcodePrefix: options.postcodePrefix } : {}),
+      ...(options.targetRating ? { targetRating: options.targetRating } : {}),
+    }),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };

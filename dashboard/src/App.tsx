@@ -30,6 +30,7 @@ import { OpportunityAlert } from "./components/OpportunityAlert";
 import { DailySendStatus } from "./components/DailySendStatus";
 import { PostboxStatus } from "./components/PostboxStatus";
 import { OutreachPipeline } from "./components/OutreachPipeline";
+import { FindAreaModal } from "./components/FindAreaModal";
 import { SendConfirmModal } from "./components/SendConfirmModal";
 import { SystemPulse } from "./components/SystemPulse";
 import {
@@ -46,6 +47,7 @@ import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
 import { isOutreachHaltedStatus } from "./lib/outreach-halt";
 
 const STORAGE_AREA = "passready_area";
+const STORAGE_POSTCODE = "passready_postcode_prefix";
 const STORAGE_RATING = "passready_rating";
 
 function canQuickDraftLead(lead: ApiLead): boolean {
@@ -89,7 +91,12 @@ export function App() {
   const [jobMessage, setJobMessage] = useState<string | null>(null);
   const [sendPreview, setSendPreview] = useState<SendPreviewResponse | null>(null);
   const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [findModalOpen, setFindModalOpen] = useState(false);
   const [pulseDismissed, setPulseDismissed] = useState(false);
+  const [areaLabel, setAreaLabel] = useState(() => localStorage.getItem(STORAGE_AREA) ?? "Preston");
+  const [postcodeLabel, setPostcodeLabel] = useState(
+    () => localStorage.getItem(STORAGE_POSTCODE) ?? "",
+  );
 
   const applySystemStatus = useCallback((status: SystemStatusResponse) => {
     if (status.pulse !== "error") {
@@ -179,7 +186,14 @@ export function App() {
       .filter((lead) => lead.status !== "contacted" && lead.status !== "nurture")
       .filter((lead) => !isLeadHidden(lead.id))
       .filter((lead) => matchesLeadFilter(lead, leadFilter))
-      .sort((a, b) => b.riskScore - a.riskScore || b.id - a.id);
+      .sort((a, b) => {
+        const ra = a.fsaRating ?? 99;
+        const rb = b.fsaRating ?? 99;
+        if (ra !== rb) {
+          return ra - rb;
+        }
+        return b.riskScore - a.riskScore || b.id - a.id;
+      });
   }, [leads, leadFilter, hiddenVersion]);
 
   const filterCounts = useMemo(
@@ -331,26 +345,39 @@ export function App() {
     }
   };
 
-  const handleFind = async () => {
-    const area =
-      localStorage.getItem(STORAGE_AREA) ??
-      window.prompt("Local authority area (e.g. Preston)", "Preston") ??
-      "Preston";
-    const rating = Number(
-      localStorage.getItem(STORAGE_RATING) ??
-        window.prompt("FSA rating target (2-5)", "2") ??
-        "2",
-    );
-    localStorage.setItem(STORAGE_AREA, area);
-    localStorage.setItem(STORAGE_RATING, String(rating));
+  const runFindForArea = async (form: { area: string; postcodePrefix: string }) => {
+    localStorage.setItem(STORAGE_AREA, form.area);
+    if (form.postcodePrefix) {
+      localStorage.setItem(STORAGE_POSTCODE, form.postcodePrefix);
+    } else {
+      localStorage.removeItem(STORAGE_POSTCODE);
+    }
+    setAreaLabel(form.area);
+    setPostcodeLabel(form.postcodePrefix);
+    setFindModalOpen(false);
 
     try {
       const secret = ensureControlSecret(getControlSecret());
       setActionBusy(true);
-      const jobId = await startFindJob(area, rating, secret);
-      await runBackgroundJob(jobId, "Finding leads…");
+      const jobId = await startFindJob(
+        {
+          area: form.area,
+          postcodePrefix: form.postcodePrefix || undefined,
+          worstFirst: true,
+        },
+        secret,
+      );
+      const postcodeNote = form.postcodePrefix ? ` (${form.postcodePrefix}…)` : "";
+      await runBackgroundJob(jobId, `Finding takeaways in ${form.area}${postcodeNote}…`);
+      setBanner({
+        tone: "success",
+        message: `Refreshed takeaways for ${form.area}${postcodeNote} — worst ratings first.`,
+      });
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Find failed");
+      setBanner({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Find failed",
+      });
       setActionBusy(false);
     }
   };
@@ -449,7 +476,10 @@ export function App() {
             Mission control
           </p>
           <h1 className="text-xl font-bold tracking-tight text-slate-50">Command Center</h1>
-          <p className="mt-0.5 text-xs text-slate-500">Hygiene compliance outreach</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {areaLabel}
+            {postcodeLabel ? ` · ${postcodeLabel}` : ""} · worst ratings first
+          </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <SystemPulse
@@ -496,6 +526,17 @@ export function App() {
 
       {jobMessage ? (
         <ActionBanner message={jobMessage} tone="info" />
+      ) : null}
+
+      {!loading && !error ? (
+        <button
+          type="button"
+          disabled={actionBusy}
+          onClick={() => setFindModalOpen(true)}
+          className="mb-3 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-sky-500/40 bg-sky-950/50 text-sm font-bold text-sky-100 disabled:opacity-50"
+        >
+          Refresh takeaways in area
+        </button>
       ) : null}
 
       {!loading && !error ? <OpportunityAlert leads={leads} /> : null}
@@ -562,9 +603,18 @@ export function App() {
 
       <FixedActionBar
         disabled={actionBusy}
-        onFind={() => void handleFind()}
+        onFind={() => setFindModalOpen(true)}
         onDraft={() => void handleDraft()}
         onSend={() => void handleSendOpen()}
+      />
+
+      <FindAreaModal
+        open={findModalOpen}
+        initialArea={localStorage.getItem(STORAGE_AREA) ?? "Preston"}
+        initialPostcodePrefix={localStorage.getItem(STORAGE_POSTCODE) ?? ""}
+        onConfirm={(form) => void runFindForArea(form)}
+        onCancel={() => setFindModalOpen(false)}
+        busy={actionBusy}
       />
 
       <SendConfirmModal

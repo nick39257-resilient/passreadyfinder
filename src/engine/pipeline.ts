@@ -52,14 +52,46 @@ interface FetchLeadsResult {
  * Paginate FSA /Establishments per business type, apply delta-sync (RatingDate) and
  * target-rating filters client-side. See .cursor/rules/delta-sync-fsa.mdc.
  */
+function matchesRatingFilter(
+  rating: number | null,
+  options: { worstFirst: boolean; maxRating: number; targetRating: number },
+): boolean {
+  if (rating === null) {
+    return options.worstFirst;
+  }
+  if (options.worstFirst) {
+    return rating <= options.maxRating;
+  }
+  return rating === options.targetRating;
+}
+
+function matchesPostcodePrefix(postcode: string, prefix: string | undefined): boolean {
+  if (!prefix?.trim()) {
+    return true;
+  }
+  const normalized = postcode.replace(/\s+/g, "").toUpperCase();
+  const want = prefix.replace(/\s+/g, "").toUpperCase();
+  return normalized.startsWith(want);
+}
+
 async function fetchLeadsWithDeltaSync(options: {
   localAuthorityName: string;
   businessTypeIds: number[];
   targetRating: number;
+  worstFirst: boolean;
+  maxRating: number;
+  postcodePrefix?: string;
   lastSyncTimestamp: string | null;
 }): Promise<FetchLeadsResult> {
-  const { localAuthorityName, businessTypeIds, targetRating, lastSyncTimestamp } =
-    options;
+  const {
+    localAuthorityName,
+    businessTypeIds,
+    targetRating,
+    worstFirst,
+    maxRating,
+    postcodePrefix,
+    lastSyncTimestamp,
+  } = options;
   const localAuthorityId = await resolveLocalAuthorityId(localAuthorityName);
   const seen = new Map<number, RawLead>();
   let apiRows = 0;
@@ -81,7 +113,12 @@ async function fetchLeadsWithDeltaSync(options: {
         deltaRows++;
 
         const lead = establishmentToRawLead(est);
-        if (lead.fsaRating !== targetRating) {
+        if (
+          !matchesRatingFilter(lead.fsaRating, { worstFirst, maxRating, targetRating })
+        ) {
+          continue;
+        }
+        if (!matchesPostcodePrefix(lead.postcode, postcodePrefix)) {
           continue;
         }
         seen.set(lead.fsaId, lead);
@@ -111,7 +148,10 @@ export async function runFindPipeline(options?: {
     (productConfig.area.mode === "localAuthority"
       ? productConfig.area.localAuthorityName
       : "Preston");
-  const targetRating = options?.segmentation?.targetRating ?? 2;
+  const worstFirst = options?.segmentation?.worstFirst ?? false;
+  const maxRating = productConfig.maxRating;
+  const targetRating = options?.segmentation?.targetRating ?? maxRating;
+  const postcodePrefix = options?.segmentation?.postcodePrefix;
 
   console.log("Resolving business type IDs from FSA /BusinessTypes…");
   const typeMap = await resolveBusinessTypeIds(productConfig.businessTypeNames);
@@ -120,13 +160,18 @@ export async function runFindPipeline(options?: {
     `  Types: ${productConfig.businessTypeNames.map((n) => `${n} (${typeMap.get(n)})`).join(", ")}`,
   );
 
+  const ratingLabel = worstFirst
+    ? `worst first (≤${maxRating}★)`
+    : `target ${targetRating}★`;
+  const postcodeLabel = postcodePrefix ? `, postcode starts ${postcodePrefix}` : "";
+
   if (lastSyncTimestamp) {
     console.log(
-      `Delta-sync: ${areaName}, RatingDate > ${lastSyncTimestamp}, target ${targetRating}★…`,
+      `Delta-sync: ${areaName}${postcodeLabel}, RatingDate > ${lastSyncTimestamp}, ${ratingLabel}…`,
     );
   } else {
     console.log(
-      `Initial sync: ${areaName}, target ${targetRating}★ (no last_sync_timestamp yet)…`,
+      `Initial sync: ${areaName}${postcodeLabel}, ${ratingLabel} (no last_sync_timestamp yet)…`,
     );
   }
 
@@ -136,6 +181,9 @@ export async function runFindPipeline(options?: {
       localAuthorityName: areaName,
       businessTypeIds,
       targetRating,
+      worstFirst,
+      maxRating,
+      postcodePrefix,
       lastSyncTimestamp,
     });
   } catch (err) {
@@ -161,7 +209,14 @@ export async function runFindPipeline(options?: {
     }),
   }));
 
-  scored.sort((a, b) => b.leadScore - a.leadScore);
+  scored.sort((a, b) => {
+    const ra = a.fsaRating ?? 99;
+    const rb = b.fsaRating ?? 99;
+    if (ra !== rb) {
+      return ra - rb;
+    }
+    return b.leadScore - a.leadScore;
+  });
 
   for (const lead of scored) {
     await upsertLead(lead);

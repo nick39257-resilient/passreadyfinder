@@ -26,7 +26,11 @@ import { getComplianceTipOfDay } from "../engine/intelligence/compliance.js";
 import { getSystemActivity } from "../engine/intelligence/activity.js";
 import { getSystemStatus } from "../engine/intelligence/system-status.js";
 import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
-import { parseArea, parseTargetRating } from "../types/segmentation.js";
+import {
+  parseArea,
+  parsePostcodePrefix,
+  parseTargetRating,
+} from "../types/segmentation.js";
 import { getDailySendQuota } from "../engine/daily-send-cap.js";
 import {
   isLeadOutreachHalted,
@@ -362,18 +366,29 @@ export async function createApp(options?: {
   app.post("/api/jobs/find", requireControlAuth, async (req, res) => {
     const area = parseArea(req.body?.area);
     const targetRating = parseTargetRating(req.body?.targetRating);
+    const postcodePrefix = parsePostcodePrefix(req.body?.postcodePrefix);
+    const worstFirst = req.body?.worstFirst !== false;
 
     if (!area) {
       res.status(400).json({ error: "area is required (local authority name, e.g. Preston)" });
       return;
     }
-    if (!targetRating) {
+    if (!worstFirst && !targetRating) {
       res.status(400).json({ error: "targetRating must be 2, 3, 4, or 5" });
+      return;
+    }
+    if (req.body?.postcodePrefix && !postcodePrefix) {
+      res.status(400).json({ error: "postcodePrefix must be a valid UK postcode area, e.g. PR1" });
       return;
     }
 
     try {
-      const jobId = await createJob("find", { area, targetRating });
+      const jobId = await createJob("find", {
+        area,
+        worstFirst,
+        ...(postcodePrefix ? { postcodePrefix } : {}),
+        ...(targetRating ? { targetRating } : {}),
+      });
       startJob(jobId, "find");
       res.status(202).json({ jobId });
     } catch (err) {

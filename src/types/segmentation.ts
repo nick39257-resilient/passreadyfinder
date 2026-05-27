@@ -3,7 +3,23 @@ export type TargetRating = (typeof TARGET_RATINGS)[number];
 
 export interface FindJobParams {
   area: string;
-  targetRating: TargetRating;
+  /** When omitted with worstFirst, uses ratings 0…product maxRating (worst first). */
+  targetRating?: TargetRating;
+  /** Optional UK postcode outward filter, e.g. PR1 or BB1. */
+  postcodePrefix?: string;
+  /** Fetch lowest FSA ratings in the area (default true from Command Center). */
+  worstFirst?: boolean;
+}
+
+export function parsePostcodePrefix(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim().toUpperCase().replace(/\s+/g, "");
+  if (trimmed.length < 2 || trimmed.length > 8) {
+    return null;
+  }
+  return trimmed;
 }
 
 export interface DraftJobParams {
