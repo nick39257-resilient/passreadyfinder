@@ -101,3 +101,42 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: WHATSAPP_NUMBER
+
+  # Sender — check hourly, send only during 2pm UK window
+  - type: cron
+    name: passreadyfinder-send
+    runtime: node
+    plan: starter
+    repo: https://github.com/nick39257-resilient/passreadyfinder
+    branch: main
+    schedule: "0 * * * *"
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm install
+    startCommand: npm run send-cron
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: TURSO_DATABASE_URL
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_DATABASE_URL
+      - key: TURSO_AUTH_TOKEN
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_AUTH_TOKEN
+      - key: RESEND_API_KEY
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: RESEND_API_KEY
+      - key: FROM_EMAIL
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: FROM_EMAIL
+      - key: TEST_EMAIL_ADDRESS
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TEST_EMAIL_ADDRESS

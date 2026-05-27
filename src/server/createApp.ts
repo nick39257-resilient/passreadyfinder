@@ -13,6 +13,7 @@ import {
   createJob,
   createSendConfirmToken,
   getJob,
+  updateJob,
 } from "../engine/store/jobs-repository.js";
 import {
   countApprovedLeads,
@@ -35,6 +36,7 @@ import {
 import { formatRouteError } from "./quick-draft-handler.js";
 import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
 import { startJob } from "./job-runner.js";
+import { getNextUkSendWindowLabel } from "../engine/send-schedule.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, "../..");
@@ -480,8 +482,21 @@ export async function createApp(options?: {
         return;
       }
 
-      const jobId = await createJob("send");
-      startJob(jobId, "send");
+      const scheduledForUk = getNextUkSendWindowLabel();
+      const jobId = await createJob("send", {
+        mode: "deferred_to_uk_2pm",
+        sendableCount,
+      });
+      await updateJob(jobId, {
+        status: "done",
+        progress: `Queued for UK send window (${scheduledForUk})`,
+        result: {
+          queued: true,
+          sendableCount,
+          scheduledForUk,
+          note: "Approved leads are sent automatically at 2pm UK time.",
+        },
+      });
       res.status(202).json({ jobId });
     } catch (err) {
       console.error(err);

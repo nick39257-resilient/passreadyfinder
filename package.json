@@ -14,6 +14,7 @@
     "start": "tsx src/server/app.ts",
     "review": "tsx src/server/app.ts",
     "send": "tsx src/cli/send.ts",
+    "send-cron": "tsx src/cli/send-cron.ts",
     "enrich": "npx tsx src/engine/enricher.ts",
     "smoke": "tsx scripts/smoke-test.mjs",
     "test:outreach-exclusions": "tsx scripts/test-outreach-exclusions.mjs",
