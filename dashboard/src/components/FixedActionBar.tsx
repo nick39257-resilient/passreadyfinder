@@ -45,7 +45,7 @@ export function FixedActionBar({
       aria-label="Outreach workflow"
     >
       <p className="mb-1 text-center text-[9px] font-medium uppercase tracking-[0.15em] text-slate-600">
-        Find → Draft → Send
+        Find → Draft → Postbox
       </p>
       <div className="mx-auto grid max-w-lg grid-cols-3 gap-1.5">
         <button
@@ -73,7 +73,7 @@ export function FixedActionBar({
           className={`${btn} bg-amber-950/80 text-amber-200 ring-1 ring-amber-500/25`}
         >
           <IconSend />
-          <span>Send outreach</span>
+          <span>Postbox</span>
         </button>
       </div>
     </nav>

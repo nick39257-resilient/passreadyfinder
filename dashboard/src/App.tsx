@@ -28,6 +28,7 @@ import { LeadFilters } from "./components/LeadFilters";
 import { LeadRow } from "./components/LeadRow";
 import { OpportunityAlert } from "./components/OpportunityAlert";
 import { DailySendStatus } from "./components/DailySendStatus";
+import { PostboxStatus } from "./components/PostboxStatus";
 import { OutreachPipeline } from "./components/OutreachPipeline";
 import { SendConfirmModal } from "./components/SendConfirmModal";
 import { SystemPulse } from "./components/SystemPulse";
@@ -153,7 +154,7 @@ export function App() {
         setBanner({
           tone: "info",
           message:
-            "This server requires a control secret — tap Key (top right) and paste CONTROL_PANEL_SECRET from Render before Draft / Send / Find.",
+            "This server requires a control secret — tap Key (top right) and paste CONTROL_PANEL_SECRET from Render before Draft / Postbox / Find.",
         });
       }
     });
@@ -253,7 +254,7 @@ export function App() {
       await loadAll();
       setBanner({
         tone: "success",
-        message: `Draft saved for ${lead.businessName}. Review in queue or approve to send.`,
+        message: `Draft saved for ${lead.businessName}. Tap Send to postbox when ready.`,
       });
       if (!options?.keepDrawerOpen) {
         setSelectedLead(null);
@@ -385,7 +386,7 @@ export function App() {
           message:
             preview.dailyCapReached
               ? "Daily send cap reached — try again tomorrow."
-              : "No approved leads ready to send. Approve drafts in Review first.",
+              : "Postbox is empty — draft a takeaway and tap Send to postbox.",
         });
         return;
       }
@@ -427,7 +428,7 @@ export function App() {
         setActionBusy(false);
         return;
       }
-      await runBackgroundJob(jobId, "Sending approved emails…");
+      await runBackgroundJob(jobId, "Dispatching postbox…");
     } catch (err) {
       setBanner({
         tone: "error",
@@ -498,6 +499,7 @@ export function App() {
       ) : null}
 
       {!loading && !error ? <OpportunityAlert leads={leads} /> : null}
+      <PostboxStatus queuedCount={filterCounts.approved} />
       <DailySendStatus dailyQuota={dailyQuota} resetDescription={dailyCapResetDescription} />
       <OutreachPipeline funnel={funnel} />
       <ActivityFeed items={activityFeed} />

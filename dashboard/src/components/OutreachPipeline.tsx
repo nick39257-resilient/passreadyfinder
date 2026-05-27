@@ -3,7 +3,7 @@ import type { FunnelStats } from "../api/funnel";
 const STAGES: { key: keyof FunnelStats; label: string }[] = [
   { key: "identified", label: "Identified" },
   { key: "drafted", label: "Drafted" },
-  { key: "approved", label: "Approved" },
+  { key: "approved", label: "Postbox" },
   { key: "converted", label: "Converted" },
 ];
 
