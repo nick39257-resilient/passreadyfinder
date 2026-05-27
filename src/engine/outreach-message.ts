@@ -1,3 +1,5 @@
+import { appendOptOutFooter } from "./outreach-halt.js";
+
 /** Remove http(s) URLs and bare wa.me links from outreach copy. */
 export function stripUrls(text: string): string {
   return text
@@ -15,6 +17,7 @@ export interface PrepareOutboundMessageOptions {
   body: string;
   touchCount: number;
   hasReplied: boolean;
+  unsubscribeUrl?: string;
 }
 
 /**
@@ -29,6 +32,13 @@ export function prepareOutboundMessage(options: PrepareOutboundMessageOptions): 
 
   if (isFirstTouch) {
     text = stripUrls(text);
+  }
+
+  if (options.unsubscribeUrl?.trim()) {
+    text = appendOptOutFooter(text, options.unsubscribeUrl.trim());
+  }
+
+  if (isFirstTouch) {
     return { text, html: null };
   }
 

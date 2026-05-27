@@ -37,6 +37,7 @@ export async function upsertLead(input: LeadUpsertInput): Promise<void> {
         on_delivery_app = excluded.on_delivery_app,
         lead_score = excluded.lead_score,
         updated_at = datetime('now')
+      WHERE leads.status != 'suppressed'
     `,
     args: [
       input.fsaId,
@@ -78,7 +79,7 @@ export async function updateLeadEnrichment(
         on_delivery_app = ?,
         lead_score = ?,
         updated_at = datetime('now')
-      WHERE fsa_id = ?
+      WHERE fsa_id = ? AND status != 'suppressed'
     `,
     args: [
       enrichment.phone,

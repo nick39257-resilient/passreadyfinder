@@ -2,10 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchFunnel, type FunnelStats } from "./api/funnel";
 import { startDraftJob, startFindJob, startSendJob } from "./api/jobs";
 import { fetchAppConfig } from "./api/config";
-import { fetchLeads, fetchLeadDetail, quickDraftLead, type ApiLead } from "./api/leads";
+import {
+  fetchLeads,
+  fetchLeadDetail,
+  markLeadConvertedApi,
+  quickDraftLead,
+  stopLeadSequence,
+  type ApiLead,
+} from "./api/leads";
 import { fetchSendPreview, type SendPreviewResponse } from "./api/send";
 import {
   fetchSystemStatus,
+  type DailySendQuota,
   type SystemPulseState,
   type SystemStatusFeedItem,
 } from "./api/status";
@@ -17,6 +25,7 @@ import { LeadDetailDrawer } from "./components/LeadDetailDrawer";
 import { LeadFilters } from "./components/LeadFilters";
 import { LeadRow } from "./components/LeadRow";
 import { OpportunityAlert } from "./components/OpportunityAlert";
+import { DailySendStatus } from "./components/DailySendStatus";
 import { OutreachPipeline } from "./components/OutreachPipeline";
 import { SendConfirmModal } from "./components/SendConfirmModal";
 import { SystemPulse } from "./components/SystemPulse";
@@ -31,12 +40,16 @@ import {
   matchesLeadFilter,
 } from "./lib/lead-insights";
 import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
+import { isOutreachHaltedStatus } from "./lib/outreach-halt";
 
 const STORAGE_AREA = "passready_area";
 const STORAGE_RATING = "passready_rating";
 
 function canQuickDraftLead(lead: ApiLead): boolean {
-  return !["contacted", "opted_in", "nurture"].includes(lead.status);
+  if (isOutreachHaltedStatus(lead.status)) {
+    return false;
+  }
+  return lead.status !== "contacted";
 }
 
 function countByFilter(leads: ApiLead[]): Record<LeadFilterKey, number> {
@@ -55,6 +68,8 @@ export function App() {
   const [activityFeed, setActivityFeed] = useState<SystemStatusFeedItem[]>([]);
   const [needsReviewCount, setNeedsReviewCount] = useState(0);
   const [complianceTip, setComplianceTip] = useState("");
+  const [dailyQuota, setDailyQuota] = useState<DailySendQuota | null>(null);
+  const [dailyCapResetDescription, setDailyCapResetDescription] = useState("midnight UTC");
   const [leadFilter, setLeadFilter] = useState<LeadFilterKey>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +104,8 @@ export function App() {
       setActivityFeed(status.feed);
       setNeedsReviewCount(status.needsReviewCount);
       setComplianceTip(status.complianceTip);
+      setDailyQuota(status.dailyQuota);
+      setDailyCapResetDescription(status.dailyCapResetDescription);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
@@ -121,6 +138,8 @@ export function App() {
           setErrorMessage(status.errorMessage);
           setActivityFeed(status.feed);
           setNeedsReviewCount(status.needsReviewCount);
+          setDailyQuota(status.dailyQuota);
+          setDailyCapResetDescription(status.dailyCapResetDescription);
         })
         .catch(() => {
           /* keep last known status */
@@ -191,7 +210,9 @@ export function App() {
     }
 
     if (!canQuickDraftLead(lead)) {
-      const msg = "Already sent — mark as replied before re-drafting.";
+      const msg = isOutreachHaltedStatus(lead.status)
+        ? "Outreach is stopped for this business."
+        : "Already sent — mark as replied (stop sequence) before re-drafting.";
       setDrawerError(msg);
       setBanner({ tone: "error", message: msg });
       return;
@@ -221,6 +242,46 @@ export function App() {
     } finally {
       setBusyId(null);
       window.setTimeout(() => setJobMessage(null), 4000);
+    }
+  };
+
+  const handleStopSequence = async (lead: ApiLead) => {
+    try {
+      const secret = ensureControlSecret(getControlSecret());
+      setBusyId(lead.id);
+      await stopLeadSequence(lead.id, secret);
+      await loadAll();
+      setBanner({
+        tone: "success",
+        message: `${lead.businessName} marked as replied — sequence stopped.`,
+      });
+      setSelectedLead(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not stop sequence";
+      setDrawerError(msg);
+      setBanner({ tone: "error", message: msg });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleMarkConverted = async (lead: ApiLead, stage: "opted_in" | "trial_started") => {
+    try {
+      const secret = ensureControlSecret(getControlSecret());
+      setBusyId(lead.id);
+      await markLeadConvertedApi(lead.id, stage, secret);
+      await loadAll();
+      setBanner({
+        tone: "success",
+        message: `${lead.businessName} marked as ${stage === "trial_started" ? "trial started" : "opted in"} — sequence stopped.`,
+      });
+      setSelectedLead(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not mark converted";
+      setDrawerError(msg);
+      setBanner({ tone: "error", message: msg });
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -320,6 +381,7 @@ export function App() {
   };
 
   const selectedCanDraft = selectedLead ? canQuickDraftLead(selectedLead) : false;
+  const selectedHalted = selectedLead ? isOutreachHaltedStatus(selectedLead.status) : false;
 
   return (
     <div className="mx-auto min-h-screen max-w-lg px-3 pb-[6.5rem] pt-5 sm:px-4">
@@ -378,6 +440,7 @@ export function App() {
       ) : null}
 
       {!loading && !error ? <OpportunityAlert leads={leads} /> : null}
+      <DailySendStatus dailyQuota={dailyQuota} resetDescription={dailyCapResetDescription} />
       <OutreachPipeline funnel={funnel} />
       <ActivityFeed items={activityFeed} />
       {complianceTip ? <ComplianceBanner tip={complianceTip} /> : null}
@@ -472,13 +535,19 @@ export function App() {
           draftDisabledReason={
             selectedCanDraft
               ? undefined
-              : "Already sent — mark as replied before re-drafting."
+              : selectedHalted
+                ? "Outreach stopped (suppressed, replied, converted, or nurture)."
+                : "Already sent — stop sequence before re-drafting."
           }
+          outreachHalted={selectedHalted}
           errorMessage={drawerError}
           onClose={() => {
             setSelectedLead(null);
             setDrawerError(null);
           }}
+          onStopSequence={() => void handleStopSequence(selectedLead)}
+          onMarkTrial={() => void handleMarkConverted(selectedLead, "trial_started")}
+          onMarkOptedIn={() => void handleMarkConverted(selectedLead, "opted_in")}
           onQuickDraft={() => void handleQuickDraft(selectedLead, { keepDrawerOpen: true })}
           onSnooze={() => {
             snoozeLead(selectedLead.id);

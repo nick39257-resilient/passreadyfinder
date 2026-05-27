@@ -41,23 +41,31 @@ export function LeadDetailDrawer({
   lead,
   onClose,
   onQuickDraft,
+  onStopSequence,
+  onMarkTrial,
+  onMarkOptedIn,
   onSnooze,
   onDismiss,
   busy,
   busyLabel = "Working…",
   draftDisabled,
   draftDisabledReason,
+  outreachHalted,
   errorMessage,
 }: {
   lead: ApiLead;
   onClose: () => void;
   onQuickDraft: () => void;
+  onStopSequence: () => void;
+  onMarkTrial: () => void;
+  onMarkOptedIn: () => void;
   onSnooze: () => void;
   onDismiss: () => void;
   busy?: boolean;
   busyLabel?: string;
   draftDisabled?: boolean;
   draftDisabledReason?: string;
+  outreachHalted?: boolean;
   errorMessage?: string | null;
 }) {
   const band = lead.riskBand as RiskBand;
@@ -151,6 +159,37 @@ export function LeadDetailDrawer({
 
           {busy ? (
             <p className="mb-3 text-center text-sm font-medium text-emerald-400">{busyLabel}</p>
+          ) : null}
+
+          {!outreachHalted ? (
+            <div className="mb-3 grid grid-cols-1 gap-2">
+              <button
+                type="button"
+                disabled={busy || lead.status === "replied"}
+                onClick={onStopSequence}
+                className="min-h-[48px] rounded-xl border border-sky-500/40 bg-sky-950/40 text-sm font-bold text-sky-100 disabled:opacity-50"
+              >
+                Mark as replied — stop sequence
+              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onMarkTrial}
+                  className="min-h-[44px] rounded-xl border border-violet-500/40 bg-violet-950/30 text-xs font-bold text-violet-100 disabled:opacity-50"
+                >
+                  Trial started
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onMarkOptedIn}
+                  className="min-h-[44px] rounded-xl border border-violet-500/40 bg-violet-950/30 text-xs font-bold text-violet-100 disabled:opacity-50"
+                >
+                  Opted in
+                </button>
+              </div>
+            </div>
           ) : null}
 
           <div className="grid grid-cols-2 gap-2">

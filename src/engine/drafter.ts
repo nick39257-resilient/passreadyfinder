@@ -14,6 +14,12 @@ import {
   firstTouchDraftMessageSchema,
 } from "../validation/draft.schemas.js";
 import { geminiChatCompletionSchema } from "../validation/gemini.schemas.js";
+import {
+  emailNotSuppressedSql,
+  ensureLeadUnsubscribeToken,
+  outreachHaltedSqlArgs,
+  outreachHaltedSqlInClause,
+} from "./outreach-halt.js";
 import { geminiApiQueue } from "./rate-limit-queue.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
@@ -186,31 +192,34 @@ export async function fetchLeadsNeedingDraft(
           SELECT id, business_name, address, postcode, fsa_rating
           FROM leads
           WHERE draft_message IS NULL
-            AND status != 'nurture'
+            AND ${outreachHaltedSqlInClause()}
             AND COALESCE(touch_count, 0) < 4
+            AND ${emailNotSuppressedSql()}
             AND fsa_rating = ?
           ORDER BY lead_score DESC
           LIMIT ?
         `,
-        args: [targetRating, limit],
+        args: [...outreachHaltedSqlArgs(), targetRating, limit],
       })
     : await db.execute({
         sql: `
           SELECT id, business_name, address, postcode, fsa_rating
           FROM leads
           WHERE draft_message IS NULL
-            AND status != 'nurture'
+            AND ${outreachHaltedSqlInClause()}
             AND COALESCE(touch_count, 0) < 4
+            AND ${emailNotSuppressedSql()}
           ORDER BY lead_score DESC
           LIMIT ?
         `,
-        args: [limit],
+        args: [...outreachHaltedSqlArgs(), limit],
       });
 
   return result.rows as unknown as LeadForDraft[];
 }
 
 export async function saveDraftMessage(leadId: number, message: string): Promise<void> {
+  await ensureLeadUnsubscribeToken(leadId);
   const db = getDb();
   await db.execute({
     sql: `

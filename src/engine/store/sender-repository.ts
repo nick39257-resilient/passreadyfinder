@@ -1,4 +1,12 @@
 import { productConfig } from "../../config/product.config.js";
+import {
+  emailNotSuppressedSql,
+  isLeadOutreachHalted,
+  isEmailSuppressed,
+  normalizeOutreachEmail,
+  outreachHaltedSqlArgs,
+  outreachHaltedSqlInClause,
+} from "../outreach-halt.js";
 import { getDb } from "./db.js";
 
 export interface ApprovedLead {
@@ -26,17 +34,44 @@ const maxTouches = productConfig.outreach.maxTouchesPerLead;
 export async function getApprovedLeads(limit?: number): Promise<ApprovedLead[]> {
   const db = getDb();
   const sql = `
-      SELECT id, business_name, email, draft_message, COALESCE(touch_count, 0) AS touch_count, replied_at
+      SELECT id, business_name, email, draft_message, COALESCE(touch_count, 0) AS touch_count, replied_at, status
       FROM leads
       WHERE status = 'approved'
         AND draft_message IS NOT NULL
         AND COALESCE(touch_count, 0) < ?
+        AND ${outreachHaltedSqlInClause()}
+        AND ${emailNotSuppressedSql("leads")}
       ORDER BY lead_score DESC
       ${limit !== undefined ? "LIMIT ?" : ""}
     `;
-  const args = limit !== undefined ? [maxTouches, limit] : [maxTouches];
+  const args =
+    limit !== undefined
+      ? [maxTouches, ...outreachHaltedSqlArgs(), limit]
+      : [maxTouches, ...outreachHaltedSqlArgs()];
   const result = await db.execute({ sql, args });
-  return result.rows as unknown as ApprovedLead[];
+  const rows = result.rows as unknown as (ApprovedLead & { status?: string })[];
+  return rows.filter((row) => !isLeadOutreachHalted(row));
+}
+
+/** Post-fetch guard: block sends when email is on suppression_list. */
+export async function filterLeadsAllowedToSend(
+  leads: ApprovedLead[],
+): Promise<{ allowed: ApprovedLead[]; skippedSuppressed: number }> {
+  const allowed: ApprovedLead[] = [];
+  let skippedSuppressed = 0;
+
+  for (const lead of leads) {
+    const testAddress = normalizeOutreachEmail(
+      lead.email ?? process.env.TEST_EMAIL_ADDRESS ?? null,
+    );
+    if (testAddress && (await isEmailSuppressed(testAddress))) {
+      skippedSuppressed++;
+      continue;
+    }
+    allowed.push(lead);
+  }
+
+  return { allowed, skippedSuppressed };
 }
 
 export async function markLeadReplied(leadId: number): Promise<boolean> {

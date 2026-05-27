@@ -5,13 +5,21 @@ import {
   randomSendDelayMs,
   sleepWithProgress,
 } from "./deliverability.js";
+import {
+  buildUnsubscribeUrl,
+  ensureLeadUnsubscribeToken,
+  isLeadOutreachHalted,
+} from "./outreach-halt.js";
 import { prepareOutboundMessage } from "./outreach-message.js";
+import { getLeadById } from "./store/leads-repository.js";
 import { runMigrations } from "./store/db.js";
 import {
+  filterLeadsAllowedToSend,
   getApprovedLeads,
   markLeadContacted,
   type ApprovedLead,
 } from "./store/sender-repository.js";
+import { isEmailSuppressed, normalizeOutreachEmail } from "./outreach-halt.js";
 
 const EMAIL_SUBJECT = "upcoming fsa inspection";
 
@@ -85,17 +93,22 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
     return { ...result, dailyCapReached: true };
   }
 
-  const leads = await getApprovedLeads(quota.remaining);
+  const report = async (msg: string) => {
+    console.log(msg);
+    await onProgress?.(msg);
+  };
+
+  const approvedPool = await getApprovedLeads(quota.remaining);
+  const { allowed: leads, skippedSuppressed } = await filterLeadsAllowedToSend(approvedPool);
+
+  if (skippedSuppressed > 0) {
+    await report(`  ⊘ skipped ${skippedSuppressed} lead(s) — email on suppression list\n`);
+  }
 
   if (leads.length === 0) {
     console.log("No approved leads to send.");
     return result;
   }
-
-  const report = async (msg: string) => {
-    console.log(msg);
-    await onProgress?.(msg);
-  };
 
   await report(
     `Sending ${leads.length} approved lead(s) via Resend (${quota.sentToday}/${quota.cap} sent today, cap ${quota.cap})…`,
@@ -108,7 +121,23 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i];
     try {
+      const row = await getLeadById(lead.id);
+      if (!row || isLeadOutreachHalted(row)) {
+        result.skipped++;
+        await report(`  ⊘ skipped ${lead.business_name} (outreach halted)\n`);
+        continue;
+      }
+
+      const token = await ensureLeadUnsubscribeToken(lead.id);
+      const unsubscribeUrl = buildUnsubscribeUrl(token);
+
       const { to, usingTestFallback } = resolveRecipient(lead);
+      const sendAddress = normalizeOutreachEmail(to);
+      if (sendAddress && (await isEmailSuppressed(sendAddress))) {
+        result.skipped++;
+        await report(`  ⊘ skipped ${lead.business_name} — suppressed email\n`);
+        continue;
+      }
 
       if (usingTestFallback) {
         await report(`→ ${lead.business_name}: TEST ${to}`);
@@ -121,6 +150,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
         body: lead.draft_message,
         touchCount: lead.touch_count,
         hasReplied,
+        unsubscribeUrl,
       });
 
       const { data, error } = await resend.emails.send({

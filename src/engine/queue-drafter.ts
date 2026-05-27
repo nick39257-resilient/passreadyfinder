@@ -25,6 +25,11 @@ import {
   type LeadForDraft,
 } from "./drafter.js";
 import { logEngineError, logQueueDrafterResult } from "./intelligence/system-status.js";
+import {
+  emailNotSuppressedSql,
+  outreachHaltedSqlArgs,
+  outreachHaltedSqlInClause,
+} from "./outreach-halt.js";
 import { getDb, runMigrations } from "./store/db.js";
 
 /** 2-Star Rescue consultant tone for high-risk outreach */
@@ -80,8 +85,10 @@ async function countEligibleNewLeads(): Promise<number> {
         AND contacted_at IS NULL
         AND draft_message IS NULL
         AND COALESCE(touch_count, 0) < ?
+        AND ${outreachHaltedSqlInClause()}
+        AND ${emailNotSuppressedSql()}
     `,
-    args: [productConfig.outreach.maxTouchesPerLead],
+    args: [productConfig.outreach.maxTouchesPerLead, ...outreachHaltedSqlArgs()],
   });
   return Number(result.rows[0]?.count ?? 0);
 }
@@ -109,10 +116,12 @@ async function fetchEligibleNewLeads(limit: number): Promise<LeadForQueueDraft[]
         AND contacted_at IS NULL
         AND draft_message IS NULL
         AND COALESCE(touch_count, 0) < ?
+        AND ${outreachHaltedSqlInClause()}
+        AND ${emailNotSuppressedSql()}
       ORDER BY lead_score DESC
       LIMIT ?
     `,
-    args: [productConfig.outreach.maxTouchesPerLead, limit * 4],
+    args: [productConfig.outreach.maxTouchesPerLead, ...outreachHaltedSqlArgs(), limit * 4],
   });
 
   return result.rows as unknown as LeadForQueueDraft[];

@@ -5,6 +5,11 @@ import {
   type EngineLogEntry,
 } from "../store/engine-log-repository.js";
 import { getLatestJob, getRecentJobs } from "../store/jobs-repository.js";
+import {
+  getDailyCapResetDescription,
+  getDailySendQuota,
+  type DailySendQuota,
+} from "../daily-send-cap.js";
 import { getLeadStatusCounts } from "../store/stats-repository.js";
 import { runMigrations } from "../store/db.js";
 
@@ -30,6 +35,8 @@ export interface SystemStatus {
   feed: SystemStatusFeedItem[];
   needsReviewCount: number;
   complianceTip: string;
+  dailyQuota: DailySendQuota;
+  dailyCapResetDescription: string;
 }
 
 const PULSE_LABELS: Record<SystemPulseState, string> = {
@@ -58,13 +65,15 @@ function formatFailedJobError(type: string, error: string | null): string {
 export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
   await runMigrations();
 
-  const [logs, latestError, statusCounts, recentJobs, latestJob] = await Promise.all([
-    getRecentEngineLogs(feedLimit),
-    getLatestEngineError(),
-    getLeadStatusCounts(),
-    getRecentJobs(12),
-    getLatestJob(),
-  ]);
+  const [logs, latestError, statusCounts, recentJobs, latestJob, dailyQuota] =
+    await Promise.all([
+      getRecentEngineLogs(feedLimit),
+      getLatestEngineError(),
+      getLeadStatusCounts(),
+      getRecentJobs(12),
+      getLatestJob(),
+      getDailySendQuota(),
+    ]);
 
   const needsReviewCount = statusCounts.drafted;
   const feed = logs.map(mapFeedEntry);
@@ -102,6 +111,8 @@ export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
     feed,
     needsReviewCount,
     complianceTip: getComplianceTipOfDay(),
+    dailyQuota,
+    dailyCapResetDescription: getDailyCapResetDescription(),
   };
 }
 

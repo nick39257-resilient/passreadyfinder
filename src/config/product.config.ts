@@ -108,9 +108,8 @@ export const productConfig = {
     /** Min/max delay between individual sends (ms) */
     sendDelayMinMs: 5 * 60 * 1000,
     sendDelayMaxMs: 15 * 60 * 1000,
-    /** Max outreach emails per mailbox per UTC day (deterministic cap in range). */
-    dailySendCapMin: 15,
-    dailySendCapMax: 20,
+    /** Max outreach emails per mailbox per UTC day (override via DAILY_SEND_CAP env). */
+    dailySendCap: 30,
     /** Background cron — run bucket size (pair with Render schedule every 5 minutes). */
     cronSchedule: {
       earliestHourUtc: 9,

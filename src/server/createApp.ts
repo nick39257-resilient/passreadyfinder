@@ -26,7 +26,13 @@ import { getSystemStatus } from "../engine/intelligence/system-status.js";
 import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
 import { parseArea, parseTargetRating } from "../types/segmentation.js";
 import { getDailySendQuota } from "../engine/daily-send-cap.js";
-import { formatRouteError, markLeadRepliedAndDraftFollowUp } from "./quick-draft-handler.js";
+import {
+  isLeadOutreachHalted,
+  markLeadConverted,
+  stopSequenceForReply,
+  suppressLeadByToken,
+} from "../engine/outreach-halt.js";
+import { formatRouteError } from "./quick-draft-handler.js";
 import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
 import { startJob } from "./job-runner.js";
 
@@ -111,6 +117,32 @@ export async function createApp(options?: {
     });
   });
 
+  app.get("/api/outreach/unsubscribe", async (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token.trim() : "";
+    if (!token) {
+      res.status(400).type("html").send("<p>Missing unsubscribe token.</p>");
+      return;
+    }
+
+    try {
+      const ok = await suppressLeadByToken(token);
+      if (!ok) {
+        res.status(404).type("html").send("<p>This unsubscribe link is invalid or expired.</p>");
+        return;
+      }
+      res.status(200).type("html").send(
+        `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Unsubscribed</title></head>
+<body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem;">
+<h1>You are unsubscribed</h1>
+<p>We will not email this business again. If this was a mistake, contact PassReady support.</p>
+</body></html>`,
+      );
+    } catch (err) {
+      console.error(err);
+      res.status(500).type("html").send("<p>Could not process unsubscribe. Try again later.</p>");
+    }
+  });
+
   app.get("/api/stats", async (_req, res) => {
     try {
       const counts = await getLeadStatusCounts();
@@ -183,7 +215,7 @@ export async function createApp(options?: {
     }
   });
 
-  app.post("/api/leads/:id/mark-replied", requireControlAuth, async (req, res) => {
+  app.post("/api/leads/:id/stop-sequence", requireControlAuth, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
       res.status(400).json({ error: "Invalid lead id" });
@@ -191,17 +223,57 @@ export async function createApp(options?: {
     }
 
     try {
-      const draft = await markLeadRepliedAndDraftFollowUp(id);
-      res.json({ ok: true, draft });
+      await stopSequenceForReply(id);
+      res.json({ ok: true, status: "replied" });
     } catch (err) {
       const message = formatRouteError(err);
-      console.error("Mark-replied failed:", message, err);
+      console.error("Stop-sequence failed:", message, err);
       if (message === "Lead not found") {
         res.status(404).json({ error: message });
         return;
       }
-      const status = message.includes("not configured") ? 503 : 500;
-      res.status(status).json({ error: message });
+      res.status(500).json({ error: message });
+    }
+  });
+
+  /** @deprecated Use POST /api/leads/:id/stop-sequence */
+  app.post("/api/leads/:id/mark-replied", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+    try {
+      await stopSequenceForReply(id);
+      res.json({ ok: true, status: "replied" });
+    } catch (err) {
+      const message = formatRouteError(err);
+      res.status(message === "Lead not found" ? 404 : 500).json({ error: message });
+    }
+  });
+
+  app.post("/api/leads/:id/mark-converted", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    const stage = req.body?.stage;
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+    if (stage !== "opted_in" && stage !== "trial_started") {
+      res.status(400).json({ error: "stage must be opted_in or trial_started" });
+      return;
+    }
+
+    try {
+      await markLeadConverted(id, stage);
+      res.json({ ok: true, status: stage });
+    } catch (err) {
+      const message = formatRouteError(err);
+      if (message === "Lead not found") {
+        res.status(404).json({ error: message });
+        return;
+      }
+      res.status(500).json({ error: message });
     }
   });
 
@@ -219,10 +291,14 @@ export async function createApp(options?: {
         return;
       }
       const hasReplied = Boolean((row as { replied_at?: string | null }).replied_at);
-      if (row.contacted_at && !hasReplied) {
+      if (isLeadOutreachHalted(row)) {
+        res.status(409).json({ error: "Outreach is halted for this business" });
+        return;
+      }
+      if (row.contacted_at && row.status !== "replied" && !hasReplied) {
         res.status(409).json({
           error:
-            "Lead already contacted — mark as replied before generating a follow-up draft",
+            "Lead already contacted — use “Mark as replied — stop sequence” or mark converted first",
         });
         return;
       }

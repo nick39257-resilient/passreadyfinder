@@ -45,6 +45,12 @@ export function statusDisplayLabel(status: string): string {
       return "Sent";
     case "nurture":
       return "Nurture";
+    case "suppressed":
+      return "Suppressed";
+    case "replied":
+      return "Replied — stopped";
+    case "trial_started":
+      return "Trial started";
     case "rejected":
       return "Rejected";
     default:

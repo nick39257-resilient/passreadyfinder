@@ -117,3 +117,30 @@ export async function quickDraftLead(
 
   return body.draft?.trim() ?? "";
 }
+
+export async function stopLeadSequence(leadId: number, secret?: string): Promise<void> {
+  const res = await fetch(`/api/leads/${leadId}/stop-sequence`, {
+    method: "POST",
+    headers: authHeaders(secret),
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Stop sequence failed (${res.status})`);
+  }
+}
+
+export async function markLeadConvertedApi(
+  leadId: number,
+  stage: "opted_in" | "trial_started",
+  secret?: string,
+): Promise<void> {
+  const res = await fetch(`/api/leads/${leadId}/mark-converted`, {
+    method: "POST",
+    headers: authHeaders(secret),
+    body: JSON.stringify({ stage }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Mark converted failed (${res.status})`);
+  }
+}

@@ -13,6 +13,12 @@ export interface SystemStatusFeedItem {
   createdAt: string;
 }
 
+export interface DailySendQuota {
+  sentToday: number;
+  cap: number;
+  remaining: number;
+}
+
 export interface SystemStatusResponse {
   pulse: SystemPulseState;
   pulseLabel: string;
@@ -20,6 +26,8 @@ export interface SystemStatusResponse {
   feed: SystemStatusFeedItem[];
   needsReviewCount: number;
   complianceTip: string;
+  dailyQuota: DailySendQuota;
+  dailyCapResetDescription: string;
 }
 
 export async function fetchSystemStatus(): Promise<SystemStatusResponse> {

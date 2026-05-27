@@ -12,6 +12,7 @@ import {
   findLocalCompetitors,
 } from "../engine/intelligence/competitors.js";
 import { resolveConsultantTip, scoresFromRow } from "../engine/intelligence/carrot.js";
+import { isLeadOutreachHalted } from "../engine/outreach-halt.js";
 import { getLeadById } from "../engine/store/leads-repository.js";
 import { markLeadReplied } from "../engine/store/sender-repository.js";
 import { runMigrations } from "../engine/store/db.js";
@@ -42,6 +43,9 @@ export async function quickDraftLeadById(leadId: number): Promise<string> {
   const row = await getLeadById(leadId);
   if (!row) {
     throw new Error("Lead not found");
+  }
+  if (isLeadOutreachHalted(row)) {
+    throw new Error("Outreach is halted for this business (suppressed, replied, or converted)");
   }
   const hasReplied = Boolean((row as { replied_at?: string | null }).replied_at);
   if (row.contacted_at && !hasReplied) {
