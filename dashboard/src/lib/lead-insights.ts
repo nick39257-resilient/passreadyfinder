@@ -3,7 +3,7 @@ import type { RiskBand } from "../components/ActionCard";
 
 export type PriorityTier = "high" | "medium" | "low";
 
-export type LeadFilterKey = "all" | "new" | "drafted" | "approved" | "high";
+export type LeadFilterKey = "all" | "new" | "drafted" | "approved" | "sent" | "high";
 
 export function priorityFromBand(band: RiskBand): PriorityTier {
   if (band === "critical" || band === "high") {
@@ -39,7 +39,7 @@ export function statusDisplayLabel(status: string): string {
     case "drafted":
       return "Draft";
     case "approved":
-      return "Approved";
+      return "In postbox";
     case "contacted":
     case "opted_in":
       return "Sent";
@@ -74,6 +74,8 @@ export function matchesLeadFilter(lead: ApiLead, filter: LeadFilterKey): boolean
       return lead.status === "drafted";
     case "approved":
       return lead.status === "approved";
+    case "sent":
+      return lead.status === "contacted" || lead.status === "replied" || lead.status === "opted_in";
     case "high":
       return isHighPriorityLead(lead);
     default:

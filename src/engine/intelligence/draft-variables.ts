@@ -32,12 +32,11 @@ export function buildFsaIssuePhrase(
 }
 
 export function buildLocalReference(city: string, competitors: LocalCompetitor[]): string {
-  const place = city.trim() || "your high street";
-  const rival = competitors[0];
-  if (rival?.businessName) {
-    return `${place} — same patch as ${rival.businessName}`;
-  }
-  return `${place} takeaway scene`;
+  // Persona constraint: always write as a kitchen manager from Preston.
+  // Do not vary the location by lead address or inferred city.
+  void city;
+  void competitors;
+  return "Preston takeaway scene";
 }
 
 export function buildDraftVariables(input: {

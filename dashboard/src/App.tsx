@@ -6,6 +6,7 @@ import {
   fetchLeads,
   fetchLeadDetail,
   markLeadConvertedApi,
+  queueLeadToPostboxApi,
   quickDraftLead,
   stopLeadSequence,
   type ApiLead,
@@ -35,7 +36,7 @@ import {
   getControlSecret,
   setControlSecret,
 } from "./lib/control-secret";
-import { pollJobUntilDone } from "./lib/job-poll";
+import { fetchJob, pollJobUntilDone } from "./lib/job-poll";
 import {
   type LeadFilterKey,
   matchesLeadFilter,
@@ -50,11 +51,11 @@ function canQuickDraftLead(lead: ApiLead): boolean {
   if (isOutreachHaltedStatus(lead.status)) {
     return false;
   }
-  return lead.status !== "contacted";
+  return lead.status !== "contacted" && lead.status !== "approved";
 }
 
 function countByFilter(leads: ApiLead[]): Record<LeadFilterKey, number> {
-  const keys: LeadFilterKey[] = ["all", "new", "drafted", "approved", "high"];
+  const keys: LeadFilterKey[] = ["all", "new", "drafted", "approved", "sent", "high"];
   return Object.fromEntries(
     keys.map((key) => [key, leads.filter((l) => matchesLeadFilter(l, key)).length]),
   ) as Record<LeadFilterKey, number>;
@@ -174,6 +175,7 @@ export function App() {
   const visibleLeads = useMemo(() => {
     void hiddenVersion;
     return leads
+      .filter((lead) => lead.status !== "contacted" && lead.status !== "nurture")
       .filter((lead) => !isLeadHidden(lead.id))
       .filter((lead) => matchesLeadFilter(lead, leadFilter))
       .sort((a, b) => b.riskScore - a.riskScore || b.id - a.id);
@@ -309,6 +311,25 @@ export function App() {
     }
   };
 
+  const handleQueuePostbox = async (lead: ApiLead) => {
+    try {
+      const secret = ensureControlSecret(getControlSecret());
+      setBusyId(lead.id);
+      await queueLeadToPostboxApi(lead.id, secret);
+      await loadAll();
+      setBanner({
+        tone: "success",
+        message: `${lead.businessName} added to postbox. It will send at 2:00 pm UK.`,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not queue to postbox";
+      setDrawerError(msg);
+      setBanner({ tone: "error", message: msg });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleFind = async () => {
     const area =
       localStorage.getItem(STORAGE_AREA) ??
@@ -394,6 +415,18 @@ export function App() {
         secret,
       );
       setSendPreview(null);
+      const job = await fetchJob(jobId);
+      const result = job.result as { queued?: boolean; scheduledForUk?: string } | null;
+      if (result?.queued) {
+        setBanner({
+          tone: "success",
+          message: `Queued for 2pm UK send window (${result.scheduledForUk ?? "today at 2:00 pm UK"}).`,
+        });
+        clearPulseError();
+        await loadAll();
+        setActionBusy(false);
+        return;
+      }
       await runBackgroundJob(jobId, "Sending approved emails…");
     } catch (err) {
       setBanner({
@@ -574,6 +607,7 @@ export function App() {
           onMarkTrial={() => void handleMarkConverted(selectedLead, "trial_started")}
           onMarkOptedIn={() => void handleMarkConverted(selectedLead, "opted_in")}
           onQuickDraft={() => void handleQuickDraft(selectedLead, { keepDrawerOpen: true })}
+          onQueuePostbox={() => void handleQueuePostbox(selectedLead)}
           onSnooze={() => {
             snoozeLead(selectedLead.id);
             setSelectedLead(null);

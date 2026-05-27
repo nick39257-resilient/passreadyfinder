@@ -4,7 +4,8 @@ const FILTERS: { key: LeadFilterKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "new", label: "New" },
   { key: "drafted", label: "Drafted" },
-  { key: "approved", label: "Approved" },
+  { key: "approved", label: "Postbox" },
+  { key: "sent", label: "Sent" },
   { key: "high", label: "High priority" },
 ];
 

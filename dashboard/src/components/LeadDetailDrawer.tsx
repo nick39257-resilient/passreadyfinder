@@ -41,6 +41,7 @@ export function LeadDetailDrawer({
   lead,
   onClose,
   onQuickDraft,
+  onQueuePostbox,
   onStopSequence,
   onMarkTrial,
   onMarkOptedIn,
@@ -56,6 +57,7 @@ export function LeadDetailDrawer({
   lead: ApiLead;
   onClose: () => void;
   onQuickDraft: () => void;
+  onQueuePostbox: () => void;
   onStopSequence: () => void;
   onMarkTrial: () => void;
   onMarkOptedIn: () => void;
@@ -74,6 +76,7 @@ export function LeadDetailDrawer({
   const scores = lead.fsaScores;
   const reasons = getLeadReasonBullets(lead, 3);
   const isDrafted = lead.status === "drafted" || lead.status === "approved";
+  const isInPostbox = lead.status === "approved";
 
   return (
     <div
@@ -204,6 +207,14 @@ export function LeadDetailDrawer({
                 : isDrafted
                   ? "Re-draft message"
                   : "Quick-draft"}
+            </button>
+            <button
+              type="button"
+              disabled={busy || lead.status !== "drafted"}
+              onClick={onQueuePostbox}
+              className="min-h-[52px] rounded-xl border border-amber-500/40 bg-amber-950/30 text-sm font-bold text-amber-100 disabled:opacity-50"
+            >
+              {isInPostbox ? "In postbox" : "Send to postbox"}
             </button>
             <button
               type="button"

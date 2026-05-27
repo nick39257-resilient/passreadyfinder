@@ -48,3 +48,22 @@ export async function rejectDraft(id: number): Promise<boolean> {
   });
   return (result.rowsAffected ?? 0) > 0;
 }
+
+/**
+ * Postbox action: move a drafted lead into the approved/send pool without editing the draft.
+ * Safe no-op unless status is 'drafted' and a draft_message exists.
+ */
+export async function queueLeadToPostbox(id: number): Promise<boolean> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `
+      UPDATE leads
+      SET status = 'approved', updated_at = datetime('now')
+      WHERE id = ?
+        AND status = 'drafted'
+        AND draft_message IS NOT NULL
+    `,
+    args: [id],
+  });
+  return (result.rowsAffected ?? 0) > 0;
+}

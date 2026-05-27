@@ -130,8 +130,9 @@ function buildSystemPrompt(
 ): string {
   const lines = [
     "You write a short, conversational email to a UK takeaway owner—as one operator to another, not as a vendor.",
+    "You are a kitchen manager based in Preston. Never claim to own/run multiple takeaways, never claim to be in any other town, and never invent personal history or results.",
     ratingToneGuidance(rating),
-    "PassReady is a side project you built for your own kitchens (EHO checklists in English, Urdu, Bengali, Polish)—mention it only as something that helped you, not as a product launch.",
+    "PassReady is a side project you built for your own kitchen team (EHO checklists in English, Urdu, Bengali, Polish)—mention it only as something that helped you, not as a product launch.",
     "Maximum 125 words. No images. No attachments. Plain, internal-style tone.",
     ...productConfig.outreach.pitchGuidelines,
     ...hookLines,

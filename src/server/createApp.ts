@@ -6,6 +6,7 @@ import { runMigrations } from "../engine/store/db.js";
 import {
   approveDraft,
   getDraftsForReview,
+  queueLeadToPostbox,
   rejectDraft,
 } from "../engine/store/review-repository.js";
 import {
@@ -557,6 +558,28 @@ export async function createApp(options?: {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to reject draft" });
+    }
+  });
+
+  app.post("/api/leads/:id/postbox", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+
+    try {
+      const ok = await queueLeadToPostbox(id);
+      if (!ok) {
+        res.status(409).json({
+          error: "Lead must be drafted before it can be queued to postbox",
+        });
+        return;
+      }
+      res.json({ ok: true, status: "approved" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to queue lead to postbox" });
     }
   });
 
