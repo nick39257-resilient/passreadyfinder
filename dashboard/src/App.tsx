@@ -24,6 +24,7 @@ import {
   type SystemStatusResponse,
 } from "./api/status";
 import { discoverContactRoutesApi, patchContactDiscoveryApi } from "./api/contact-discovery";
+import { ActionBanner } from "./components/ActionBanner";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { ComplianceBanner } from "./components/ComplianceBanner";
 import { FixedActionBar } from "./components/FixedActionBar";
