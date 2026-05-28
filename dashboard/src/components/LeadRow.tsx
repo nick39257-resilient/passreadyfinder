@@ -13,6 +13,10 @@ import { RiskScoreBadge } from "./RiskScoreBadge";
 
 const SWIPE_THRESHOLD = 72;
 
+function formatDraftPreview(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 export function LeadRow({
   lead,
   onRowTap,
@@ -43,6 +47,7 @@ export function LeadRow({
 
   const statusStyle = statusPillStyles[lead.status] ?? "bg-slate-700 text-slate-200";
   const canQueuePostbox = lead.status === "drafted" && Boolean(lead.email?.trim());
+  const showDraftPreview = lead.status === "drafted" && Boolean(lead.draftPreview?.trim());
 
   return (
     <li
@@ -144,6 +149,10 @@ export function LeadRow({
                     </li>
                   ))}
                 </ul>
+              ) : showDraftPreview ? (
+                <p className="mt-2 line-clamp-2 text-xs leading-snug text-slate-300">
+                  {formatDraftPreview(lead.draftPreview ?? "")}
+                </p>
               ) : (
                 <p className="mt-1.5 text-xs text-slate-500">{lead.postcode}</p>
               )}

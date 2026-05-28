@@ -205,7 +205,9 @@ export async function createApp(options?: {
   app.get("/api/leads", async (_req, res) => {
     try {
       const rows = await getAllLeads();
-      const leads = await Promise.all(rows.map((row) => mapLeadRowToApiLead(row)));
+      const leads = await Promise.all(
+        rows.map((row) => mapLeadRowToApiLead(row, { includeComparables: false })),
+      );
       leads.sort((a, b) => b.riskScore - a.riskScore || b.id - a.id);
       res.json({ leads });
     } catch (err) {

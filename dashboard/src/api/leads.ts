@@ -39,6 +39,7 @@ export interface ApiLead {
   phone: string | null;
   website: string | null;
   email: string | null;
+  draftPreview: string | null;
   leadScore: number;
   status: string;
   riskScore: number;

@@ -93,6 +93,7 @@ export function App() {
   const [sendPreview, setSendPreview] = useState<SendPreviewResponse | null>(null);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [findModalOpen, setFindModalOpen] = useState(false);
+  const [fastMode, setFastMode] = useState(true);
   const showHighPriority = useCallback(() => {
     setLeadFilter("high");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -237,8 +238,10 @@ export function App() {
     setDrawerError(null);
     setDrawerLoading(true);
     try {
-      const detail = await fetchLeadDetail(lead.id);
-      setSelectedLead(detail);
+      if (!fastMode) {
+        const detail = await fetchLeadDetail(lead.id);
+        setSelectedLead(detail);
+      }
     } catch {
       /* keep list row data */
     } finally {
@@ -521,6 +524,14 @@ export function App() {
           <div className="flex gap-1">
             <button
               type="button"
+              onClick={() => setFastMode((v) => !v)}
+              className="min-h-[36px] rounded-lg border border-slate-700/80 bg-slate-900/60 px-2 text-[10px] font-semibold text-slate-400"
+              title="Toggle fast mode"
+            >
+              {fastMode ? "Fast" : "Full"}
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 const s = window.prompt("CONTROL_PANEL_SECRET (saved in this browser):");
                 if (s?.trim()) {
@@ -578,15 +589,19 @@ export function App() {
       ) : null}
       <PostboxStatus queuedCount={filterCounts.approved} />
       <DailySendStatus dailyQuota={dailyQuota} resetDescription={dailyCapResetDescription} />
-      <OutreachPipeline
-        funnel={funnel}
-        onSelectStage={(filter) => {
-          setLeadFilter(filter);
-          window.scrollTo({ top: 380, behavior: "smooth" });
-        }}
-      />
-      <ActivityFeed items={activityFeed} />
-      {complianceTip ? <ComplianceBanner tip={complianceTip} /> : null}
+      {!fastMode ? (
+        <>
+          <OutreachPipeline
+            funnel={funnel}
+            onSelectStage={(filter) => {
+              setLeadFilter(filter);
+              window.scrollTo({ top: 380, behavior: "smooth" });
+            }}
+          />
+          <ActivityFeed items={activityFeed} />
+          {complianceTip ? <ComplianceBanner tip={complianceTip} /> : null}
+        </>
+      ) : null}
 
       {!loading && !error ? (
         <LeadFilters value={leadFilter} onChange={setLeadFilter} counts={filterCounts} />
@@ -721,6 +736,21 @@ export function App() {
               }
             })();
           }}
+          onLoadFullDetail={
+            fastMode
+              ? () => {
+                  void (async () => {
+                    try {
+                      setDrawerLoading(true);
+                      const detail = await fetchLeadDetail(selectedLead.id);
+                      setSelectedLead(detail);
+                    } finally {
+                      setDrawerLoading(false);
+                    }
+                  })();
+                }
+              : undefined
+          }
           onSnooze={() => {
             snoozeLead(selectedLead.id);
             setSelectedLead(null);

@@ -38,6 +38,7 @@ export interface ApiLeadDetail {
   phone: string | null;
   website: string | null;
   email: string | null;
+  draftPreview: string | null;
   onDeliveryApp: string;
   leadScore: number;
   status: string;
@@ -81,8 +82,9 @@ function deriveSignals(
 
 export async function mapLeadRowToApiLead(
   row: LeadRow,
-  options?: { ensureFsaScores?: boolean },
+  options?: { ensureFsaScores?: boolean; includeComparables?: boolean },
 ): Promise<ApiLeadDetail> {
+  const includeComparables = options?.includeComparables !== false;
   let fsaScores = scoresFromRow(row);
   if (options?.ensureFsaScores) {
     fsaScores = await ensureLeadFsaScores(row.id, row.fsa_id, fsaScores);
@@ -96,14 +98,22 @@ export async function mapLeadRowToApiLead(
     website: row.website,
   });
 
-  const [competitors, localPassReadyCount] = await Promise.all([
-    findLocalCompetitors({
-      id: row.id,
-      postcode: row.postcode,
-      business_type: row.business_type,
-    }),
-    countLocalPassReadyUsers(row.postcode),
-  ]);
+  const [competitors, localPassReadyCount] = includeComparables
+    ? await Promise.all([
+        findLocalCompetitors({
+          id: row.id,
+          postcode: row.postcode,
+          business_type: row.business_type,
+        }),
+        countLocalPassReadyUsers(row.postcode),
+      ])
+    : [[], 0];
+
+  const draftRaw = readDraftMessage(row);
+  const draftPreview =
+    typeof draftRaw === "string" && draftRaw.trim()
+      ? draftRaw.trim().slice(0, 220)
+      : null;
 
   return {
     id: row.id,
@@ -119,6 +129,7 @@ export async function mapLeadRowToApiLead(
     phone: row.phone,
     website: row.website,
     email: row.email ?? null,
+    draftPreview,
     onDeliveryApp: row.on_delivery_app,
     leadScore: row.lead_score,
     status: readStatus(row),
@@ -137,7 +148,7 @@ export async function mapLeadRowToApiLead(
     localPassReadyCount,
     fsaScores,
     consultantTip,
-    rivalBadge: formatRivalBadge(competitors),
+    rivalBadge: includeComparables ? formatRivalBadge(competitors) : null,
     ehoReportUrl: buildEhoReportUrl(row.fsa_id),
     carrotFocusArea: getLowestScoreArea(fsaScores),
   };

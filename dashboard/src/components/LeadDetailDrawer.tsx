@@ -44,6 +44,7 @@ export function LeadDetailDrawer({
   onQuickDraft,
   onQueuePostbox,
   onSetEmail,
+  onLoadFullDetail,
   onStopSequence,
   onMarkTrial,
   onMarkOptedIn,
@@ -61,6 +62,7 @@ export function LeadDetailDrawer({
   onQuickDraft: () => void;
   onQueuePostbox: () => void;
   onSetEmail: (email: string) => void;
+  onLoadFullDetail?: () => void;
   onStopSequence: () => void;
   onMarkTrial: () => void;
   onMarkOptedIn: () => void;
@@ -154,6 +156,17 @@ export function LeadDetailDrawer({
                 </li>
               ))}
             </ul>
+          ) : null}
+
+          {onLoadFullDetail ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onLoadFullDetail}
+              className="mb-3 min-h-[44px] w-full rounded-xl border border-slate-700 bg-slate-950/60 text-xs font-semibold text-slate-300 disabled:opacity-50"
+            >
+              Load full detail
+            </button>
           ) : null}
 
           <section className="mb-4">
