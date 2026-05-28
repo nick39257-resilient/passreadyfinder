@@ -37,9 +37,8 @@ export function buildDraftHookGuidance(context: DraftHookContext): string[] {
     );
   }
   if (toggles.competitiveThreat && context.competitors.length > 0) {
-    const rival = context.competitors[0];
     lines.push(
-      `Local context: ${rival.businessName} is on the same high street—no ratings or comparisons; just that it's a competitive patch and you stay organised to keep pace.`,
+      "Local context: keep it generic (Preston food scene). Never claim you're on the same road/high street as the lead.",
     );
   }
   if (toggles.socialProof) {

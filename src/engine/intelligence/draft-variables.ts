@@ -34,9 +34,10 @@ export function buildFsaIssuePhrase(
 export function buildLocalReference(city: string, competitors: LocalCompetitor[]): string {
   // Persona constraint: always write as a kitchen manager from Preston.
   // Do not vary the location by lead address or inferred city.
+  // Keep the reference generic so the draft cannot imply a shared road/high street.
   void city;
   void competitors;
-  return "Preston takeaway scene";
+  return "Preston";
 }
 
 export function buildDraftVariables(input: {

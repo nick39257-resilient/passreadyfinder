@@ -124,7 +124,7 @@ export const productConfig = {
       "Assume they are doing their best in a high-pressure environment.",
       "Shared struggle opener: start with one line acknowledging the grind (e.g. Friday night rush, staffing, stock).",
       "Tool as byproduct: do not present PassReady as a product or sales pitch—it is a side project you built for your own kitchens that happened to work well.",
-      "Variable injection (required): naturally include all three — (1) Business Name, (2) a practical FSA-area issue hook (not their star rating), (3) a specific local reference (area/high street).",
+      "Variable injection (required): naturally include all three — (1) Business Name, (2) a practical FSA-area issue hook (not their star rating), (3) a generic local reference (Preston). Never mention being on the same road/high street.",
       "First message: NO links, NO URLs, NO wa.me — plain text only. Close with a curious ask inviting a reply (e.g. 'Would it help if I shared what we did?').",
       "Follow-up after they reply: you may include the WhatsApp link as the only CTA.",
       "Never pretend to be an EHO officer or any official body.",
