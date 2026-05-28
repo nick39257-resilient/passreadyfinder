@@ -47,6 +47,7 @@ export function LeadDetailDrawer({
   onSetFlagForReview,
   onMarkNotInterested,
   onMarkVisited,
+  onOpenFind,
   onLoadFullDetail,
   onStopSequence,
   onMarkTrial,
@@ -68,6 +69,7 @@ export function LeadDetailDrawer({
   onSetFlagForReview: (flagged: boolean) => void;
   onMarkNotInterested: () => void;
   onMarkVisited: () => void;
+  onOpenFind: () => void;
   onLoadFullDetail?: () => void;
   onStopSequence: () => void;
   onMarkTrial: () => void;
@@ -117,7 +119,20 @@ export function LeadDetailDrawer({
               {lead.email ? (
                 <p className="mt-1 text-xs text-emerald-400/90">Email: {lead.email}</p>
               ) : (
-                <p className="mt-1 text-xs text-amber-400/90">No business email yet — run Find leads to discover one</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-amber-400/90">
+                    No business email yet — run Find leads to discover one
+                  </p>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={onOpenFind}
+                    className="rounded-full bg-sky-500/15 px-3 py-1.5 text-xs font-semibold text-sky-200 ring-1 ring-sky-500/30 disabled:opacity-50"
+                    title="Find leads (refresh area)"
+                  >
+                    Find leads
+                  </button>
+                </div>
               )}
 
               <div className="mt-2 flex flex-wrap items-center gap-2">

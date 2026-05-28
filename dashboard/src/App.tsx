@@ -823,6 +823,7 @@ export function App() {
               }
             })();
           }}
+          onOpenFind={() => setFindModalOpen(true)}
           onLoadFullDetail={
             fastMode
               ? () => {
