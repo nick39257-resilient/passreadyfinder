@@ -156,3 +156,15 @@ export async function queueLeadToPostboxApi(leadId: number, secret?: string): Pr
     throw new Error(body.error ?? `Queue to postbox failed (${res.status})`);
   }
 }
+
+export async function setLeadEmailApi(leadId: number, email: string, secret?: string): Promise<void> {
+  const res = await fetch(`/api/leads/${leadId}/set-email`, {
+    method: "POST",
+    headers: authHeaders(secret),
+    body: JSON.stringify({ email }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Set email failed (${res.status})`);
+  }
+}

@@ -27,6 +27,7 @@ import { getSystemActivity } from "../engine/intelligence/activity.js";
 import { getSystemStatus } from "../engine/intelligence/system-status.js";
 import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
 import { fetchAuthorities } from "../engine/finder/authorities.js";
+import { updateLeadEmail } from "../engine/enrich/lead-email.js";
 import {
   parseArea,
   parsePostcodePrefix,
@@ -292,6 +293,33 @@ export async function createApp(options?: {
         return;
       }
       res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/leads/:id/set-email", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+
+    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    if (!email || !email.includes("@")) {
+      res.status(400).json({ error: "email is required" });
+      return;
+    }
+
+    try {
+      const row = await getLeadById(id);
+      if (!row) {
+        res.status(404).json({ error: "Lead not found" });
+        return;
+      }
+      await updateLeadEmail(id, email);
+      res.json({ ok: true });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to set business email" });
     }
   });
 

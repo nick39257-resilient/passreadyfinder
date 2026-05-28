@@ -8,6 +8,7 @@ import {
   markLeadConvertedApi,
   queueLeadToPostboxApi,
   quickDraftLead,
+  setLeadEmailApi,
   stopLeadSequence,
   type ApiLead,
 } from "./api/leads";
@@ -695,6 +696,24 @@ export function App() {
           onMarkOptedIn={() => void handleMarkConverted(selectedLead, "opted_in")}
           onQuickDraft={() => void handleQuickDraft(selectedLead, { keepDrawerOpen: true })}
           onQueuePostbox={() => void handleQueuePostbox(selectedLead)}
+          onSetEmail={(email) => {
+            void (async () => {
+              try {
+                const secret = ensureControlSecret(getControlSecret());
+                setBusyId(selectedLead.id);
+                await setLeadEmailApi(selectedLead.id, email, secret);
+                await loadAll();
+                setBanner({ tone: "success", message: "Business email saved." });
+              } catch (err) {
+                setBanner({
+                  tone: "error",
+                  message: err instanceof Error ? err.message : "Could not save email",
+                });
+              } finally {
+                setBusyId(null);
+              }
+            })();
+          }}
           onSnooze={() => {
             snoozeLead(selectedLead.id);
             setSelectedLead(null);

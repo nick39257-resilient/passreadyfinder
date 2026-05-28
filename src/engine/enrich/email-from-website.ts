@@ -35,6 +35,33 @@ function websiteHost(url: string): string | null {
   }
 }
 
+function joinUrl(base: string, path: string): string {
+  return new URL(path, base).toString();
+}
+
+async function fetchHtml(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "passreadyfinder/1.0 (contact enrichment)",
+        Accept: "text/html,application/xhtml+xml",
+      },
+      signal: AbortSignal.timeout(12_000),
+      redirect: "follow",
+    });
+    if (!res.ok) {
+      return null;
+    }
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.toLowerCase().includes("text/html")) {
+      return null;
+    }
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
 export function extractEmailsFromText(text: string): string[] {
   const fromMailto = [...text.matchAll(/mailto:([^\s"'?<>]+)/gi)].map((m) =>
     decodeURIComponent(m[1] ?? "").trim(),
@@ -92,29 +119,36 @@ export function pickBusinessEmail(
   return unique[0] ?? null;
 }
 
-/** Fetch a business homepage and extract the best contact email. */
+/** Fetch a business site and extract the best contact email. */
 export async function fetchEmailFromWebsite(website: string): Promise<string | null> {
   const url = normalizeWebsiteUrl(website);
   if (!url) {
     return null;
   }
 
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "passreadyfinder/1.0 (contact enrichment)",
-        Accept: "text/html,application/xhtml+xml",
-      },
-      signal: AbortSignal.timeout(12_000),
-      redirect: "follow",
-    });
-    if (!res.ok) {
-      return null;
+  const pathsToTry = [
+    "/",
+    "/contact",
+    "/contact-us",
+    "/contactus",
+    "/about",
+    "/about-us",
+    "/impressum",
+    "/support",
+  ];
+
+  for (const path of pathsToTry) {
+    const pageUrl = joinUrl(url, path);
+    const html = await fetchHtml(pageUrl);
+    if (!html) {
+      continue;
     }
-    const html = await res.text();
     const emails = extractEmailsFromText(html);
-    return pickBusinessEmail(emails, url);
-  } catch {
-    return null;
+    const picked = pickBusinessEmail(emails, pageUrl);
+    if (picked) {
+      return picked;
+    }
   }
+
+  return null;
 }

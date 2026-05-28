@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { ApiLead } from "../api/leads";
 import {
   getLeadReasonBullets,
@@ -42,6 +43,7 @@ export function LeadDetailDrawer({
   onClose,
   onQuickDraft,
   onQueuePostbox,
+  onSetEmail,
   onStopSequence,
   onMarkTrial,
   onMarkOptedIn,
@@ -58,6 +60,7 @@ export function LeadDetailDrawer({
   onClose: () => void;
   onQuickDraft: () => void;
   onQueuePostbox: () => void;
+  onSetEmail: (email: string) => void;
   onStopSequence: () => void;
   onMarkTrial: () => void;
   onMarkOptedIn: () => void;
@@ -77,6 +80,11 @@ export function LeadDetailDrawer({
   const reasons = getLeadReasonBullets(lead, 3);
   const isDrafted = lead.status === "drafted" || lead.status === "approved";
   const isInPostbox = lead.status === "approved";
+  const [emailDraft, setEmailDraft] = useState("");
+
+  useEffect(() => {
+    setEmailDraft(lead.email ?? "");
+  }, [lead.id, lead.email]);
 
   return (
     <div
@@ -101,6 +109,25 @@ export function LeadDetailDrawer({
               ) : (
                 <p className="mt-1 text-xs text-amber-400/90">No business email yet — run Find leads to discover one</p>
               )}
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={emailDraft}
+                  onChange={(e) => setEmailDraft(e.target.value)}
+                  placeholder="Paste business email"
+                  className="min-h-[40px] w-full rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  inputMode="email"
+                  autoComplete="email"
+                />
+                <button
+                  type="button"
+                  disabled={busy || !emailDraft.trim().includes("@")}
+                  onClick={() => onSetEmail(emailDraft.trim())}
+                  className="min-h-[40px] shrink-0 rounded-xl bg-emerald-600 px-3 text-sm font-bold text-white disabled:opacity-50"
+                  title="Save business email"
+                >
+                  Save
+                </button>
+              </div>
               {lead.rivalBadge ? (
                 <span className="mt-2 inline-block rounded-full border border-violet-500/40 bg-violet-950/40 px-3 py-1 text-xs font-semibold text-violet-200">
                   {lead.rivalBadge}
