@@ -13,6 +13,7 @@ import {
   draftMessageSchema,
   firstTouchDraftMessageSchema,
 } from "../validation/draft.schemas.js";
+import { MAX_DRAFT_WORDS, wordCount } from "../validation/draft.schemas.js";
 import { geminiChatCompletionSchema } from "../validation/gemini.schemas.js";
 import {
   emailNotSuppressedSql,
@@ -146,7 +147,7 @@ function buildSystemPrompt(
     "Never invent personal history, results, customers, or relationships.",
     ratingToneGuidance(rating),
     "PassReady is a side project you built for your own kitchen team (EHO checklists in English, Urdu, Bengali, Polish)—mention it only as something that helped you, not as a product launch.",
-    "Maximum 125 words. No images. No attachments. Plain, internal-style tone.",
+    "Hard limit: maximum 110 words (aim 80–100). No images. No attachments. Plain, internal-style tone.",
     ...productConfig.outreach.pitchGuidelines,
     ...hookLines,
   ];
@@ -193,6 +194,54 @@ function buildUserPrompt(
   }
 
   return lines.join("\n");
+}
+
+async function shortenDraftToWordLimit(input: {
+  llm: OpenAI;
+  model: string;
+  includeLink: boolean;
+  variables: DraftVariables;
+  original: string;
+}): Promise<string> {
+  const guard = input.includeLink
+    ? `Keep under ${MAX_DRAFT_WORDS} words. Keep the message truthful and compliant.`
+    : `Keep under ${MAX_DRAFT_WORDS} words. Remove any links/URLs.`;
+
+  const system = [
+    "You rewrite drafts to be shorter while preserving meaning.",
+    guard,
+    "You MUST keep the required variable injection: business name, practical issue hook, and local reference.",
+    "Do not add new claims, locations, or backstory.",
+    "Return only the rewritten email body (no subject line, no bullets about what you changed).",
+  ].join("\n");
+
+  const user = [
+    "Required variables (must remain present, naturally):",
+    `Business name: ${input.variables.businessName}`,
+    `FSA issue hook: ${input.variables.fsaIssue}`,
+    `Local reference: ${input.variables.localReference}`,
+    "",
+    "Draft to shorten:",
+    input.original,
+  ].join("\n");
+
+  const completion = await geminiApiQueue.run(() =>
+    input.llm.chat.completions.create({
+      model: input.model,
+      temperature: 0.3,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  );
+
+  const parsed = geminiChatCompletionSchema.parse(completion);
+  const text = parsed.choices[0]?.message?.content?.trim() ?? "";
+  if (!text) {
+    throw new Error("LLM returned empty content while shortening draft");
+  }
+  return text;
 }
 
 export async function fetchLeadsNeedingDraft(
@@ -323,14 +372,36 @@ export async function generateDraftForLead(
     throw new Error(`LLM returned empty content for lead ${lead.id}`);
   }
 
-  if (!includeLink) {
-    raw = stripUrls(raw);
-    raw = firstTouchDraftMessageSchema.parse(raw);
-  } else {
-    raw = draftMessageSchema.parse(raw);
-    if (waMeLink && !raw.includes(waMeLink)) {
-      raw = `${raw.trim()}\n\n${waMeLink}`;
+  const validate = (text: string): string => {
+    if (!includeLink) {
+      const stripped = stripUrls(text);
+      return firstTouchDraftMessageSchema.parse(stripped);
     }
+    const ok = draftMessageSchema.parse(text);
+    if (waMeLink && !ok.includes(waMeLink)) {
+      return `${ok.trim()}\n\n${waMeLink}`;
+    }
+    return ok;
+  };
+
+  try {
+    raw = validate(raw);
+  } catch (err) {
+    // Most common: model drifts over word limit. Retry once with a shorten pass.
+    const message = err instanceof Error ? err.message : String(err);
+    const isWordLimit = message.includes("Draft exceeds") || wordCount(raw) > MAX_DRAFT_WORDS;
+    if (!isWordLimit) {
+      throw err;
+    }
+
+    const shortened = await shortenDraftToWordLimit({
+      llm,
+      model,
+      includeLink,
+      variables,
+      original: raw,
+    });
+    raw = validate(shortened);
   }
 
   assertDraftUsesVariables(raw, variables);
