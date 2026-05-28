@@ -63,6 +63,24 @@ export interface ApiLead {
   contactDiscovery: ApiContactDiscovery | null;
 }
 
+function normalizeLead(lead: ApiLead): ApiLead {
+  return {
+    ...lead,
+    contactScore: lead.contactScore ?? 0,
+    contactable: lead.contactable ?? Boolean(lead.email?.trim() || lead.phone?.trim()),
+    contactDiscovery: lead.contactDiscovery ?? null,
+    competitors: lead.competitors ?? [],
+    fsaScores: lead.fsaScores ?? { hygiene: null, structural: null, management: null },
+    signals: lead.signals ?? { ehoScraped: false, predictiveScore: false, draftReady: false },
+    riskComponents: lead.riskComponents ?? {
+      ratingPressure: 0,
+      inspectionStaleness: 0,
+      lowRatingUrgency: 0,
+      contactGap: 0,
+    },
+  };
+}
+
 export async function fetchLeads(): Promise<ApiLead[]> {
   const res = await fetch("/api/leads");
   if (!res.ok) {
@@ -70,7 +88,7 @@ export async function fetchLeads(): Promise<ApiLead[]> {
   }
 
   const data = (await res.json()) as { leads?: ApiLead[] };
-  return data.leads ?? [];
+  return (data.leads ?? []).map(normalizeLead);
 }
 
 export async function fetchLeadDetail(leadId: number): Promise<ApiLead> {
@@ -79,7 +97,7 @@ export async function fetchLeadDetail(leadId: number): Promise<ApiLead> {
     throw new Error(`Failed to load lead (${res.status})`);
   }
   const data = (await res.json()) as { lead: ApiLead };
-  return data.lead;
+  return normalizeLead(data.lead);
 }
 
 export async function quickDraftLead(

@@ -23,11 +23,7 @@ import {
   type SystemStatusFeedItem,
   type SystemStatusResponse,
 } from "./api/status";
-import {
-  discoverContactRoutesApi,
-  patchContactDiscoveryApi,
-} from "./api/contact-discovery";
-import { ContactRoutesPanel } from "./components/ContactRoutesPanel";
+import { discoverContactRoutesApi, patchContactDiscoveryApi } from "./api/contact-discovery";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { ComplianceBanner } from "./components/ComplianceBanner";
 import { FixedActionBar } from "./components/FixedActionBar";
@@ -624,8 +620,8 @@ export function App() {
 
       {!loading && !error ? (
         <div className="mb-3 rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm text-slate-200">
-          {filterCounts.needs_eyes === 0 &&
-          filterCounts.approved === 0 &&
+          {(filterCounts.needs_eyes ?? 0) === 0 &&
+          (filterCounts.approved ?? 0) === 0 &&
           leads.filter((l) => l.status === "replied").length === 0 ? (
             <span>Nothing needs you right now. ✓</span>
           ) : (
@@ -656,7 +652,7 @@ export function App() {
           }}
         />
       ) : null}
-      <PostboxStatus queuedCount={filterCounts.approved} />
+      <PostboxStatus queuedCount={filterCounts.approved ?? 0} />
       <DailySendStatus dailyQuota={dailyQuota} resetDescription={dailyCapResetDescription} />
       <div className="mt-6">
         <OutreachPipeline

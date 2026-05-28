@@ -105,15 +105,21 @@ export function matchesLeadFilter(lead: ApiLead, filter: LeadFilterKey): boolean
 /** Short reason bullets inferred from existing API fields only. */
 export function getLeadReasonBullets(lead: ApiLead, max = 2): string[] {
   const reasons: string[] = [];
-  const { riskComponents: c } = lead;
+  const c = lead.riskComponents;
+  const scores = lead.fsaScores;
+  const signals = lead.signals;
+  const competitors = lead.competitors ?? [];
 
-  if (c.ratingPressure >= 24 || (lead.fsaRating !== null && lead.fsaRating <= 2)) {
+  if (c && (c.ratingPressure >= 24 || (lead.fsaRating !== null && lead.fsaRating <= 2))) {
     reasons.push("Rating pressure detected");
   }
-  if (c.inspectionStaleness >= 18 || (lead.daysSinceInspection !== null && lead.daysSinceInspection > 540)) {
+  if (c && (c.inspectionStaleness >= 18 || (lead.daysSinceInspection !== null && lead.daysSinceInspection > 540))) {
     reasons.push("Inspection may be stale");
   }
-  if (lead.carrotFocusArea === "hygiene" || (lead.fsaScores.hygiene !== null && lead.fsaScores.hygiene < 12)) {
+  if (
+    scores &&
+    (lead.carrotFocusArea === "hygiene" || (scores.hygiene !== null && scores.hygiene < 12))
+  ) {
     reasons.push("Low hygiene score opportunity");
   }
   if (lead.carrotFocusArea === "management") {
@@ -122,13 +128,13 @@ export function getLeadReasonBullets(lead: ApiLead, max = 2): string[] {
   if (lead.carrotFocusArea === "structural") {
     reasons.push("Structural upkeep opportunity");
   }
-  if (lead.status === "new" && lead.signals.ehoScraped) {
+  if (signals && lead.status === "new" && signals.ehoScraped) {
     reasons.push("New business opportunity");
   }
-  if (lead.signals.draftReady && lead.status === "drafted") {
+  if (signals && signals.draftReady && lead.status === "drafted") {
     reasons.push("Draft ready for review");
   }
-  if (lead.competitors.length > 0 && reasons.length < max) {
+  if (competitors.length > 0 && reasons.length < max) {
     reasons.push("Competitive local patch");
   }
   if (lead.inspectionSummary && reasons.length < max) {

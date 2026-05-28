@@ -6,13 +6,20 @@
   }
 
   body {
-    @apply min-h-screen antialiased text-slate-100;
+    @apply min-h-screen overflow-x-hidden antialiased text-slate-100;
     background: linear-gradient(
       165deg,
       #0a1628 0%,
       #0c1a22 38%,
       #081612 100%
     );
-    background-attachment: fixed;
+    /* fixed backgrounds break scrolling/rendering on iOS Safari */
+    background-attachment: scroll;
+  }
+
+  @media (min-width: 768px) {
+    body {
+      background-attachment: fixed;
+    }
   }
 }

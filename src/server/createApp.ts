@@ -216,7 +216,12 @@ export async function createApp(options?: {
   app.get("/api/leads", async (_req, res) => {
     try {
       const rows = await getAllLeads();
-      const summaries = await getContactDiscoverySummaries(rows.map((r) => r.id));
+      let summaries = new Map<number, { contactScore: number; contactable: boolean }>();
+      try {
+        summaries = await getContactDiscoverySummaries(rows.map((r) => r.id));
+      } catch (summaryErr) {
+        console.error("Contact discovery summaries unavailable:", summaryErr);
+      }
       const leads = await Promise.all(
         rows.map((row) => {
           const summary = summaries.get(row.id);

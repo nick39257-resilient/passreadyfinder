@@ -17,6 +17,9 @@ function formatDraftPreview(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+const actionBtn =
+  "flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-bold leading-tight disabled:opacity-40";
+
 export function LeadRow({
   lead,
   onRowTap,
@@ -52,6 +55,7 @@ export function LeadRow({
   const statusStyle = statusPillStyles[lead.status] ?? "bg-slate-700 text-slate-200";
   const canQueuePostbox = lead.status === "drafted" && Boolean(lead.email?.trim());
   const showDraftPreview = lead.status === "drafted" && Boolean(lead.draftPreview?.trim());
+  const contactScore = lead.contactScore ?? 0;
 
   return (
     <li
@@ -82,7 +86,7 @@ export function LeadRow({
         </div>
       ) : null}
 
-      <div className="relative flex items-stretch">
+      <div className="relative flex flex-col">
         <button
           type="button"
           onClick={() => {
@@ -93,7 +97,7 @@ export function LeadRow({
             onRowTap();
           }}
           disabled={busy}
-          className="relative min-w-0 flex-1 touch-pan-y px-3 py-3 text-left transition-transform active:bg-slate-800/30"
+          className="relative w-full touch-pan-y px-3 py-3 text-left transition-transform active:bg-slate-800/30"
           style={{ transform: `translateX(${offset}px)` }}
           onTouchStart={(e) => {
             startX.current = e.touches[0]?.clientX ?? 0;
@@ -139,9 +143,9 @@ export function LeadRow({
                 >
                   {priorityLabel(tier)}
                 </span>
-                {lead.contactScore > 0 ? (
+                {contactScore > 0 ? (
                   <span className="rounded-md bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-200 ring-1 ring-sky-500/30">
-                    Contact {lead.contactScore}
+                    Contact {contactScore}
                   </span>
                 ) : null}
               </div>
@@ -171,67 +175,65 @@ export function LeadRow({
           </div>
         </button>
 
-        {onDiscoverContacts ? (
+        <div className="flex border-t border-slate-800/80 bg-slate-950/30">
+          {onDiscoverContacts ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDiscoverContacts();
+              }}
+              title="Find contact routes"
+              className={`${actionBtn} border-r border-slate-800/80 text-sky-200`}
+            >
+              <span className="text-base leading-none" aria-hidden>
+                🔍
+              </span>
+              <span>Contact</span>
+            </button>
+          ) : null}
+
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || !canQuickDraft}
             onClick={(e) => {
               e.stopPropagation();
-              onDiscoverContacts();
+              onQuickDraft();
             }}
-            title="Find contact routes (email, phone, social, form)"
-            className="flex w-[4.5rem] shrink-0 flex-col items-center justify-center gap-0.5 border-l border-slate-800/80 bg-sky-950/40 px-0.5 text-[9px] font-bold leading-tight text-sky-200 disabled:opacity-40"
+            title={canQuickDraft ? "Quick-draft with AI" : "Open lead for follow-up options"}
+            className={`${actionBtn} border-r border-slate-800/80 text-emerald-400`}
           >
             <span className="text-base leading-none" aria-hidden>
-              🔍
+              ✎
             </span>
-            <span>Contact</span>
+            <span>Draft</span>
           </button>
-        ) : null}
 
-        <button
-          type="button"
-          disabled={busy || !canQuickDraft}
-          onClick={(e) => {
-            e.stopPropagation();
-            onQuickDraft();
-          }}
-          title={
-            canQuickDraft
-              ? "Quick-draft with AI"
-              : "Already sent — open lead for follow-up options"
-          }
-          className="flex w-[4.25rem] shrink-0 flex-col items-center justify-center gap-0.5 border-l border-slate-800/80 bg-slate-950/40 px-1 text-[10px] font-bold leading-tight text-emerald-400 disabled:opacity-40"
-        >
-          <span className="text-base leading-none" aria-hidden>
-            ✎
-          </span>
-          <span>Draft</span>
-        </button>
-
-        {onQueuePostbox ? (
-          <button
-            type="button"
-            disabled={busy || !canQueuePostbox}
-            onClick={(e) => {
-              e.stopPropagation();
-              onQueuePostbox();
-            }}
-            title={
-              canQueuePostbox
-                ? "Send to postbox"
-                : lead.status !== "drafted"
-                  ? "Only drafted leads can be queued"
-                  : "Needs a business email before postbox"
-            }
-            className="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-0.5 border-l border-slate-800/80 bg-amber-950/30 px-1 text-[10px] font-bold leading-tight text-amber-200 disabled:opacity-40"
-          >
-            <span className="text-base leading-none" aria-hidden>
-              📮
-            </span>
-            <span>Postbox</span>
-          </button>
-        ) : null}
+          {onQueuePostbox ? (
+            <button
+              type="button"
+              disabled={busy || !canQueuePostbox}
+              onClick={(e) => {
+                e.stopPropagation();
+                onQueuePostbox();
+              }}
+              title={
+                canQueuePostbox
+                  ? "Send to postbox"
+                  : lead.status !== "drafted"
+                    ? "Only drafted leads can be queued"
+                    : "Needs a business email before postbox"
+              }
+              className={`${actionBtn} text-amber-200`}
+            >
+              <span className="text-base leading-none" aria-hidden>
+                📮
+              </span>
+              <span>Postbox</span>
+            </button>
+          ) : null}
+        </div>
       </div>
     </li>
   );
