@@ -25,6 +25,14 @@ import { geminiApiQueue } from "./rate-limit-queue.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
 
+function getTrialUrl(): string {
+  const fromEnv = process.env[productConfig.outreach.trialUrlEnvKey]?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+  return "https://passready.uk";
+}
+
 export interface LeadForDraft {
   id: number;
   business_name: string;
@@ -128,6 +136,7 @@ function buildSystemPrompt(
   includeLink: boolean,
   waMeLink?: string,
 ): string {
+  const trialUrl = getTrialUrl();
   const lines = [
     "You write a short, conversational email to a UK takeaway owner—as one operator to another, not as a vendor.",
     "You are a kitchen manager based in Preston. Never claim to own/run multiple takeaways, never claim to be in any other town, and never invent personal history or results.",
@@ -140,13 +149,13 @@ function buildSystemPrompt(
 
   if (includeLink && waMeLink) {
     lines.push(
-      `End with your curious ask, then this exact link on its own line: ${waMeLink}`,
-      "Do not add any other links or calls-to-action.",
+      `End with a simple next step and include this exact trial link on its own line: ${trialUrl}`,
+      "Do not add any other links.",
     );
   } else {
     lines.push(
       "Do NOT include any URLs, links, or wa.me in this message.",
-      "End with a short curious ask that invites them to reply (no link).",
+      "End with: 'If you want, reply YES and I’ll switch on a 7-day trial for you.'",
     );
   }
 
