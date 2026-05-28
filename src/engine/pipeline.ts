@@ -148,6 +148,26 @@ export async function runFindPipeline(options?: {
     (productConfig.area.mode === "localAuthority"
       ? productConfig.area.localAuthorityName
       : "Preston");
+  const countyBundles: Record<string, string[]> = {
+    lancashire: [
+      "Preston",
+      "South Ribble",
+      "Chorley",
+      "Lancaster City",
+      "Fylde",
+      "Wyre",
+      "Ribble Valley",
+      "Pendle",
+      "Burnley",
+      "Hyndburn",
+      "Rossendale",
+      "West Lancashire",
+      "Blackpool",
+      "Blackburn with Darwen",
+    ],
+  };
+  const authorityNames =
+    countyBundles[areaName.trim().toLowerCase()] ?? [areaName];
   const worstFirst = options?.segmentation?.worstFirst ?? false;
   const maxRating = productConfig.maxRating;
   const targetRating = options?.segmentation?.targetRating ?? maxRating;
@@ -175,17 +195,29 @@ export async function runFindPipeline(options?: {
     );
   }
 
-  let fetchResult: FetchLeadsResult;
+  const merged = new Map<number, RawLead>();
+  let apiRows = 0;
+  let deltaRows = 0;
+  let pagesFetched = 0;
+
   try {
-    fetchResult = await fetchLeadsWithDeltaSync({
-      localAuthorityName: areaName,
-      businessTypeIds,
-      targetRating,
-      worstFirst,
-      maxRating,
-      postcodePrefix,
-      lastSyncTimestamp,
-    });
+    for (const authorityName of authorityNames) {
+      const fetchResult = await fetchLeadsWithDeltaSync({
+        localAuthorityName: authorityName,
+        businessTypeIds,
+        targetRating,
+        worstFirst,
+        maxRating,
+        postcodePrefix,
+        lastSyncTimestamp,
+      });
+      apiRows += fetchResult.apiRows;
+      deltaRows += fetchResult.deltaRows;
+      pagesFetched += fetchResult.pagesFetched;
+      for (const lead of fetchResult.leads) {
+        merged.set(lead.fsaId, lead);
+      }
+    }
   } catch (err) {
     console.error(
       "FSA /Establishments fetch failed — last_sync_timestamp not updated:",
@@ -194,9 +226,9 @@ export async function runFindPipeline(options?: {
     throw err;
   }
 
-  const rawLeads = fetchResult.leads;
+  const rawLeads = Array.from(merged.values());
   console.log(
-    `  Done: ${fetchResult.pagesFetched} page(s), ${fetchResult.apiRows} API rows, ${fetchResult.deltaRows} delta rows, ${rawLeads.length} match target rating.`,
+    `  Done: ${pagesFetched} page(s), ${apiRows} API rows, ${deltaRows} delta rows, ${rawLeads.length} match target rating.`,
   );
 
   const scored = rawLeads.map((lead) => ({
@@ -311,9 +343,9 @@ export async function runFindPipeline(options?: {
     enriched,
     withPhone,
     withWebsite,
-    apiRows: fetchResult.apiRows,
-    deltaRows: fetchResult.deltaRows,
-    pagesFetched: fetchResult.pagesFetched,
+    apiRows,
+    deltaRows,
+    pagesFetched,
     lastSyncTimestamp,
     syncTimestampUpdated: true,
   };

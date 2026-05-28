@@ -47,24 +47,24 @@ export function FindAreaModal({
       >
         <h2 className="text-lg font-bold text-slate-50">Find takeaways in area</h2>
         <p className="mt-2 text-sm text-slate-400">
-          Pulls new FSA listings for your local authority, worst ratings first (up to 2★), then
-          enriches contact details.
+          Type a local authority, town, or county (e.g. Lancashire). We’ll pick the closest FSA
+          match and pull worst ratings first (up to 2★), then enrich contact details.
         </p>
 
         <label className="mt-4 block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Local authority
+            Area (authority / town / county)
           </span>
           <input
             type="text"
             value={area}
             onChange={(e) => setArea(e.target.value)}
-            placeholder="Preston"
+            placeholder="Preston or Lancashire"
             className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-base text-slate-100 outline-none focus:ring-2 focus:ring-sky-500/40"
             autoComplete="off"
           />
           <span className="mt-1 block text-[11px] text-slate-500">
-            Must match FSA council name (e.g. Preston, Blackburn with Darwen).
+            Tip: “Lancashire” will search multiple councils (Preston, Lancaster City, etc.).
           </span>
         </label>
 

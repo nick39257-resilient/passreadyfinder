@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchFunnel, type FunnelStats } from "./api/funnel";
-import { startDraftJob, startFindJob, startSendJob } from "./api/jobs";
+import { startDraftAllJob, startDraftJob, startFindJob, startSendJob } from "./api/jobs";
 import { fetchAppConfig } from "./api/config";
 import {
   fetchLeads,
@@ -402,6 +402,23 @@ export function App() {
     }
   };
 
+  const handleAutoDraftAll = async () => {
+    try {
+      const secret = ensureControlSecret(getControlSecret());
+      setActionBusy(true);
+      const jobId = await startDraftAllJob(secret);
+      await runBackgroundJob(jobId, "Auto-drafting takeaways…");
+      setLeadFilter("drafted");
+      setBanner({ tone: "success", message: "Auto-draft complete — review drafts below." });
+    } catch (err) {
+      setBanner({
+        tone: "error",
+        message: err instanceof Error ? err.message : "Auto-draft failed",
+      });
+      setActionBusy(false);
+    }
+  };
+
   const handleSendOpen = async () => {
     try {
       const secret = ensureControlSecret(getControlSecret());
@@ -622,7 +639,7 @@ export function App() {
       <FixedActionBar
         disabled={actionBusy}
         onFind={() => setFindModalOpen(true)}
-        onDraft={() => void handleDraft()}
+        onDraft={() => void handleAutoDraftAll()}
         onSend={() => void handleSendOpen()}
       />
 

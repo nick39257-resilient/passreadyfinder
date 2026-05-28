@@ -26,6 +26,7 @@ import { getComplianceTipOfDay } from "../engine/intelligence/compliance.js";
 import { getSystemActivity } from "../engine/intelligence/activity.js";
 import { getSystemStatus } from "../engine/intelligence/system-status.js";
 import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
+import { fetchAuthorities } from "../engine/finder/authorities.js";
 import {
   parseArea,
   parsePostcodePrefix,
@@ -187,6 +188,16 @@ export async function createApp(options?: {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch system status" });
+    }
+  });
+
+  app.get("/api/fsa/authorities", async (_req, res) => {
+    try {
+      const authorities = await fetchAuthorities();
+      res.json({ authorities });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch FSA authorities" });
     }
   });
 
@@ -408,6 +419,17 @@ export async function createApp(options?: {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to start draft job" });
+    }
+  });
+
+  app.post("/api/jobs/draft-all", requireControlAuth, async (_req, res) => {
+    try {
+      const jobId = await createJob("draft_all");
+      startJob(jobId, "draft_all");
+      res.status(202).json({ jobId });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to start auto-draft job" });
     }
   });
 

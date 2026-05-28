@@ -64,7 +64,7 @@ export function FixedActionBar({
           className={`${btn} bg-violet-950/80 text-violet-200 ring-1 ring-violet-500/25`}
         >
           <IconDraft />
-          <span>Draft messages</span>
+          <span>Auto-draft all</span>
         </button>
         <button
           type="button"

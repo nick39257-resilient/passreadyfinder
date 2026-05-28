@@ -1,6 +1,7 @@
 import { runFindLeadsJob } from "../engine/find-leads-job.js";
 import { runQueueDrafter } from "../engine/queue-drafter.js";
 import { runSender } from "../engine/sender.js";
+import { runAutoDraftAll } from "../engine/auto-draft-all.js";
 import { quickDraftLeadById } from "./quick-draft-handler.js";
 import { appendEngineLog } from "../engine/store/engine-log-repository.js";
 import {
@@ -46,6 +47,13 @@ async function runJobBody(
       return runQueueDrafter({
         batchSize: (params as DraftJobParams | undefined)?.batchSize,
       });
+    }
+    case "draft_all": {
+      await updateJob(jobId, {
+        status: "running",
+        progress: "Auto-drafting all eligible takeaways…",
+      });
+      return runAutoDraftAll(onProgress);
     }
     case "send": {
       await updateJob(jobId, {

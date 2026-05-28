@@ -6,6 +6,7 @@ import {
   fsaEstablishmentsResponseSchema,
 } from "../../validation/fsa.schemas.js";
 import { fsaFetch } from "./fsa-http.js";
+import { resolveLocalAuthorityIdLoose } from "./authorities.js";
 
 function parseFsaResponse<T>(schema: { parse: (data: unknown) => T }, data: unknown): T {
   return schema.parse(data);
@@ -33,13 +34,8 @@ export async function resolveBusinessTypeIds(names: readonly string[]): Promise<
 }
 
 export async function resolveLocalAuthorityId(name: string): Promise<number> {
-  const raw = await fsaFetch<unknown>("/Authorities/basic");
-  const data = parseFsaResponse(fsaAuthoritiesResponseSchema, raw);
-  const match = data.authorities.find((a) => a.Name.toLowerCase() === name.toLowerCase());
-  if (!match) {
-    throw new Error(`Local authority "${name}" not found in FSA /Authorities/basic`);
-  }
-  return match.LocalAuthorityId;
+  const resolved = await resolveLocalAuthorityIdLoose(name);
+  return resolved.id;
 }
 
 /** Parse FSA RatingValue defensively — Scotland Pass/Improvement etc. return null */

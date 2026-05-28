@@ -43,6 +43,19 @@ export async function startDraftJob(targetRating?: number, secret?: string): Pro
   return data.jobId;
 }
 
+export async function startDraftAllJob(secret?: string): Promise<string> {
+  const res = await fetch("/api/jobs/draft-all", {
+    method: "POST",
+    headers: authHeaders(secret),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Auto-draft job failed (${res.status})`);
+  }
+  const data = (await res.json()) as { jobId: string };
+  return data.jobId;
+}
+
 export async function startSendJob(
   confirmToken: string,
   expectedCount: number,
