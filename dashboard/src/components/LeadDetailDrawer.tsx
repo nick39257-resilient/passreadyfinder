@@ -9,6 +9,7 @@ import {
 import { riskPillStyles } from "../lib/risk-styles";
 import type { RiskBand } from "./ActionCard";
 import { RiskScoreBadge } from "./RiskScoreBadge";
+import { ContactRoutesPanel } from "./ContactRoutesPanel";
 
 function ScoreCell({
   label,
@@ -48,6 +49,8 @@ export function LeadDetailDrawer({
   onMarkNotInterested,
   onMarkVisited,
   onOpenFind,
+  onDiscoverContacts,
+  onSaveContactManual,
   onLoadFullDetail,
   onStopSequence,
   onMarkTrial,
@@ -70,6 +73,8 @@ export function LeadDetailDrawer({
   onMarkNotInterested: () => void;
   onMarkVisited: () => void;
   onOpenFind: () => void;
+  onDiscoverContacts: () => void;
+  onSaveContactManual: (patch: Record<string, string | boolean>) => void;
   onLoadFullDetail?: () => void;
   onStopSequence: () => void;
   onMarkTrial: () => void;
@@ -201,6 +206,13 @@ export function LeadDetailDrawer({
               ))}
             </ul>
           ) : null}
+
+          <ContactRoutesPanel
+            discovery={lead.contactDiscovery}
+            busy={busy}
+            onDiscover={onDiscoverContacts}
+            onSaveManual={onSaveContactManual}
+          />
 
           {onLoadFullDetail ? (
             <button

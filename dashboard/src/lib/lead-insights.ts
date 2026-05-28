@@ -6,6 +6,7 @@ export type PriorityTier = "high" | "medium" | "low";
 export type LeadFilterKey =
   | "all"
   | "needs_eyes"
+  | "contactable"
   | "new"
   | "drafted"
   | "approved"
@@ -79,6 +80,12 @@ export function matchesLeadFilter(lead: ApiLead, filter: LeadFilterKey): boolean
       return (
         lead.status === "drafted" &&
         (Boolean(lead.flagForReview) || Boolean(lead.needsEyesReason?.trim()))
+      );
+    case "contactable":
+      return (
+        lead.contactable ||
+        Boolean(lead.email?.trim()) ||
+        Boolean(lead.phone?.trim())
       );
     case "new":
       return lead.status === "new";

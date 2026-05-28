@@ -22,19 +22,23 @@ export function LeadRow({
   onRowTap,
   onQuickDraft,
   onQueuePostbox,
+  onDiscoverContacts,
   onSwipeLeft,
   onSwipeRight,
   canQuickDraft,
   busy,
+  busyLabel = "Working…",
 }: {
   lead: ApiLead;
   onRowTap: () => void;
   onQuickDraft: () => void;
   onQueuePostbox?: () => void;
+  onDiscoverContacts?: () => void;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
   canQuickDraft: boolean;
   busy?: boolean;
+  busyLabel?: string;
 }) {
   const band = lead.riskBand as RiskBand;
   const tier = priorityFromBand(band);
@@ -73,7 +77,7 @@ export function LeadRow({
       {busy ? (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-slate-950/75">
           <p className="rounded-full bg-emerald-950/90 px-3 py-1.5 text-xs font-semibold text-emerald-300">
-            Drafting with AI…
+            {busyLabel}
           </p>
         </div>
       ) : null}
@@ -135,6 +139,11 @@ export function LeadRow({
                 >
                   {priorityLabel(tier)}
                 </span>
+                {lead.contactScore > 0 ? (
+                  <span className="rounded-md bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-200 ring-1 ring-sky-500/30">
+                    Contact {lead.contactScore}
+                  </span>
+                ) : null}
               </div>
 
               {reasons.length > 0 ? (
@@ -161,6 +170,24 @@ export function LeadRow({
             <RiskScoreBadge score={lead.riskScore} band={band} />
           </div>
         </button>
+
+        {onDiscoverContacts ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDiscoverContacts();
+            }}
+            title="Find contact routes (email, phone, social, form)"
+            className="flex w-[4.5rem] shrink-0 flex-col items-center justify-center gap-0.5 border-l border-slate-800/80 bg-sky-950/40 px-0.5 text-[9px] font-bold leading-tight text-sky-200 disabled:opacity-40"
+          >
+            <span className="text-base leading-none" aria-hidden>
+              🔍
+            </span>
+            <span>Contact</span>
+          </button>
+        ) : null}
 
         <button
           type="button"

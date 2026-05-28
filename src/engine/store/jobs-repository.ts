@@ -1,7 +1,13 @@
 import { randomUUID } from "crypto";
 import { getDb } from "./db.js";
 
-export type JobType = "find" | "draft" | "draft_all" | "send" | "quick_draft";
+export type JobType =
+  | "find"
+  | "draft"
+  | "draft_all"
+  | "send"
+  | "quick_draft"
+  | "contact_discovery";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export interface JobRecord {

@@ -1,3 +1,4 @@
+import type { ApiContactDiscovery } from "./contact-discovery.js";
 import type { RiskBand } from "../components/ActionCard";
 import { authHeaders } from "../lib/auth-headers.js";
 import { pollJobUntilDone } from "../lib/job-poll.js";
@@ -57,6 +58,9 @@ export interface ApiLead {
   rivalBadge: string | null;
   ehoReportUrl: string;
   carrotFocusArea: string | null;
+  contactScore: number;
+  contactable: boolean;
+  contactDiscovery: ApiContactDiscovery | null;
 }
 
 export async function fetchLeads(): Promise<ApiLead[]> {

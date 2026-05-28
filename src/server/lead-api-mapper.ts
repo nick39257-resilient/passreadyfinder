@@ -17,6 +17,7 @@ import {
 } from "../engine/intelligence/competitors.js";
 import { calculateRiskScore } from "../engine/risk-scorer.js";
 import type { LeadRow } from "../engine/store/leads-repository.js";
+import type { ApiContactDiscovery } from "../engine/store/contact-discovery-repository.js";
 
 export interface LeadDataSignals {
   ehoScraped: boolean;
@@ -59,6 +60,9 @@ export interface ApiLeadDetail {
   rivalBadge: string | null;
   ehoReportUrl: string;
   carrotFocusArea: string | null;
+  contactScore: number;
+  contactable: boolean;
+  contactDiscovery: ApiContactDiscovery | null;
 }
 
 function readStatus(row: LeadRow & { status?: string }): string {
@@ -84,7 +88,13 @@ function deriveSignals(
 
 export async function mapLeadRowToApiLead(
   row: LeadRow,
-  options?: { ensureFsaScores?: boolean; includeComparables?: boolean },
+  options?: {
+    ensureFsaScores?: boolean;
+    includeComparables?: boolean;
+    contactScore?: number;
+    contactable?: boolean;
+    contactDiscovery?: ApiContactDiscovery | null;
+  },
 ): Promise<ApiLeadDetail> {
   const includeComparables = options?.includeComparables !== false;
   let fsaScores = scoresFromRow(row);
@@ -155,5 +165,8 @@ export async function mapLeadRowToApiLead(
     rivalBadge: includeComparables ? formatRivalBadge(competitors) : null,
     ehoReportUrl: buildEhoReportUrl(row.fsa_id),
     carrotFocusArea: getLowestScoreArea(fsaScores),
+    contactScore: options?.contactScore ?? 0,
+    contactable: options?.contactable ?? false,
+    contactDiscovery: options?.contactDiscovery ?? null,
   };
 }

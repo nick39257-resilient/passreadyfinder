@@ -34,6 +34,11 @@ import {
 import { fetchAuthorities } from "../engine/finder/authorities.js";
 import { updateLeadEmail } from "../engine/enrich/lead-email.js";
 import {
+  getContactDiscoveryApi,
+  getContactDiscoverySummaries,
+  updateContactDiscoveryManual,
+} from "../engine/store/contact-discovery-repository.js";
+import {
   parseArea,
   parsePostcodePrefix,
   parseTargetRating,
@@ -211,8 +216,18 @@ export async function createApp(options?: {
   app.get("/api/leads", async (_req, res) => {
     try {
       const rows = await getAllLeads();
+      const summaries = await getContactDiscoverySummaries(rows.map((r) => r.id));
       const leads = await Promise.all(
-        rows.map((row) => mapLeadRowToApiLead(row, { includeComparables: false })),
+        rows.map((row) => {
+          const summary = summaries.get(row.id);
+          return mapLeadRowToApiLead(row, {
+            includeComparables: false,
+            contactScore: summary?.contactScore ?? 0,
+            contactable:
+              summary?.contactable ??
+              Boolean(row.email?.trim() || row.phone?.trim()),
+          });
+        }),
       );
       leads.sort((a, b) => b.riskScore - a.riskScore || b.id - a.id);
       res.json({ leads });
@@ -235,7 +250,15 @@ export async function createApp(options?: {
         res.status(404).json({ error: "Lead not found" });
         return;
       }
-      res.json({ lead: await mapLeadRowToApiLead(row, { ensureFsaScores: true }) });
+      const contactDiscovery = await getContactDiscoveryApi(id);
+      res.json({
+        lead: await mapLeadRowToApiLead(row, {
+          ensureFsaScores: true,
+          contactScore: contactDiscovery?.contactScore ?? 0,
+          contactable: contactDiscovery?.contactable ?? false,
+          contactDiscovery,
+        }),
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch lead" });
@@ -385,6 +408,80 @@ export async function createApp(options?: {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to update review flag" });
+    }
+  });
+
+  app.post("/api/leads/:id/discover-contacts", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+
+    try {
+      const row = await getLeadById(id);
+      if (!row) {
+        res.status(404).json({ error: "Lead not found" });
+        return;
+      }
+      const jobId = await createJob("contact_discovery", { leadId: id });
+      startJob(jobId, "contact_discovery");
+      res.status(202).json({ jobId });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to start contact discovery" });
+    }
+  });
+
+  app.patch("/api/leads/:id/contact-discovery", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+
+    const body = req.body ?? {};
+    try {
+      const row = await getLeadById(id);
+      if (!row) {
+        res.status(404).json({ error: "Lead not found" });
+        return;
+      }
+
+      await updateContactDiscoveryManual(id, {
+        website: typeof body.website === "string" ? body.website.trim() || null : undefined,
+        email: typeof body.email === "string" ? body.email.trim() || null : undefined,
+        contactPageUrl:
+          typeof body.contactPageUrl === "string" ? body.contactPageUrl.trim() || null : undefined,
+        contactFormDetected:
+          typeof body.contactFormDetected === "boolean" ? body.contactFormDetected : undefined,
+        facebookUrl:
+          typeof body.facebookUrl === "string" ? body.facebookUrl.trim() || null : undefined,
+        instagramUrl:
+          typeof body.instagramUrl === "string" ? body.instagramUrl.trim() || null : undefined,
+        whatsapp: typeof body.whatsapp === "string" ? body.whatsapp.trim() || null : undefined,
+        phone: typeof body.phone === "string" ? body.phone.trim() || null : undefined,
+        draftEmail:
+          typeof body.draftEmail === "string" ? body.draftEmail.trim() || null : undefined,
+        draftContactForm:
+          typeof body.draftContactForm === "string" ? body.draftContactForm.trim() || null : undefined,
+        draftFacebook:
+          typeof body.draftFacebook === "string" ? body.draftFacebook.trim() || null : undefined,
+        draftWhatsapp:
+          typeof body.draftWhatsapp === "string" ? body.draftWhatsapp.trim() || null : undefined,
+        draftPhoneScript:
+          typeof body.draftPhoneScript === "string" ? body.draftPhoneScript.trim() || null : undefined,
+      });
+
+      if (typeof body.email === "string" && body.email.trim()) {
+        await updateLeadEmail(id, body.email.trim());
+      }
+
+      const contactDiscovery = await getContactDiscoveryApi(id);
+      res.json({ ok: true, contactDiscovery });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update contact discovery" });
     }
   });
 

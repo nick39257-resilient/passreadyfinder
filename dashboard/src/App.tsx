@@ -23,7 +23,11 @@ import {
   type SystemStatusFeedItem,
   type SystemStatusResponse,
 } from "./api/status";
-import { ActionBanner } from "./components/ActionBanner";
+import {
+  discoverContactRoutesApi,
+  patchContactDiscoveryApi,
+} from "./api/contact-discovery";
+import { ContactRoutesPanel } from "./components/ContactRoutesPanel";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { ComplianceBanner } from "./components/ComplianceBanner";
 import { FixedActionBar } from "./components/FixedActionBar";
@@ -65,6 +69,7 @@ function countByFilter(leads: ApiLead[]): Record<LeadFilterKey, number> {
   const keys: LeadFilterKey[] = [
     "all",
     "needs_eyes",
+    "contactable",
     "new",
     "drafted",
     "approved",
@@ -92,6 +97,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [selectedLead, setSelectedLead] = useState<ApiLead | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyLabel, setBusyLabel] = useState("Working…");
   const [actionBusy, setActionBusy] = useState(false);
   const [hiddenVersion, setHiddenVersion] = useState(0);
   const [drawerLoading, setDrawerLoading] = useState(false);
@@ -249,14 +255,50 @@ export function App() {
     setDrawerError(null);
     setDrawerLoading(true);
     try {
-      if (!fastMode) {
-        const detail = await fetchLeadDetail(lead.id);
-        setSelectedLead(detail);
-      }
+      const detail = await fetchLeadDetail(lead.id);
+      setSelectedLead(detail);
     } catch {
       /* keep list row data */
     } finally {
       setDrawerLoading(false);
+    }
+  };
+
+  const handleDiscoverContacts = async (lead: ApiLead) => {
+    setDrawerError(null);
+    let secret: string;
+    try {
+      secret = ensureControlSecret(getControlSecret());
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Secret required";
+      setDrawerError(msg);
+      setBanner({ tone: "error", message: msg });
+      return;
+    }
+
+    setBusyId(lead.id);
+    setBusyLabel("Finding contact routes…");
+    setJobMessage(`Finding contact routes for ${lead.businessName}…`);
+    try {
+      const discovery = await discoverContactRoutesApi(lead.id, secret, (progress) => {
+        setJobMessage(progress);
+        setBusyLabel(progress);
+      });
+      await loadAll();
+      const detail = await fetchLeadDetail(lead.id);
+      setSelectedLead(detail);
+      setBanner({
+        tone: "success",
+        message: `Contact score ${discovery.contactScore}/100 for ${lead.businessName}.`,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Contact discovery failed";
+      setDrawerError(msg);
+      setBanner({ tone: "error", message: msg });
+    } finally {
+      setBusyId(null);
+      setBusyLabel("Working…");
+      window.setTimeout(() => setJobMessage(null), 5000);
     }
   };
 
@@ -282,6 +324,7 @@ export function App() {
     }
 
     setBusyId(lead.id);
+    setBusyLabel("Drafting with AI…");
     setJobMessage(`Drafting ${lead.businessName}… (30–90 sec)`);
     try {
       await quickDraftLead(lead.id, secret, (progress) => {
@@ -665,9 +708,11 @@ export function App() {
               key={lead.id}
               lead={lead}
               busy={busyId === lead.id}
+              busyLabel={busyId === lead.id ? busyLabel : "Working…"}
               canQuickDraft={canQuickDraftLead(lead)}
               onRowTap={() => void openLeadDrawer(lead)}
               onQuickDraft={() => void handleQuickDraft(lead)}
+              onDiscoverContacts={() => void handleDiscoverContacts(lead)}
               onQueuePostbox={() => void handleQueuePostbox(lead)}
               onSwipeLeft={() => {
                 snoozeLead(lead.id);
@@ -722,9 +767,9 @@ export function App() {
           busy={busyId === selectedLead.id || drawerLoading}
           busyLabel={
             busyId === selectedLead.id
-              ? "Drafting with AI… (30–90 sec)"
+              ? busyLabel
               : drawerLoading
-                ? "Loading FSA data…"
+                ? "Loading…"
                 : "Working…"
           }
           draftDisabled={!selectedCanDraft}
@@ -824,6 +869,27 @@ export function App() {
             })();
           }}
           onOpenFind={() => setFindModalOpen(true)}
+          onDiscoverContacts={() => void handleDiscoverContacts(selectedLead)}
+          onSaveContactManual={(patch) => {
+            void (async () => {
+              try {
+                const secret = ensureControlSecret(getControlSecret());
+                setBusyId(selectedLead.id);
+                await patchContactDiscoveryApi(selectedLead.id, patch, secret);
+                await loadAll();
+                const detail = await fetchLeadDetail(selectedLead.id);
+                setSelectedLead(detail);
+                setBanner({ tone: "success", message: "Contact overrides saved." });
+              } catch (err) {
+                setBanner({
+                  tone: "error",
+                  message: err instanceof Error ? err.message : "Could not save overrides",
+                });
+              } finally {
+                setBusyId(null);
+              }
+            })();
+          }}
           onLoadFullDetail={
             fastMode
               ? () => {

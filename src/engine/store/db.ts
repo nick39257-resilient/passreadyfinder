@@ -75,6 +75,9 @@ export async function runMigrations(): Promise<void> {
 
   const { runEngineLogMigrations } = await import("./engine-log-repository.js");
   await runEngineLogMigrations();
+
+  const { runContactDiscoveryMigrations } = await import("./contact-discovery-repository.js");
+  await runContactDiscoveryMigrations();
 }
 
 export async function closeDb(): Promise<void> {

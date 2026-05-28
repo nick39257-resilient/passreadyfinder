@@ -3,6 +3,7 @@ import { runQueueDrafter } from "../engine/queue-drafter.js";
 import { runSender } from "../engine/sender.js";
 import { runAutoDraftAll } from "../engine/auto-draft-all.js";
 import { quickDraftLeadById } from "./quick-draft-handler.js";
+import { runContactDiscoveryForLead } from "../engine/contact-discovery/discover.js";
 import { appendEngineLog } from "../engine/store/engine-log-repository.js";
 import {
   getJob,
@@ -73,6 +74,16 @@ async function runJobBody(
       });
       const draft = await quickDraftLeadById(leadId);
       return { draft, leadId };
+    }
+    case "contact_discovery": {
+      const leadId = Number((params as { leadId?: number } | null)?.leadId);
+      if (!Number.isInteger(leadId) || leadId < 1) {
+        throw new Error("Invalid lead id for contact discovery job");
+      }
+      const discovery = await runContactDiscoveryForLead(leadId, async (message) => {
+        await updateJob(jobId, { progress: message });
+      });
+      return { leadId, contactScore: discovery.contactScore };
     }
     default: {
       const _exhaustive: never = type;
