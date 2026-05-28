@@ -1,7 +1,13 @@
 import type { ApiLead } from "../api/leads";
 import { countHighPriorityLeads } from "../lib/lead-insights";
 
-export function OpportunityAlert({ leads }: { leads: ApiLead[] }) {
+export function OpportunityAlert({
+  leads,
+  onShowHighPriority,
+}: {
+  leads: ApiLead[];
+  onShowHighPriority?: (count: number) => void;
+}) {
   const count = countHighPriorityLeads(leads);
 
   if (count === 0) {
@@ -21,7 +27,12 @@ export function OpportunityAlert({ leads }: { leads: ApiLead[] }) {
   const verb = count === 1 ? "may need" : "may need";
 
   return (
-    <section className="mb-3 rounded-2xl border border-rose-500/25 bg-gradient-to-br from-rose-950/35 via-slate-900/70 to-slate-950/80 p-3.5 shadow-[0_0_28px_-12px_rgba(244,63,94,0.2)]">
+    <button
+      type="button"
+      onClick={() => onShowHighPriority?.(count)}
+      className="mb-3 w-full rounded-2xl border border-rose-500/25 bg-gradient-to-br from-rose-950/35 via-slate-900/70 to-slate-950/80 p-3.5 text-left shadow-[0_0_28px_-12px_rgba(244,63,94,0.2)] transition active:scale-[0.99]"
+      aria-label={`Show ${count} high priority businesses`}
+    >
       <p className="text-[10px] font-semibold uppercase tracking-wider text-rose-300/90">
         AI opportunity alert
       </p>
@@ -30,8 +41,8 @@ export function OpportunityAlert({ leads }: { leads: ApiLead[] }) {
         support this week.
       </p>
       <p className="mt-1 text-xs text-slate-400">
-        Ranked by compliance risk score — tap a lead for FSA breakdown.
+        Tap to view the high-priority list — then tap a lead for the FSA breakdown.
       </p>
-    </section>
+    </button>
   );
 }

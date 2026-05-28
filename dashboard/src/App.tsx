@@ -92,6 +92,13 @@ export function App() {
   const [sendPreview, setSendPreview] = useState<SendPreviewResponse | null>(null);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [findModalOpen, setFindModalOpen] = useState(false);
+  const showHighPriority = useCallback(() => {
+    setLeadFilter("high");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.setTimeout(() => {
+      window.scrollTo({ top: 380, behavior: "smooth" });
+    }, 120);
+  }, []);
   const [pulseDismissed, setPulseDismissed] = useState(false);
   const [areaLabel, setAreaLabel] = useState(() => localStorage.getItem(STORAGE_AREA) ?? "Preston");
   const [postcodeLabel, setPostcodeLabel] = useState(
@@ -539,7 +546,14 @@ export function App() {
         </button>
       ) : null}
 
-      {!loading && !error ? <OpportunityAlert leads={leads} /> : null}
+      {!loading && !error ? (
+        <OpportunityAlert
+          leads={leads}
+          onShowHighPriority={() => {
+            showHighPriority();
+          }}
+        />
+      ) : null}
       <PostboxStatus queuedCount={filterCounts.approved} />
       <DailySendStatus dailyQuota={dailyQuota} resetDescription={dailyCapResetDescription} />
       <OutreachPipeline funnel={funnel} />
