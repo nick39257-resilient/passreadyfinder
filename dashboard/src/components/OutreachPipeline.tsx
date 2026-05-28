@@ -1,4 +1,5 @@
 import type { FunnelStats } from "../api/funnel";
+import type { LeadFilterKey } from "../lib/lead-insights";
 
 const STAGES: { key: keyof FunnelStats; label: string }[] = [
   { key: "identified", label: "Identified" },
@@ -7,7 +8,29 @@ const STAGES: { key: keyof FunnelStats; label: string }[] = [
   { key: "converted", label: "Converted" },
 ];
 
-export function OutreachPipeline({ funnel }: { funnel: FunnelStats | null }) {
+function stageToFilter(stage: keyof FunnelStats): LeadFilterKey {
+  switch (stage) {
+    case "identified":
+      return "new";
+    case "drafted":
+      return "drafted";
+    case "approved":
+      return "approved";
+    case "converted":
+      // Best available view today (includes opted-in/trial/replied/contacted)
+      return "sent";
+    default:
+      return "all";
+  }
+}
+
+export function OutreachPipeline({
+  funnel,
+  onSelectStage,
+}: {
+  funnel: FunnelStats | null;
+  onSelectStage?: (filter: LeadFilterKey) => void;
+}) {
   if (!funnel) {
     return (
       <div className="mb-3 h-20 animate-pulse rounded-2xl border border-slate-700/50 bg-slate-900/40" aria-hidden />
@@ -31,9 +54,17 @@ export function OutreachPipeline({ funnel }: { funnel: FunnelStats | null }) {
         {STAGES.map((stage) => {
           const count = funnel[stage.key];
           const fill = Math.max(12, Math.round((count / max) * 100));
+          const filter = stageToFilter(stage.key);
           return (
-            <div key={stage.key} className="min-w-0">
-              <div className="relative h-9 overflow-hidden rounded-lg bg-slate-950/80 ring-1 ring-slate-700/50">
+            <button
+              key={stage.key}
+              type="button"
+              onClick={() => onSelectStage?.(filter)}
+              className="min-w-0 text-left"
+              aria-label={`Show ${stage.label} list (${count})`}
+              title="Tap to filter list"
+            >
+              <div className="relative h-9 overflow-hidden rounded-lg bg-slate-950/80 ring-1 ring-slate-700/50 transition active:scale-[0.99]">
                 <div
                   className="absolute inset-y-0 left-0 rounded-lg bg-gradient-to-r from-teal-600/70 to-emerald-500/50"
                   style={{ width: `${fill}%` }}
@@ -45,7 +76,7 @@ export function OutreachPipeline({ funnel }: { funnel: FunnelStats | null }) {
               <p className="mt-1 truncate text-center text-[9px] font-medium uppercase tracking-wide text-slate-500">
                 {stage.label}
               </p>
-            </div>
+            </button>
           );
         })}
       </div>

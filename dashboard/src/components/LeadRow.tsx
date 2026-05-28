@@ -17,6 +17,7 @@ export function LeadRow({
   lead,
   onRowTap,
   onQuickDraft,
+  onQueuePostbox,
   onSwipeLeft,
   onSwipeRight,
   canQuickDraft,
@@ -25,6 +26,7 @@ export function LeadRow({
   lead: ApiLead;
   onRowTap: () => void;
   onQuickDraft: () => void;
+  onQueuePostbox?: () => void;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
   canQuickDraft: boolean;
@@ -40,6 +42,7 @@ export function LeadRow({
   const [hint, setHint] = useState<"left" | "right" | null>(null);
 
   const statusStyle = statusPillStyles[lead.status] ?? "bg-slate-700 text-slate-200";
+  const canQueuePostbox = lead.status === "drafted" && Boolean(lead.email?.trim());
 
   return (
     <li
@@ -169,6 +172,30 @@ export function LeadRow({
           </span>
           <span>Draft</span>
         </button>
+
+        {onQueuePostbox ? (
+          <button
+            type="button"
+            disabled={busy || !canQueuePostbox}
+            onClick={(e) => {
+              e.stopPropagation();
+              onQueuePostbox();
+            }}
+            title={
+              canQueuePostbox
+                ? "Send to postbox"
+                : lead.status !== "drafted"
+                  ? "Only drafted leads can be queued"
+                  : "Needs a business email before postbox"
+            }
+            className="flex w-[4.75rem] shrink-0 flex-col items-center justify-center gap-0.5 border-l border-slate-800/80 bg-amber-950/30 px-1 text-[10px] font-bold leading-tight text-amber-200 disabled:opacity-40"
+          >
+            <span className="text-base leading-none" aria-hidden>
+              📮
+            </span>
+            <span>Postbox</span>
+          </button>
+        ) : null}
       </div>
     </li>
   );

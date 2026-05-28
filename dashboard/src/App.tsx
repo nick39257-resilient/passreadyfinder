@@ -578,7 +578,13 @@ export function App() {
       ) : null}
       <PostboxStatus queuedCount={filterCounts.approved} />
       <DailySendStatus dailyQuota={dailyQuota} resetDescription={dailyCapResetDescription} />
-      <OutreachPipeline funnel={funnel} />
+      <OutreachPipeline
+        funnel={funnel}
+        onSelectStage={(filter) => {
+          setLeadFilter(filter);
+          window.scrollTo({ top: 380, behavior: "smooth" });
+        }}
+      />
       <ActivityFeed items={activityFeed} />
       {complianceTip ? <ComplianceBanner tip={complianceTip} /> : null}
 
@@ -619,6 +625,7 @@ export function App() {
               canQuickDraft={canQuickDraftLead(lead)}
               onRowTap={() => void openLeadDrawer(lead)}
               onQuickDraft={() => void handleQuickDraft(lead)}
+              onQueuePostbox={() => void handleQueuePostbox(lead)}
               onSwipeLeft={() => {
                 snoozeLead(lead.id);
                 setHiddenVersion((v) => v + 1);
