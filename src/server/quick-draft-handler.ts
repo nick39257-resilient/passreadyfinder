@@ -71,13 +71,16 @@ export async function quickDraftLeadById(leadId: number): Promise<string> {
   }
 
   const consultantTip = resolveConsultantTip(fsaScores);
-  const city = extractCity({
+  const leadForDraft = {
     id: row.id,
     business_name: row.business_name,
     address: row.address,
     postcode: row.postcode,
     fsa_rating: row.fsa_rating,
-  });
+    email: row.email ?? null,
+    flag_for_review: row.flag_for_review ?? 0,
+  };
+  const city = extractCity(leadForDraft);
   const variables = buildDraftVariables({
     businessName: row.business_name,
     city,
@@ -88,13 +91,7 @@ export async function quickDraftLeadById(leadId: number): Promise<string> {
 
   const llm = createLlmClient();
   const draft = await generateDraftForLead(
-    {
-      id: row.id,
-      business_name: row.business_name,
-      address: row.address,
-      postcode: row.postcode,
-      fsa_rating: row.fsa_rating,
-    },
+    leadForDraft,
     llm,
     {
       templateRating: row.fsa_rating === 2 ? 2 : row.fsa_rating,

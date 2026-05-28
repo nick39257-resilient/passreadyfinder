@@ -44,6 +44,9 @@ export function LeadDetailDrawer({
   onQuickDraft,
   onQueuePostbox,
   onSetEmail,
+  onSetFlagForReview,
+  onMarkNotInterested,
+  onMarkVisited,
   onLoadFullDetail,
   onStopSequence,
   onMarkTrial,
@@ -62,6 +65,9 @@ export function LeadDetailDrawer({
   onQuickDraft: () => void;
   onQueuePostbox: () => void;
   onSetEmail: (email: string) => void;
+  onSetFlagForReview: (flagged: boolean) => void;
+  onMarkNotInterested: () => void;
+  onMarkVisited: () => void;
   onLoadFullDetail?: () => void;
   onStopSequence: () => void;
   onMarkTrial: () => void;
@@ -83,6 +89,8 @@ export function LeadDetailDrawer({
   const isDrafted = lead.status === "drafted" || lead.status === "approved";
   const isInPostbox = lead.status === "approved";
   const [emailDraft, setEmailDraft] = useState("");
+  const flaggedForReview = Boolean(lead.flagForReview);
+  const needsEyesReason = lead.needsEyesReason?.trim() || null;
 
   useEffect(() => {
     setEmailDraft(lead.email ?? "");
@@ -111,6 +119,27 @@ export function LeadDetailDrawer({
               ) : (
                 <p className="mt-1 text-xs text-amber-400/90">No business email yet — run Find leads to discover one</p>
               )}
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onSetFlagForReview(!flaggedForReview)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition ${
+                    flaggedForReview
+                      ? "bg-amber-500/20 text-amber-200 ring-amber-500/40"
+                      : "bg-slate-800/90 text-slate-300 ring-slate-700/60"
+                  }`}
+                  title="Force this lead into Needs Eyes (never auto-postbox)"
+                >
+                  {flaggedForReview ? "Flagged for review" : "Flag for review"}
+                </button>
+                {needsEyesReason ? (
+                  <span className="rounded-full bg-violet-500/15 px-3 py-1.5 text-xs font-semibold text-violet-200 ring-1 ring-violet-500/30">
+                    Needs Eyes: {needsEyesReason}
+                  </span>
+                ) : null}
+              </div>
               <div className="mt-2 flex gap-2">
                 <input
                   value={emailDraft}
@@ -209,36 +238,46 @@ export function LeadDetailDrawer({
             <p className="mb-3 text-center text-sm font-medium text-emerald-400">{busyLabel}</p>
           ) : null}
 
-          {!outreachHalted ? (
-            <div className="mb-3 grid grid-cols-1 gap-2">
+          <div className="mb-3">
+            <div className="grid grid-cols-4 gap-2">
               <button
                 type="button"
-                disabled={busy || lead.status === "replied"}
+                disabled={busy || outreachHalted || lead.status === "replied"}
                 onClick={onStopSequence}
-                className="min-h-[48px] rounded-xl border border-sky-500/40 bg-sky-950/40 text-sm font-bold text-sky-100 disabled:opacity-50"
+                className="min-h-[44px] rounded-xl border border-sky-500/40 bg-sky-950/40 text-[11px] font-bold text-sky-100 disabled:opacity-40"
+                title="Replied (stop sequence)"
               >
-                Mark as replied — stop sequence
+                Replied
               </button>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={onMarkTrial}
-                  className="min-h-[44px] rounded-xl border border-violet-500/40 bg-violet-950/30 text-xs font-bold text-violet-100 disabled:opacity-50"
-                >
-                  Trial started
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={onMarkOptedIn}
-                  className="min-h-[44px] rounded-xl border border-violet-500/40 bg-violet-950/30 text-xs font-bold text-violet-100 disabled:opacity-50"
-                >
-                  Opted in
-                </button>
-              </div>
+              <button
+                type="button"
+                disabled={busy || outreachHalted}
+                onClick={onMarkOptedIn}
+                className="min-h-[44px] rounded-xl border border-violet-500/40 bg-violet-950/30 text-[11px] font-bold text-violet-100 disabled:opacity-40"
+                title="Converted (stop sequence)"
+              >
+                Converted
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onMarkNotInterested}
+                className="min-h-[44px] rounded-xl border border-red-500/40 bg-red-950/30 text-[11px] font-bold text-red-100 disabled:opacity-40"
+                title="Not interested (suppress + stop)"
+              >
+                Not interested
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onMarkVisited}
+                className="min-h-[44px] rounded-xl border border-slate-600 bg-slate-800 text-[11px] font-bold text-slate-200 disabled:opacity-40"
+                title="Visited (note)"
+              >
+                Visited
+              </button>
             </div>
-          ) : null}
+          </div>
 
           <div className="grid grid-cols-2 gap-2">
             <button

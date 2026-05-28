@@ -14,7 +14,7 @@ import {
   getDailySendQuota,
   type DailySendQuota,
 } from "../daily-send-cap.js";
-import { getLeadStatusCounts } from "../store/stats-repository.js";
+import { countNeedsEyesDrafts, getLeadStatusCounts } from "../store/stats-repository.js";
 import { runMigrations } from "../store/db.js";
 
 export type SystemPulseState =
@@ -64,15 +64,15 @@ function mapFeedEntry(row: EngineLogEntry): SystemStatusFeedItem {
 export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
   await runMigrations();
 
-  const [logs, latestError, statusCounts, recentJobs, dailyQuota] = await Promise.all([
+  const [logs, latestError, statusCounts, needsReviewCount, recentJobs, dailyQuota] =
+    await Promise.all([
     getRecentEngineLogs(feedLimit),
     getLatestEngineError(),
     getLeadStatusCounts(),
+    countNeedsEyesDrafts(),
     getRecentJobs(20),
     getDailySendQuota(),
   ]);
-
-  const needsReviewCount = statusCounts.drafted;
   const feed = logs.map(mapFeedEntry);
 
   const runningFind = recentJobs.some((j) => j.type === "find" && j.status === "running");

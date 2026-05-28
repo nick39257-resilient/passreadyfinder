@@ -40,6 +40,8 @@ export interface ApiLead {
   website: string | null;
   email: string | null;
   draftPreview: string | null;
+  flagForReview: boolean;
+  needsEyesReason: string | null;
   leadScore: number;
   status: string;
   riskScore: number;
@@ -167,5 +169,43 @@ export async function setLeadEmailApi(leadId: number, email: string, secret?: st
   const body = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) {
     throw new Error(body.error ?? `Set email failed (${res.status})`);
+  }
+}
+
+export async function setLeadFlagForReviewApi(
+  leadId: number,
+  flagged: boolean,
+  secret?: string,
+): Promise<void> {
+  const res = await fetch(`/api/leads/${leadId}/flag-review`, {
+    method: "POST",
+    headers: authHeaders(secret),
+    body: JSON.stringify({ flagged }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Flag review failed (${res.status})`);
+  }
+}
+
+export async function markNotInterestedApi(leadId: number, secret?: string): Promise<void> {
+  const res = await fetch(`/api/leads/${leadId}/mark-not-interested`, {
+    method: "POST",
+    headers: authHeaders(secret),
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Not interested failed (${res.status})`);
+  }
+}
+
+export async function markVisitedApi(leadId: number, secret?: string): Promise<void> {
+  const res = await fetch(`/api/leads/${leadId}/mark-visited`, {
+    method: "POST",
+    headers: authHeaders(secret),
+  });
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error ?? `Mark visited failed (${res.status})`);
   }
 }

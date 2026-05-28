@@ -25,7 +25,12 @@ import { getDeliverabilityStatus } from "../engine/deliverability.js";
 import { getComplianceTipOfDay } from "../engine/intelligence/compliance.js";
 import { getSystemActivity } from "../engine/intelligence/activity.js";
 import { getSystemStatus } from "../engine/intelligence/system-status.js";
-import { getAllLeads, getLeadById } from "../engine/store/leads-repository.js";
+import {
+  getAllLeads,
+  getLeadById,
+  setLeadFlagForReview,
+  setLeadStatus,
+} from "../engine/store/leads-repository.js";
 import { fetchAuthorities } from "../engine/finder/authorities.js";
 import { updateLeadEmail } from "../engine/enrich/lead-email.js";
 import {
@@ -38,6 +43,7 @@ import {
   isLeadOutreachHalted,
   markLeadConverted,
   stopSequenceForReply,
+  suppressLead,
   suppressLeadByToken,
 } from "../engine/outreach-halt.js";
 import { formatRouteError } from "./quick-draft-handler.js";
@@ -298,6 +304,41 @@ export async function createApp(options?: {
     }
   });
 
+  app.post("/api/leads/:id/mark-not-interested", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+    try {
+      await suppressLead(id, "not_interested");
+      res.json({ ok: true, status: "suppressed" });
+    } catch (err) {
+      const message = formatRouteError(err);
+      res.status(message === "Lead not found" ? 404 : 500).json({ error: message });
+    }
+  });
+
+  app.post("/api/leads/:id/mark-visited", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+    try {
+      const row = await getLeadById(id);
+      if (!row) {
+        res.status(404).json({ error: "Lead not found" });
+        return;
+      }
+      await setLeadStatus(id, "visited");
+      res.json({ ok: true, status: "visited" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to mark visited" });
+    }
+  });
+
   app.post("/api/leads/:id/set-email", requireControlAuth, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) {
@@ -322,6 +363,28 @@ export async function createApp(options?: {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to set business email" });
+    }
+  });
+
+  app.post("/api/leads/:id/flag-review", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+
+    const flagged = Boolean(req.body?.flagged);
+    try {
+      const row = await getLeadById(id);
+      if (!row) {
+        res.status(404).json({ error: "Lead not found" });
+        return;
+      }
+      await setLeadFlagForReview(id, flagged);
+      res.json({ ok: true, flagged });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update review flag" });
     }
   });
 

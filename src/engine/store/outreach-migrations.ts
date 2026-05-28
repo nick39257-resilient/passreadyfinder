@@ -12,6 +12,12 @@ const LEAD_PHASE_B_COLUMNS = [
   "fsa_score_hygiene INTEGER",
   "fsa_score_structural INTEGER",
   "fsa_score_management INTEGER",
+  // UX lane controls:
+  // - flag_for_review: manual operator override to force "Needs Eyes"
+  // - needs_eyes_reason: persisted auto-gate failure reason for visibility/debug
+  "flag_for_review INTEGER NOT NULL DEFAULT 0",
+  "needs_eyes_reason TEXT",
+  "needs_eyes_updated_at TEXT",
 ] as const;
 
 async function columnExists(table: string, column: string): Promise<boolean> {

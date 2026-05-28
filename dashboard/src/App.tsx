@@ -5,9 +5,12 @@ import { fetchAppConfig } from "./api/config";
 import {
   fetchLeads,
   fetchLeadDetail,
+  markNotInterestedApi,
   markLeadConvertedApi,
+  markVisitedApi,
   queueLeadToPostboxApi,
   quickDraftLead,
+  setLeadFlagForReviewApi,
   setLeadEmailApi,
   stopLeadSequence,
   type ApiLead,
@@ -59,7 +62,15 @@ function canQuickDraftLead(lead: ApiLead): boolean {
 }
 
 function countByFilter(leads: ApiLead[]): Record<LeadFilterKey, number> {
-  const keys: LeadFilterKey[] = ["all", "new", "drafted", "approved", "sent", "high"];
+  const keys: LeadFilterKey[] = [
+    "all",
+    "needs_eyes",
+    "new",
+    "drafted",
+    "approved",
+    "sent",
+    "high",
+  ];
   return Object.fromEntries(
     keys.map((key) => [key, leads.filter((l) => matchesLeadFilter(l, key)).length]),
   ) as Record<LeadFilterKey, number>;
@@ -569,6 +580,21 @@ export function App() {
       ) : null}
 
       {!loading && !error ? (
+        <div className="mb-3 rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm text-slate-200">
+          {filterCounts.needs_eyes === 0 &&
+          filterCounts.approved === 0 &&
+          leads.filter((l) => l.status === "replied").length === 0 ? (
+            <span>Nothing needs you right now. ✓</span>
+          ) : (
+            <span className="tabular-nums">
+              {filterCounts.needs_eyes} drafts need your eyes · {filterCounts.approved} queued for 2pm ·{" "}
+              {leads.filter((l) => l.status === "replied").length} replies to action
+            </span>
+          )}
+        </div>
+      ) : null}
+
+      {!loading && !error ? (
         <button
           type="button"
           disabled={actionBusy}
@@ -589,19 +615,21 @@ export function App() {
       ) : null}
       <PostboxStatus queuedCount={filterCounts.approved} />
       <DailySendStatus dailyQuota={dailyQuota} resetDescription={dailyCapResetDescription} />
-      {!fastMode ? (
-        <>
-          <OutreachPipeline
-            funnel={funnel}
-            onSelectStage={(filter) => {
-              setLeadFilter(filter);
-              window.scrollTo({ top: 380, behavior: "smooth" });
-            }}
-          />
-          <ActivityFeed items={activityFeed} />
-          {complianceTip ? <ComplianceBanner tip={complianceTip} /> : null}
-        </>
-      ) : null}
+      <div className="mt-6">
+        <OutreachPipeline
+          funnel={funnel}
+          onSelectStage={(filter) => {
+            setLeadFilter(filter);
+            window.scrollTo({ top: 380, behavior: "smooth" });
+          }}
+        />
+        {!fastMode ? (
+          <>
+            <ActivityFeed items={activityFeed} />
+            {complianceTip ? <ComplianceBanner tip={complianceTip} /> : null}
+          </>
+        ) : null}
+      </div>
 
       {!loading && !error ? (
         <LeadFilters value={leadFilter} onChange={setLeadFilter} counts={filterCounts} />
@@ -730,6 +758,65 @@ export function App() {
                 setBanner({
                   tone: "error",
                   message: err instanceof Error ? err.message : "Could not save email",
+                });
+              } finally {
+                setBusyId(null);
+              }
+            })();
+          }}
+          onSetFlagForReview={(flagged) => {
+            void (async () => {
+              try {
+                const secret = ensureControlSecret(getControlSecret());
+                setBusyId(selectedLead.id);
+                await setLeadFlagForReviewApi(selectedLead.id, flagged, secret);
+                await loadAll();
+                setBanner({
+                  tone: "success",
+                  message: flagged ? "Flagged for review (Needs Eyes)." : "Review flag cleared.",
+                });
+              } catch (err) {
+                setBanner({
+                  tone: "error",
+                  message: err instanceof Error ? err.message : "Could not update review flag",
+                });
+              } finally {
+                setBusyId(null);
+              }
+            })();
+          }}
+          onMarkNotInterested={() => {
+            void (async () => {
+              try {
+                const secret = ensureControlSecret(getControlSecret());
+                setBusyId(selectedLead.id);
+                await markNotInterestedApi(selectedLead.id, secret);
+                await loadAll();
+                setBanner({ tone: "success", message: "Marked not interested (suppressed)." });
+                setSelectedLead(null);
+              } catch (err) {
+                setBanner({
+                  tone: "error",
+                  message: err instanceof Error ? err.message : "Could not mark not interested",
+                });
+              } finally {
+                setBusyId(null);
+              }
+            })();
+          }}
+          onMarkVisited={() => {
+            void (async () => {
+              try {
+                const secret = ensureControlSecret(getControlSecret());
+                setBusyId(selectedLead.id);
+                await markVisitedApi(selectedLead.id, secret);
+                await loadAll();
+                setBanner({ tone: "success", message: "Marked visited." });
+                setSelectedLead(null);
+              } catch (err) {
+                setBanner({
+                  tone: "error",
+                  message: err instanceof Error ? err.message : "Could not mark visited",
                 });
               } finally {
                 setBusyId(null);

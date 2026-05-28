@@ -14,7 +14,12 @@ export async function getDraftsForReview(): Promise<ReviewDraft[]> {
   const result = await db.execute(`
     SELECT id, business_name, fsa_rating, draft_message, postcode, lead_score
     FROM leads
-    WHERE draft_message IS NOT NULL AND status = 'drafted'
+    WHERE draft_message IS NOT NULL
+      AND status = 'drafted'
+      AND (
+        COALESCE(flag_for_review, 0) = 1
+        OR (needs_eyes_reason IS NOT NULL AND TRIM(needs_eyes_reason) != '')
+      )
     ORDER BY lead_score DESC
   `);
   return result.rows as unknown as ReviewDraft[];
@@ -28,7 +33,11 @@ export async function approveDraft(
   const result = await db.execute({
     sql: `
       UPDATE leads
-      SET draft_message = ?, status = 'approved', updated_at = datetime('now')
+      SET draft_message = ?,
+          status = 'approved',
+          needs_eyes_reason = NULL,
+          needs_eyes_updated_at = datetime('now'),
+          updated_at = datetime('now')
       WHERE id = ? AND status = 'drafted'
     `,
     args: [draftMessage.trim(), id],
@@ -41,7 +50,10 @@ export async function rejectDraft(id: number): Promise<boolean> {
   const result = await db.execute({
     sql: `
       UPDATE leads
-      SET status = 'rejected', updated_at = datetime('now')
+      SET status = 'rejected',
+          needs_eyes_reason = NULL,
+          needs_eyes_updated_at = datetime('now'),
+          updated_at = datetime('now')
       WHERE id = ? AND status = 'drafted'
     `,
     args: [id],

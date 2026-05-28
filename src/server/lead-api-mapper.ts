@@ -39,6 +39,8 @@ export interface ApiLeadDetail {
   website: string | null;
   email: string | null;
   draftPreview: string | null;
+  flagForReview: boolean;
+  needsEyesReason: string | null;
   onDeliveryApp: string;
   leadScore: number;
   status: string;
@@ -130,6 +132,8 @@ export async function mapLeadRowToApiLead(
     website: row.website,
     email: row.email ?? null,
     draftPreview,
+    flagForReview: Boolean(row.flag_for_review),
+    needsEyesReason: row.needs_eyes_reason ?? null,
     onDeliveryApp: row.on_delivery_app,
     leadScore: row.lead_score,
     status: readStatus(row),

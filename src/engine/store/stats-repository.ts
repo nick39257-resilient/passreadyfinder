@@ -65,6 +65,20 @@ export async function countApprovedLeads(): Promise<number> {
   return Number(result.rows[0]?.count ?? 0);
 }
 
+export async function countNeedsEyesDrafts(): Promise<number> {
+  const db = getDb();
+  const result = await db.execute(`
+    SELECT COUNT(*) AS count
+    FROM leads
+    WHERE status = 'drafted'
+      AND (
+        COALESCE(flag_for_review, 0) = 1
+        OR (needs_eyes_reason IS NOT NULL AND TRIM(needs_eyes_reason) != '')
+      )
+  `);
+  return Number(result.rows[0]?.count ?? 0);
+}
+
 export interface FunnelStats {
   identified: number;
   drafted: number;

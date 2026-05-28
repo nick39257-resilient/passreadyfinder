@@ -21,6 +21,7 @@ import {
   createLlmClient,
   extractCity,
   generateDraftForLead,
+  routeDraftAfterSave,
   saveDraftMessage,
   type LeadForDraft,
 } from "./drafter.js";
@@ -105,6 +106,8 @@ async function fetchEligibleNewLeads(limit: number): Promise<LeadForQueueDraft[]
         postcode,
         business_type,
         fsa_rating,
+        email,
+        flag_for_review,
         fsa_last_inspection_date,
         phone,
         website,
@@ -208,6 +211,7 @@ async function processLeadWithRetry(
   try {
     const draft = await draftSingleLead(lead, llmClient);
     await saveDraftMessage(lead.id, draft);
+    await routeDraftAfterSave({ lead, draft });
     return { ok: true, draft };
   } catch (err) {
     return { ok: false, error: formatError(err) };

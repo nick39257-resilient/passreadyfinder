@@ -25,6 +25,8 @@ import { getGeminiDraftModel } from "./gemini-draft-model.js";
 import { geminiApiQueue } from "./rate-limit-queue.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
+import { queueLeadToPostbox } from "./store/review-repository.js";
+import { setLeadNeedsEyesReason } from "./store/leads-repository.js";
 
 function getTrialUrl(): string {
   const fromEnv = process.env[productConfig.outreach.trialUrlEnvKey]?.trim();
@@ -40,6 +42,8 @@ export interface LeadForDraft {
   address: string;
   postcode: string;
   fsa_rating: number | null;
+  email: string | null;
+  flag_for_review: number | null;
 }
 
 export type { DraftVariables };
@@ -252,7 +256,7 @@ export async function fetchLeadsNeedingDraft(
   const result = targetRating
     ? await db.execute({
         sql: `
-          SELECT id, business_name, address, postcode, fsa_rating
+          SELECT id, business_name, address, postcode, fsa_rating, email, flag_for_review
           FROM leads
           WHERE draft_message IS NULL
             AND ${outreachHaltedSqlInClause()}
@@ -266,7 +270,7 @@ export async function fetchLeadsNeedingDraft(
       })
     : await db.execute({
         sql: `
-          SELECT id, business_name, address, postcode, fsa_rating
+          SELECT id, business_name, address, postcode, fsa_rating, email, flag_for_review
           FROM leads
           WHERE draft_message IS NULL
             AND ${outreachHaltedSqlInClause()}
@@ -292,6 +296,85 @@ export async function saveDraftMessage(leadId: number, message: string): Promise
     `,
     args: [message.trim(), leadId],
   });
+}
+
+function reviewAllDraftsEnabled(): boolean {
+  return String(process.env.REVIEW_ALL_DRAFTS ?? "")
+    .trim()
+    .toLowerCase() === "true";
+}
+
+function checkPersonaForAutoApproval(draft: string): { ok: true } | { ok: false; reason: string } {
+  const text = draft.toLowerCase();
+  const disqualifying = [
+    "consultant",
+    "specialist",
+    "i represent",
+    "on behalf of",
+    "agency",
+    "software",
+    "platform",
+  ];
+  for (const term of disqualifying) {
+    if (text.includes(term)) {
+      return { ok: false, reason: `persona_disqualifying_term:${term}` };
+    }
+  }
+
+  const hasFirstPerson = /\b(i|i['’]m|im|i['’]ve|ive|my|me)\b/i.test(draft);
+  if (!hasFirstPerson) {
+    return { ok: false, reason: "persona_missing_first_person" };
+  }
+
+  return { ok: true };
+}
+
+function draftQualityGate(input: {
+  lead: LeadForDraft;
+  draft: string;
+}): { pass: true } | { pass: false; reason: string } {
+  // Kill-switch: force every draft into "Needs Eyes" (manual /review lane).
+  if (reviewAllDraftsEnabled()) {
+    return { pass: false, reason: "review_all_drafts_enabled" };
+  }
+
+  // Manual override: force "Needs Eyes" (high value / handwrite / edge cases).
+  if (Number(input.lead.flag_for_review ?? 0) === 1) {
+    return { pass: false, reason: "flagged_for_review" };
+  }
+
+  // Auto-postbox lane requires a real business email.
+  if (!input.lead.email?.trim()) {
+    return { pass: false, reason: "missing_business_email" };
+  }
+
+  // Lightweight persona safety net for unattended auto-approval.
+  const persona = checkPersonaForAutoApproval(input.draft);
+  if (!persona.ok) {
+    return { pass: false, reason: persona.reason };
+  }
+
+  return { pass: true };
+}
+
+export async function routeDraftAfterSave(input: {
+  lead: LeadForDraft;
+  draft: string;
+}): Promise<{ lane: "postbox" } | { lane: "needs_eyes"; reason: string }> {
+  const gate = draftQualityGate({ lead: input.lead, draft: input.draft });
+  if (!gate.pass) {
+    await setLeadNeedsEyesReason(input.lead.id, gate.reason);
+    return { lane: "needs_eyes", reason: gate.reason };
+  }
+
+  const queued = await queueLeadToPostbox(input.lead.id);
+  if (!queued) {
+    await setLeadNeedsEyesReason(input.lead.id, "auto_postbox_failed");
+    return { lane: "needs_eyes", reason: "auto_postbox_failed" };
+  }
+
+  await setLeadNeedsEyesReason(input.lead.id, null);
+  return { lane: "postbox" };
 }
 
 export async function generateDraftForLead(
@@ -444,6 +527,15 @@ export async function runDrafter(options?: DraftJobParams): Promise<DraftRunResu
       result.drafted++;
       console.log(`✓ ${lead.business_name}`);
       console.log(`  ${draft.split("\n").join("\n  ")}\n`);
+
+      // AUTO lane: if the draft passes the quality gate, move it straight into Postbox.
+      // MANUAL lane: /review uses approveDraft() (edit + approve) for items routed into Needs Eyes.
+      const routed = await routeDraftAfterSave({ lead, draft });
+      if (routed.lane === "postbox") {
+        console.log(`  → auto-postboxed\n`);
+      } else {
+        console.log(`  ⊘ Needs Eyes: ${routed.reason}\n`);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       result.errors.push({

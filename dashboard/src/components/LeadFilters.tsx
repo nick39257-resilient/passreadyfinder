@@ -2,6 +2,7 @@ import type { LeadFilterKey } from "../lib/lead-insights";
 
 const FILTERS: { key: LeadFilterKey; label: string }[] = [
   { key: "all", label: "All" },
+  { key: "needs_eyes", label: "Needs Eyes" },
   { key: "new", label: "New" },
   { key: "drafted", label: "Drafted" },
   { key: "approved", label: "Postbox" },

@@ -115,6 +115,9 @@ export interface LeadRow {
   contacted_at?: string | null;
   touch_count?: number;
   replied_at?: string | null;
+  flag_for_review?: number | null;
+  needs_eyes_reason?: string | null;
+  needs_eyes_updated_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -135,6 +138,47 @@ export async function getLeadById(id: number): Promise<LeadRow | null> {
     return null;
   }
   return result.rows[0] as unknown as LeadRow;
+}
+
+export async function setLeadFlagForReview(leadId: number, flagged: boolean): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE leads
+      SET flag_for_review = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [flagged ? 1 : 0, leadId],
+  });
+}
+
+export async function setLeadNeedsEyesReason(
+  leadId: number,
+  reason: string | null,
+): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE leads
+      SET needs_eyes_reason = ?,
+          needs_eyes_updated_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [reason, leadId],
+  });
+}
+
+export async function setLeadStatus(leadId: number, status: string): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE leads
+      SET status = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [status, leadId],
+  });
 }
 
 export async function getTopLeads(limit: number): Promise<LeadRow[]> {
