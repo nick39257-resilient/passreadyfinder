@@ -37,15 +37,18 @@ export function SystemPulse({
   errorMessage,
   needsReviewCount,
   onDismissError,
+  onShowNeedsReview,
 }: {
   pulse: SystemPulseState;
   pulseLabel: string;
   errorMessage: string | null;
   needsReviewCount: number;
   onDismissError?: () => void;
+  onShowNeedsReview?: () => void;
 }) {
   const styles = PULSE_STYLES[pulse];
   const isError = pulse === "error" && Boolean(errorMessage);
+  const canJumpToReview = pulse === "needs_review" && needsReviewCount > 0;
   const label =
     pulse === "needs_review" && needsReviewCount > 0
       ? `${pulseLabel} (${needsReviewCount})`
@@ -57,15 +60,29 @@ export function SystemPulse({
       onClick={() => {
         if (isError) {
           onDismissError?.();
+          return;
+        }
+        if (canJumpToReview) {
+          onShowNeedsReview?.();
         }
       }}
       className={`flex min-h-[40px] items-center gap-2 rounded-lg border px-2.5 py-1.5 ${styles.ring} ${
-        isError ? "cursor-pointer" : "cursor-default"
+        isError || canJumpToReview ? "cursor-pointer" : "cursor-default"
       } bg-slate-900/90`}
       aria-label={
-        isError ? `Dismiss error: ${errorMessage}` : `System status: ${label}`
+        isError
+          ? `Dismiss error: ${errorMessage}`
+          : canJumpToReview
+            ? `Show ${needsReviewCount} drafts needing review`
+            : `System status: ${label}`
       }
-      title={isError ? errorMessage ?? "Tap to dismiss" : undefined}
+      title={
+        isError
+          ? errorMessage ?? "Tap to dismiss"
+          : canJumpToReview
+            ? "Tap to view drafts needing review"
+            : undefined
+      }
     >
       <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${styles.dot}`} aria-hidden />
       <span className={`text-xs font-semibold uppercase tracking-wide ${styles.text}`}>

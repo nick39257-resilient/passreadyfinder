@@ -495,6 +495,10 @@ export function App() {
             errorMessage={errorMessage}
             needsReviewCount={needsReviewCount}
             onDismissError={dismissPulseError}
+            onShowNeedsReview={() => {
+              setLeadFilter("drafted");
+              window.scrollTo({ top: 380, behavior: "smooth" });
+            }}
           />
           <div className="flex gap-1">
             <button
