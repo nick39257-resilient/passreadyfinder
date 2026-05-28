@@ -830,6 +830,10 @@ export async function createApp(options?: {
 
   if (options?.serveStatic) {
     app.get("/", (_req, res) => {
+      res.redirect(302, "/dashboard/");
+    });
+
+    app.get("/control", (_req, res) => {
       res.sendFile(path.join(publicDir, "control.html"));
     });
 

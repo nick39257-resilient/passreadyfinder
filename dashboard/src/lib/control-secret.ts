@@ -1,11 +1,13 @@
+import { readSession, writeSession } from "./safe-storage";
+
 const STORAGE_KEY = "control_secret";
 
 export function getControlSecret(): string {
-  return sessionStorage.getItem(STORAGE_KEY) ?? "";
+  return readSession(STORAGE_KEY) ?? "";
 }
 
 export function setControlSecret(secret: string): void {
-  sessionStorage.setItem(STORAGE_KEY, secret.trim());
+  writeSession(STORAGE_KEY, secret.trim());
 }
 
 /** Prompt once if server requires CONTROL_PANEL_SECRET (Render production). */

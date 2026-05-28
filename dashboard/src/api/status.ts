@@ -30,8 +30,10 @@ export interface SystemStatusResponse {
   dailyCapResetDescription: string;
 }
 
+import { fetchWithTimeout } from "../lib/fetch-with-timeout.js";
+
 export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
-  const res = await fetch("/api/status");
+  const res = await fetchWithTimeout("/api/status");
   if (!res.ok) {
     throw new Error(`Failed to load system status (${res.status})`);
   }

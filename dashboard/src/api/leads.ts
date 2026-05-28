@@ -1,6 +1,7 @@
 import type { ApiContactDiscovery } from "./contact-discovery.js";
 import type { RiskBand } from "../components/ActionCard";
 import { authHeaders } from "../lib/auth-headers.js";
+import { fetchWithTimeout } from "../lib/fetch-with-timeout.js";
 import { pollJobUntilDone } from "../lib/job-poll.js";
 
 export interface RiskComponents {
@@ -63,9 +64,20 @@ export interface ApiLead {
   contactDiscovery: ApiContactDiscovery | null;
 }
 
+const VALID_RISK_BANDS = new Set<RiskBand>(["critical", "high", "medium", "low"]);
+
+function normalizeRiskBand(band: string | undefined | null): RiskBand {
+  if (band && VALID_RISK_BANDS.has(band as RiskBand)) {
+    return band as RiskBand;
+  }
+  return "low";
+}
+
 function normalizeLead(lead: ApiLead): ApiLead {
   return {
     ...lead,
+    riskBand: normalizeRiskBand(lead.riskBand),
+    riskScore: typeof lead.riskScore === "number" ? lead.riskScore : 0,
     contactScore: lead.contactScore ?? 0,
     contactable: lead.contactable ?? Boolean(lead.email?.trim() || lead.phone?.trim()),
     contactDiscovery: lead.contactDiscovery ?? null,
@@ -82,7 +94,7 @@ function normalizeLead(lead: ApiLead): ApiLead {
 }
 
 export async function fetchLeads(): Promise<ApiLead[]> {
-  const res = await fetch("/api/leads");
+  const res = await fetchWithTimeout("/api/leads");
   if (!res.ok) {
     throw new Error(`Failed to load leads (${res.status})`);
   }

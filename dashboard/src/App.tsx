@@ -49,6 +49,7 @@ import {
 } from "./lib/lead-insights";
 import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
 import { isOutreachHaltedStatus } from "./lib/outreach-halt";
+import { readLocal, removeLocal, writeLocal } from "./lib/safe-storage";
 
 const STORAGE_AREA = "passready_area";
 const STORAGE_POSTCODE = "passready_postcode_prefix";
@@ -115,9 +116,9 @@ export function App() {
     }, 120);
   }, []);
   const [pulseDismissed, setPulseDismissed] = useState(false);
-  const [areaLabel, setAreaLabel] = useState(() => localStorage.getItem(STORAGE_AREA) ?? "Preston");
+  const [areaLabel, setAreaLabel] = useState(() => readLocal(STORAGE_AREA) ?? "Preston");
   const [postcodeLabel, setPostcodeLabel] = useState(
-    () => localStorage.getItem(STORAGE_POSTCODE) ?? "",
+    () => readLocal(STORAGE_POSTCODE) ?? "",
   );
 
   const applySystemStatus = useCallback((status: SystemStatusResponse) => {
@@ -407,11 +408,11 @@ export function App() {
   };
 
   const runFindForArea = async (form: { area: string; postcodePrefix: string }) => {
-    localStorage.setItem(STORAGE_AREA, form.area);
+    writeLocal(STORAGE_AREA, form.area);
     if (form.postcodePrefix) {
-      localStorage.setItem(STORAGE_POSTCODE, form.postcodePrefix);
+      writeLocal(STORAGE_POSTCODE, form.postcodePrefix);
     } else {
-      localStorage.removeItem(STORAGE_POSTCODE);
+      removeLocal(STORAGE_POSTCODE);
     }
     setAreaLabel(form.area);
     setPostcodeLabel(form.postcodePrefix);
@@ -444,7 +445,7 @@ export function App() {
   };
 
   const handleDraft = async () => {
-    const rating = Number(localStorage.getItem(STORAGE_RATING) ?? "2");
+    const rating = Number(readLocal(STORAGE_RATING) ?? "2");
     try {
       const secret = ensureControlSecret(getControlSecret());
       setActionBusy(true);
@@ -737,8 +738,8 @@ export function App() {
 
       <FindAreaModal
         open={findModalOpen}
-        initialArea={localStorage.getItem(STORAGE_AREA) ?? "Preston"}
-        initialPostcodePrefix={localStorage.getItem(STORAGE_POSTCODE) ?? ""}
+        initialArea={readLocal(STORAGE_AREA) ?? "Preston"}
+        initialPostcodePrefix={readLocal(STORAGE_POSTCODE) ?? ""}
         onConfirm={(form) => void runFindForArea(form)}
         onCancel={() => setFindModalOpen(false)}
         busy={actionBusy}

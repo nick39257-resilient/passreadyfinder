@@ -1,3 +1,5 @@
+import { readLocal, writeLocal } from "./safe-storage";
+
 const SNOOZE_KEY = "passready_snoozed";
 const DISMISS_KEY = "passready_dismissed";
 
@@ -5,7 +7,7 @@ type SnoozeMap = Record<string, number>;
 
 function readSnoozed(): SnoozeMap {
   try {
-    return JSON.parse(localStorage.getItem(SNOOZE_KEY) ?? "{}") as SnoozeMap;
+    return JSON.parse(readLocal(SNOOZE_KEY) ?? "{}") as SnoozeMap;
   } catch {
     return {};
   }
@@ -13,7 +15,7 @@ function readSnoozed(): SnoozeMap {
 
 function readDismissed(): Set<number> {
   try {
-    const raw = JSON.parse(localStorage.getItem(DISMISS_KEY) ?? "[]") as number[];
+    const raw = JSON.parse(readLocal(DISMISS_KEY) ?? "[]") as number[];
     return new Set(raw);
   } catch {
     return new Set();
@@ -23,13 +25,13 @@ function readDismissed(): Set<number> {
 export function snoozeLead(leadId: number, hours = 24 * 30): void {
   const map = readSnoozed();
   map[String(leadId)] = Date.now() + hours * 60 * 60 * 1000;
-  localStorage.setItem(SNOOZE_KEY, JSON.stringify(map));
+  writeLocal(SNOOZE_KEY, JSON.stringify(map));
 }
 
 export function dismissLead(leadId: number): void {
   const dismissed = readDismissed();
   dismissed.add(leadId);
-  localStorage.setItem(DISMISS_KEY, JSON.stringify([...dismissed]));
+  writeLocal(DISMISS_KEY, JSON.stringify([...dismissed]));
 }
 
 export function isLeadHidden(leadId: number): boolean {
