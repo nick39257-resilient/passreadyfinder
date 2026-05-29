@@ -32,12 +32,15 @@ async function runJobBody(
 
   switch (type) {
     case "find": {
+      const findParams = params as FindJobParams | undefined;
       await updateJob(jobId, {
         status: "running",
-        progress: "Finding FSA leads and enriching via OSM…",
+        progress: findParams?.fullResync
+          ? "Full FSA rescan (all matching takeaways)…"
+          : "Checking FSA for rating changes since last sync…",
       });
       return runFindLeadsJob({
-        segmentation: params as FindJobParams | undefined,
+        segmentation: findParams,
       });
     }
     case "draft": {

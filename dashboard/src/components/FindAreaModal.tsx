@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 export interface FindAreaForm {
   area: string;
   postcodePrefix: string;
+  fullResync: boolean;
 }
 
 export function FindAreaModal({
@@ -22,11 +23,13 @@ export function FindAreaModal({
 }) {
   const [area, setArea] = useState(initialArea);
   const [postcodePrefix, setPostcodePrefix] = useState(initialPostcodePrefix);
+  const [fullResync, setFullResync] = useState(false);
 
   useEffect(() => {
     if (open) {
       setArea(initialArea);
       setPostcodePrefix(initialPostcodePrefix);
+      setFullResync(false);
     }
   }, [open, initialArea, initialPostcodePrefix]);
 
@@ -45,10 +48,10 @@ export function FindAreaModal({
         className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-bold text-slate-50">Find takeaways in area</h2>
+        <h2 className="text-lg font-bold text-slate-50">Check FSA changes</h2>
         <p className="mt-2 text-sm text-slate-400">
-          Type a local authority, town, or county (e.g. Lancashire). We’ll pick the closest FSA
-          match and pull worst ratings first (up to 2★), then enrich contact details.
+          Free FSA sync — after your first run, only takeaways with a new inspection date
+          are imported. OSM enriches changed leads only (no Google).
         </p>
 
         <label className="mt-4 block">
@@ -85,6 +88,19 @@ export function FindAreaModal({
           </span>
         </label>
 
+        <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={fullResync}
+            onChange={(e) => setFullResync(e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-slate-600"
+          />
+          <span className="text-xs leading-snug text-slate-400">
+            <span className="font-semibold text-slate-300">Full rescan</span> — re-import all
+            matching takeaways (slower). Leave off for changes-only.
+          </span>
+        </label>
+
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -101,11 +117,12 @@ export function FindAreaModal({
               onConfirm({
                 area: area.trim(),
                 postcodePrefix: postcodePrefix.trim(),
+                fullResync,
               })
             }
             className="min-h-[48px] rounded-xl bg-sky-600 text-sm font-bold text-white disabled:opacity-50"
           >
-            {busy ? "Finding…" : "Find & refresh"}
+            {busy ? "Checking…" : fullResync ? "Full rescan" : "Check changes"}
           </button>
         </div>
       </div>

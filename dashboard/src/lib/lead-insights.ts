@@ -5,6 +5,7 @@ export type PriorityTier = "high" | "medium" | "low";
 
 export type LeadFilterKey =
   | "all"
+  | "changed"
   | "needs_eyes"
   | "contactable"
   | "new"
@@ -76,6 +77,11 @@ export function countHighPriorityLeads(leads: ApiLead[]): number {
 
 export function matchesLeadFilter(lead: ApiLead, filter: LeadFilterKey): boolean {
   switch (filter) {
+    case "changed":
+      return (
+        Boolean(lead.recentlyChanged) &&
+        (lead.status === "new" || lead.status === "drafted")
+      );
     case "needs_eyes":
       return (
         lead.status === "drafted" &&

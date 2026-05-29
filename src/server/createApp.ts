@@ -31,6 +31,11 @@ import {
   setLeadStatus,
 } from "../engine/store/leads-repository.js";
 import { fetchAuthorities } from "../engine/finder/authorities.js";
+import {
+  formatSyncStatusLabel,
+  leadChangedSinceSync,
+} from "../engine/sync/sync-label.js";
+import { getLastSyncTimestamp } from "../engine/sync/fsa-sync-state.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "../engine/enrich/lead-email.js";
 import {
   getContactDiscoveryApi,
@@ -210,8 +215,23 @@ export async function createApp(options?: {
     }
   });
 
+  app.get("/api/sync/status", async (_req, res) => {
+    try {
+      const lastSyncAt = await getLastSyncTimestamp();
+      res.json({
+        lastSyncAt,
+        hasInitialSync: Boolean(lastSyncAt),
+        label: formatSyncStatusLabel(lastSyncAt),
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch sync status" });
+    }
+  });
+
   app.get("/api/leads", async (_req, res) => {
     try {
+      const lastSyncAt = await getLastSyncTimestamp();
       const rows = await getAllLeads();
       let summaries = new Map<number, { contactScore: number; contactable: boolean }>();
       try {
@@ -220,19 +240,30 @@ export async function createApp(options?: {
         console.error("Contact discovery summaries unavailable:", summaryErr);
       }
       const leads = await Promise.all(
-        rows.map((row) => {
+        rows.map(async (row) => {
           const summary = summaries.get(row.id);
-          return mapLeadRowToApiLead(row, {
+          const mapped = await mapLeadRowToApiLead(row, {
             includeComparables: false,
             contactScore: summary?.contactScore ?? 0,
             contactable:
               summary?.contactable ??
               Boolean(row.email?.trim() || row.phone?.trim()),
           });
+          return {
+            ...mapped,
+            recentlyChanged: leadChangedSinceSync(row.updated_at, lastSyncAt),
+          };
         }),
       );
       leads.sort((a, b) => b.riskScore - a.riskScore || b.id - a.id);
-      res.json({ leads });
+      res.json({
+        leads,
+        sync: {
+          lastSyncAt,
+          hasInitialSync: Boolean(lastSyncAt),
+          label: formatSyncStatusLabel(lastSyncAt),
+        },
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch leads" });
@@ -589,6 +620,7 @@ export async function createApp(options?: {
       const jobId = await createJob("find", {
         area,
         worstFirst,
+        fullResync: req.body?.fullResync === true,
         ...(postcodePrefix ? { postcodePrefix } : {}),
         ...(targetRating ? { targetRating } : {}),
       });

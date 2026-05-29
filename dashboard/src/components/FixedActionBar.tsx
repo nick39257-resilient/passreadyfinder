@@ -55,7 +55,7 @@ export function FixedActionBar({
           className={`${btn} bg-sky-950/80 text-sky-200 ring-1 ring-sky-500/25`}
         >
           <IconFind />
-          <span>Find leads</span>
+          <span>Check changes</span>
         </button>
         <button
           type="button"

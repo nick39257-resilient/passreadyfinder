@@ -9,6 +9,8 @@ export interface FindJobParams {
   postcodePrefix?: string;
   /** Fetch lowest FSA ratings in the area (default true from Command Center). */
   worstFirst?: boolean;
+  /** Ignore last_sync_timestamp and import all matching establishments (expensive). */
+  fullResync?: boolean;
 }
 
 export function parsePostcodePrefix(value: unknown): string | null {

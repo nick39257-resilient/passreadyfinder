@@ -10,7 +10,6 @@ export async function setLastSyncTimestamp(iso: string): Promise<void> {
   await setSetting(LAST_SYNC_TIMESTAMP_KEY, iso);
 }
 
-/** True when establishment should be processed on this delta run */
 export function establishmentChangedSince(
   ratingDate: string | null | undefined,
   lastSyncTimestamp: string | null,

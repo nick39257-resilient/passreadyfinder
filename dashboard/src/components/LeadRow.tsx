@@ -7,6 +7,7 @@ import {
   priorityLabel,
   statusDisplayLabel,
 } from "../lib/lead-insights";
+import { getLeadNextAction } from "../lib/lead-next-action";
 import { statusPillStyles } from "../lib/risk-styles";
 import type { RiskBand } from "./ActionCard";
 import { RiskScoreBadge } from "./RiskScoreBadge";
@@ -20,19 +21,17 @@ function formatDraftPreview(text: string): string {
 export function LeadRow({
   lead,
   onRowTap,
-  onQuickDraft,
+  onAction,
   onSwipeLeft,
   onSwipeRight,
-  canQuickDraft,
   busy,
   busyLabel = "Working…",
 }: {
   lead: ApiLead;
   onRowTap: () => void;
-  onQuickDraft: () => void;
+  onAction: () => void;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
-  canQuickDraft: boolean;
   busy?: boolean;
   busyLabel?: string;
 }) {
@@ -40,6 +39,7 @@ export function LeadRow({
   const tier = priorityFromBand(band);
   const styles = priorityCardStyles[tier];
   const reasons = getLeadReasonBullets(lead, 2);
+  const next = getLeadNextAction(lead);
   const startX = useRef(0);
   const didSwipe = useRef(false);
   const [offset, setOffset] = useState(0);
@@ -63,7 +63,7 @@ export function LeadRow({
         aria-hidden
       >
         <span className={hint === "right" ? "text-emerald-400" : "text-transparent"}>
-          Draft →
+          {next.buttonLabel} →
         </span>
         <span className={hint === "left" ? "text-amber-400" : "text-transparent"}>
           ← Snooze
@@ -124,6 +124,8 @@ export function LeadRow({
                 {lead.businessName}
               </p>
 
+              <p className="mt-1 text-xs leading-snug text-sky-200/90">{next.hint}</p>
+
               <div className="mt-1.5 flex flex-wrap items-center gap-1">
                 <span
                   className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${statusStyle}`}
@@ -135,6 +137,11 @@ export function LeadRow({
                 >
                   {priorityLabel(tier)}
                 </span>
+                {lead.recentlyChanged ? (
+                  <span className="rounded-md bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200 ring-1 ring-violet-500/30">
+                    FSA update
+                  </span>
+                ) : null}
                 {inPostbox ? (
                   <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-500/30">
                     2pm send
@@ -167,18 +174,18 @@ export function LeadRow({
           </div>
         </button>
 
-        {!inPostbox && lead.status !== "contacted" ? (
+        {next.kind !== "wait_send" && lead.status !== "contacted" && lead.status !== "opted_in" ? (
           <button
             type="button"
-            disabled={busy || !canQuickDraft}
+            disabled={busy}
             onClick={(e) => {
               e.stopPropagation();
-              onQuickDraft();
+              onAction();
             }}
             className="flex min-h-[48px] w-full items-center justify-center gap-2 border-t border-slate-800/80 bg-slate-950/30 text-sm font-bold text-emerald-400 disabled:opacity-40"
           >
-            <span aria-hidden>✎</span>
-            <span>{canQuickDraft ? "Draft message" : "Open for options"}</span>
+            <span aria-hidden>→</span>
+            <span>{next.buttonLabel}</span>
           </button>
         ) : null}
       </div>

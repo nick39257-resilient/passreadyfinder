@@ -39,6 +39,8 @@ export interface PipelineResult {
   pagesFetched: number;
   lastSyncTimestamp: string | null;
   syncTimestampUpdated: boolean;
+  deltaMode?: boolean;
+  fullResync?: boolean;
 }
 
 interface FetchLeadsResult {
@@ -141,7 +143,9 @@ export async function runFindPipeline(options?: {
   await runMigrations();
 
   const syncStartedAt = new Date().toISOString();
-  const lastSyncTimestamp = await getLastSyncTimestamp();
+  const storedLastSync = await getLastSyncTimestamp();
+  const fullResync = options?.segmentation?.fullResync === true;
+  const lastSyncTimestamp = fullResync ? null : storedLastSync;
 
   const areaName =
     options?.segmentation?.area ??
@@ -185,7 +189,11 @@ export async function runFindPipeline(options?: {
     : `target ${targetRating}★`;
   const postcodeLabel = postcodePrefix ? `, postcode starts ${postcodePrefix}` : "";
 
-  if (lastSyncTimestamp) {
+  if (fullResync) {
+    console.log(
+      `Full resync: ${areaName}${postcodeLabel}, ${ratingLabel} (ignoring last sync)…`,
+    );
+  } else if (lastSyncTimestamp) {
     console.log(
       `Delta-sync: ${areaName}${postcodeLabel}, RatingDate > ${lastSyncTimestamp}, ${ratingLabel}…`,
     );
@@ -281,9 +289,12 @@ export async function runFindPipeline(options?: {
   let withPhone = 0;
   let withWebsite = 0;
 
-  if (!options?.skipEnrichment) {
-    const toEnrich = scored.slice(0, productConfig.enrichTopN);
-    console.log(`Enriching top ${toEnrich.length} leads via Overpass API…`);
+  if (!options?.skipEnrichment && scored.length > 0) {
+    const enrichLimit = lastSyncTimestamp && !fullResync
+      ? scored.length
+      : productConfig.enrichTopN;
+    const toEnrich = scored.slice(0, enrichLimit);
+    console.log(`Enriching ${toEnrich.length} lead(s) via Overpass API…`);
 
     for (const lead of toEnrich) {
       try {
@@ -346,8 +357,10 @@ export async function runFindPipeline(options?: {
     apiRows,
     deltaRows,
     pagesFetched,
-    lastSyncTimestamp,
+    lastSyncTimestamp: storedLastSync,
     syncTimestampUpdated: true,
+    deltaMode: !fullResync && Boolean(storedLastSync),
+    fullResync,
   };
 }
 

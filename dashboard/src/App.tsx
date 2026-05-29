@@ -43,6 +43,7 @@ import {
 import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
 import { isOutreachHaltedStatus } from "./lib/outreach-halt";
 import { readLocal, removeLocal, writeLocal } from "./lib/safe-storage";
+import { getLeadNextAction } from "./lib/lead-next-action";
 
 const STORAGE_AREA = "passready_area";
 const STORAGE_POSTCODE = "passready_postcode_prefix";
@@ -58,12 +59,13 @@ function canQuickDraftLead(lead: ApiLead): boolean {
 function countByFilter(leads: ApiLead[]): Record<LeadFilterKey, number> {
   const keys: LeadFilterKey[] = [
     "all",
+    "changed",
     "needs_eyes",
+    "approved",
+    "sent",
     "contactable",
     "new",
     "drafted",
-    "approved",
-    "sent",
     "high",
   ];
   return Object.fromEntries(
@@ -100,6 +102,7 @@ export function App() {
   const [postcodeLabel, setPostcodeLabel] = useState(
     () => readLocal(STORAGE_POSTCODE) ?? "",
   );
+  const [syncLabel, setSyncLabel] = useState<string | null>(null);
 
   const applySystemStatus = useCallback((status: SystemStatusResponse) => {
     if (status.pulse !== "error") {
@@ -135,11 +138,12 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
-      const [leadList, status] = await Promise.all([
+      const [{ leads: leadList, sync }, status] = await Promise.all([
         fetchLeads(),
         fetchSystemStatus(),
       ]);
       setLeads(leadList);
+      setSyncLabel(sync?.label ?? null);
       applySystemStatus(status);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
@@ -415,7 +419,60 @@ export function App() {
     }
   };
 
-  const runFindForArea = async (form: { area: string; postcodePrefix: string }) => {
+  const promptAndSetEmail = async (lead: ApiLead): Promise<boolean> => {
+    try {
+      const secret = ensureControlSecret(getControlSecret());
+      const hint = lead.contactDiscovery?.email?.trim() ?? lead.email ?? "";
+      const entered = window.prompt(`Business email for ${lead.businessName}:`, hint);
+      if (!entered?.trim()) {
+        return false;
+      }
+      setBusyId(lead.id);
+      await setLeadEmailApi(lead.id, entered.trim(), secret);
+      await loadAll();
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not save email";
+      setBanner({ tone: "error", message: msg });
+      return false;
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleLeadAction = (lead: ApiLead) => {
+    const kind = getLeadNextAction(lead).kind;
+    switch (kind) {
+      case "draft":
+        void handleQuickDraft(lead);
+        break;
+      case "add_email":
+        void (async () => {
+          const saved = await promptAndSetEmail(lead);
+          if (saved && lead.status === "drafted") {
+            void handleQueuePostbox(lead);
+          } else if (saved) {
+            setBanner({ tone: "success", message: `Email saved for ${lead.businessName}.` });
+          }
+        })();
+        break;
+      case "postbox":
+        void handleQueuePostbox(lead);
+        break;
+      case "find_contacts":
+        void handleDiscoverContacts(lead);
+        break;
+      default:
+        void openLeadDrawer(lead);
+        break;
+    }
+  };
+
+  const runFindForArea = async (form: {
+    area: string;
+    postcodePrefix: string;
+    fullResync: boolean;
+  }) => {
     writeLocal(STORAGE_AREA, form.area);
     if (form.postcodePrefix) {
       writeLocal(STORAGE_POSTCODE, form.postcodePrefix);
@@ -434,15 +491,30 @@ export function App() {
           area: form.area,
           postcodePrefix: form.postcodePrefix || undefined,
           worstFirst: true,
+          fullResync: form.fullResync,
         },
         secret,
       );
       const postcodeNote = form.postcodePrefix ? ` (${form.postcodePrefix}…)` : "";
-      await runBackgroundJob(jobId, `Finding takeaways in ${form.area}${postcodeNote}…`);
-      setBanner({
-        tone: "success",
-        message: `Refreshed takeaways for ${form.area}${postcodeNote} — worst ratings first.`,
+      const label = form.fullResync
+        ? `Full FSA rescan in ${form.area}${postcodeNote}…`
+        : `Checking FSA changes in ${form.area}${postcodeNote}…`;
+      await runBackgroundJob(jobId, label, (result) => {
+        const r = result as { stored?: number; deltaRows?: number; deltaMode?: boolean } | null;
+        const stored = r?.stored ?? 0;
+        if (form.fullResync) {
+          return `${stored} takeaway(s) imported for ${form.area}${postcodeNote}.`;
+        }
+        if (r?.deltaMode) {
+          return stored > 0
+            ? `${stored} new/changed takeaway(s) — tap New/changed filter.`
+            : `No FSA rating changes since last check.`;
+        }
+        return `${stored} takeaway(s) ready in ${form.area}${postcodeNote}.`;
       });
+      if (!form.fullResync) {
+        setLeadFilter("changed");
+      }
     } catch (err) {
       setBanner({
         tone: "error",
@@ -559,7 +631,7 @@ export function App() {
           </p>
           <h1 className="text-xl font-bold tracking-tight text-slate-50">Command Center</h1>
           <p className="mt-0.5 text-xs text-slate-500">
-            Draft a lead → postbox → auto-sends 2pm UK
+            Next action on each row · FSA delta sync (free)
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -629,6 +701,9 @@ export function App() {
       ) : null}
 
       <PostboxStatus queuedCount={filterCounts.approved ?? 0} />
+      {syncLabel ? (
+        <p className="mb-3 text-[11px] leading-snug text-slate-500">{syncLabel}</p>
+      ) : null}
 
       {!loading && !error ? (
         <LeadFilters value={leadFilter} onChange={setLeadFilter} counts={filterCounts} />
@@ -653,7 +728,7 @@ export function App() {
 
       {!loading && !error && visibleLeads.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">
-          No leads match this filter — try All or run Find.
+          No leads match this filter — try All or Check changes.
         </p>
       ) : null}
 
@@ -665,25 +740,20 @@ export function App() {
               lead={lead}
               busy={busyId === lead.id}
               busyLabel={busyId === lead.id ? busyLabel : "Working…"}
-              canQuickDraft={canQuickDraftLead(lead)}
               onRowTap={() => void openLeadDrawer(lead)}
-              onQuickDraft={() => void handleQuickDraft(lead)}
+              onAction={() => handleLeadAction(lead)}
               onSwipeLeft={() => {
                 snoozeLead(lead.id);
                 setHiddenVersion((v) => v + 1);
               }}
-              onSwipeRight={() => {
-                if (canQuickDraftLead(lead)) {
-                  void handleQuickDraft(lead);
-                }
-              }}
+              onSwipeRight={() => handleLeadAction(lead)}
             />
           ))}
         </ul>
       ) : null}
 
       <p className="mt-3 text-center text-[10px] text-slate-600">
-        Tap row for detail · Draft or swipe right · Swipe left snooze
+        Tap row for detail · Swipe right for next action · Swipe left snooze
       </p>
 
       <FixedActionBar

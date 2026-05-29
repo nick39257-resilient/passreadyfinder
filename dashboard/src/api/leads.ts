@@ -62,6 +62,16 @@ export interface ApiLead {
   contactScore: number;
   contactable: boolean;
   contactDiscovery: ApiContactDiscovery | null;
+  recentlyChanged?: boolean;
+}
+
+export interface LeadsListResponse {
+  leads: ApiLead[];
+  sync?: {
+    lastSyncAt: string | null;
+    hasInitialSync: boolean;
+    label: string;
+  };
 }
 
 const VALID_RISK_BANDS = new Set<RiskBand>(["critical", "high", "medium", "low"]);
@@ -90,17 +100,21 @@ function normalizeLead(lead: ApiLead): ApiLead {
       lowRatingUrgency: 0,
       contactGap: 0,
     },
+    recentlyChanged: lead.recentlyChanged ?? false,
   };
 }
 
-export async function fetchLeads(): Promise<ApiLead[]> {
+export async function fetchLeads(): Promise<LeadsListResponse> {
   const res = await fetchWithTimeout("/api/leads");
   if (!res.ok) {
     throw new Error(`Failed to load leads (${res.status})`);
   }
 
-  const data = (await res.json()) as { leads?: ApiLead[] };
-  return (data.leads ?? []).map(normalizeLead);
+  const data = (await res.json()) as { leads?: ApiLead[]; sync?: LeadsListResponse["sync"] };
+  return {
+    leads: (data.leads ?? []).map(normalizeLead),
+    sync: data.sync,
+  };
 }
 
 export async function fetchLeadDetail(leadId: number): Promise<ApiLead> {

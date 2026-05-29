@@ -5,6 +5,7 @@ export interface StartFindJobOptions {
   postcodePrefix?: string;
   worstFirst?: boolean;
   targetRating?: number;
+  fullResync?: boolean;
 }
 
 export async function startFindJob(
@@ -17,6 +18,7 @@ export async function startFindJob(
     body: JSON.stringify({
       area: options.area,
       worstFirst: options.worstFirst ?? true,
+      fullResync: options.fullResync ?? false,
       ...(options.postcodePrefix ? { postcodePrefix: options.postcodePrefix } : {}),
       ...(options.targetRating ? { targetRating: options.targetRating } : {}),
     }),
