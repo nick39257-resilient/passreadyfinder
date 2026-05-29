@@ -4,6 +4,7 @@ import { runSender } from "../engine/sender.js";
 import { getNextUkSendWindowLabel, getUkDateKey, isWithinUkSendWindow } from "../engine/send-schedule.js";
 import { closeDb } from "../engine/store/db.js";
 import { getSetting, setSetting } from "../engine/store/outreach-migrations.js";
+import { countApprovedLeads } from "../engine/store/stats-repository.js";
 
 const LAST_SEND_KEY = "last_send_day_uk";
 
@@ -22,6 +23,7 @@ async function main(): Promise<void> {
       return;
     }
 
+    const approvedBefore = await countApprovedLeads();
     const result = await runSender();
     console.log("---");
     console.log(`Sent:   ${result.sent}`);
@@ -29,8 +31,20 @@ async function main(): Promise<void> {
       console.log(`Errors: ${result.errors.length}`);
     }
 
-    await setSetting(LAST_SEND_KEY, ukDay);
-    console.log(`Recorded UK send window run for ${ukDay}.`);
+    if (result.sent > 0) {
+      await setSetting(LAST_SEND_KEY, ukDay);
+      console.log(`Recorded UK send window run for ${ukDay} (${result.sent} sent).`);
+    } else if (approvedBefore === 0) {
+      console.log("Postbox empty — not recording send day.");
+    } else if (result.sendLocked) {
+      console.log("Send locked — will retry in window if cron runs again.");
+    } else if (result.dailyCapReached) {
+      console.log("Daily cap reached — not recording send day.");
+    } else {
+      console.log(
+        `Postbox had ${approvedBefore} lead(s) but 0 sent — not recording send day (will retry).`,
+      );
+    }
   } finally {
     await closeDb();
   }

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchFunnel, type FunnelStats } from "./api/funnel";
 import { startDraftAllJob, startDraftJob, startFindJob, startSendJob } from "./api/jobs";
 import { fetchAppConfig } from "./api/config";
 import {
@@ -18,23 +17,16 @@ import {
 import { fetchSendPreview, type SendPreviewResponse } from "./api/send";
 import {
   fetchSystemStatus,
-  type DailySendQuota,
   type SystemPulseState,
-  type SystemStatusFeedItem,
   type SystemStatusResponse,
 } from "./api/status";
 import { discoverContactRoutesApi, patchContactDiscoveryApi } from "./api/contact-discovery";
 import { ActionBanner } from "./components/ActionBanner";
-import { ActivityFeed } from "./components/ActivityFeed";
-import { ComplianceBanner } from "./components/ComplianceBanner";
 import { FixedActionBar } from "./components/FixedActionBar";
 import { LeadDetailDrawer } from "./components/LeadDetailDrawer";
 import { LeadFilters } from "./components/LeadFilters";
 import { LeadRow } from "./components/LeadRow";
-import { OpportunityAlert } from "./components/OpportunityAlert";
-import { DailySendStatus } from "./components/DailySendStatus";
 import { PostboxStatus } from "./components/PostboxStatus";
-import { OutreachPipeline } from "./components/OutreachPipeline";
 import { FindAreaModal } from "./components/FindAreaModal";
 import { SendConfirmModal } from "./components/SendConfirmModal";
 import { SystemPulse } from "./components/SystemPulse";
@@ -43,7 +35,7 @@ import {
   getControlSecret,
   setControlSecret,
 } from "./lib/control-secret";
-import { fetchJob, pollJobUntilDone } from "./lib/job-poll";
+import { pollJobUntilDone } from "./lib/job-poll";
 import {
   type LeadFilterKey,
   matchesLeadFilter,
@@ -81,15 +73,10 @@ function countByFilter(leads: ApiLead[]): Record<LeadFilterKey, number> {
 
 export function App() {
   const [leads, setLeads] = useState<ApiLead[]>([]);
-  const [funnel, setFunnel] = useState<FunnelStats | null>(null);
   const [pulse, setPulse] = useState<SystemPulseState>("idle");
   const [pulseLabel, setPulseLabel] = useState("Idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activityFeed, setActivityFeed] = useState<SystemStatusFeedItem[]>([]);
   const [needsReviewCount, setNeedsReviewCount] = useState(0);
-  const [complianceTip, setComplianceTip] = useState("");
-  const [dailyQuota, setDailyQuota] = useState<DailySendQuota | null>(null);
-  const [dailyCapResetDescription, setDailyCapResetDescription] = useState("midnight UTC");
   const [leadFilter, setLeadFilter] = useState<LeadFilterKey>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,14 +95,6 @@ export function App() {
   const [sendPreview, setSendPreview] = useState<SendPreviewResponse | null>(null);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [findModalOpen, setFindModalOpen] = useState(false);
-  const [fastMode, setFastMode] = useState(true);
-  const showHighPriority = useCallback(() => {
-    setLeadFilter("high");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    window.setTimeout(() => {
-      window.scrollTo({ top: 380, behavior: "smooth" });
-    }, 120);
-  }, []);
   const [pulseDismissed, setPulseDismissed] = useState(false);
   const [areaLabel, setAreaLabel] = useState(() => readLocal(STORAGE_AREA) ?? "Preston");
   const [postcodeLabel, setPostcodeLabel] = useState(
@@ -135,11 +114,7 @@ export function App() {
       setPulseLabel(status.pulseLabel);
       setErrorMessage(status.errorMessage);
     }
-    setActivityFeed(status.feed);
     setNeedsReviewCount(status.needsReviewCount);
-    setComplianceTip(status.complianceTip);
-    setDailyQuota(status.dailyQuota);
-    setDailyCapResetDescription(status.dailyCapResetDescription);
   }, [pulseDismissed]);
 
   const clearPulseError = useCallback(() => {
@@ -160,13 +135,11 @@ export function App() {
     setLoading(true);
     setError(null);
     try {
-      const [leadList, funnelStats, status] = await Promise.all([
+      const [leadList, status] = await Promise.all([
         fetchLeads(),
-        fetchFunnel(),
         fetchSystemStatus(),
       ]);
       setLeads(leadList);
-      setFunnel(funnelStats);
       applySystemStatus(status);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
@@ -226,16 +199,24 @@ export function App() {
   );
 
   const runBackgroundJob = useCallback(
-    async (jobId: string, label: string) => {
+    async (
+      jobId: string,
+      label: string,
+      successMessage?: (result: unknown) => string,
+    ) => {
       setActionBusy(true);
       setJobMessage(label);
       try {
         const { promise } = pollJobUntilDone(jobId, (job) => {
           setJobMessage(job.progress || `${label} (${job.status})`);
         });
-        await promise;
+        const job = await promise;
         clearPulseError();
-        setBanner({ tone: "success", message: "Job finished successfully." });
+        const custom = successMessage?.(job.result);
+        setBanner({
+          tone: "success",
+          message: custom ?? "Job finished successfully.",
+        });
         await loadAll();
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Job failed";
@@ -325,14 +306,26 @@ export function App() {
     setBusyLabel("Drafting with AI…");
     setJobMessage(`Drafting ${lead.businessName}… (30–90 sec)`);
     try {
-      await quickDraftLead(lead.id, secret, (progress) => {
+      const outcome = await quickDraftLead(lead.id, secret, (progress) => {
         setJobMessage(progress);
       });
       await loadAll();
-      setBanner({
-        tone: "success",
-        message: `Draft saved for ${lead.businessName}. Tap Send to postbox when ready.`,
-      });
+      if (outcome.lane === "postbox") {
+        setBanner({
+          tone: "success",
+          message: `${lead.businessName} drafted and queued — auto-sends at 2pm UK.`,
+        });
+      } else if (outcome.reason === "missing_business_email") {
+        setBanner({
+          tone: "info",
+          message: `Draft saved. Add an email for ${lead.businessName} to queue for send.`,
+        });
+      } else {
+        setBanner({
+          tone: "info",
+          message: `Draft saved for ${lead.businessName} — open it to review or add to postbox.`,
+        });
+      }
       if (!options?.keepDrawerOpen) {
         setSelectedLead(null);
       }
@@ -393,11 +386,25 @@ export function App() {
     try {
       const secret = ensureControlSecret(getControlSecret());
       setBusyId(lead.id);
+
+      if (!lead.email?.trim()) {
+        const hint = lead.contactDiscovery?.email?.trim() ?? "";
+        const entered = window.prompt(
+          `${lead.businessName} needs a business email before it can send.\n\nEnter email:`,
+          hint,
+        );
+        if (!entered?.trim()) {
+          setBanner({ tone: "info", message: "Add an email to queue this lead for send." });
+          return;
+        }
+        await setLeadEmailApi(lead.id, entered.trim(), secret);
+      }
+
       await queueLeadToPostboxApi(lead.id, secret);
       await loadAll();
       setBanner({
         tone: "success",
-        message: `${lead.businessName} added to postbox. It will send at 2:00 pm UK.`,
+        message: `${lead.businessName} in postbox — auto-sends at 2pm UK (or tap Send now).`,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not queue to postbox";
@@ -493,7 +500,7 @@ export function App() {
           message:
             preview.dailyCapReached
               ? "Daily send cap reached — try again tomorrow."
-              : "Postbox is empty — draft a takeaway and tap Send to postbox.",
+              : "Postbox is empty — draft a lead with an email first.",
         });
         return;
       }
@@ -516,26 +523,21 @@ export function App() {
     try {
       const secret = ensureControlSecret(getControlSecret());
       setSendModalOpen(false);
-      setActionBusy(true);
       const jobId = await startSendJob(
         sendPreview.confirmToken,
         sendPreview.sendableCount,
         secret,
       );
       setSendPreview(null);
-      const job = await fetchJob(jobId);
-      const result = job.result as { queued?: boolean; scheduledForUk?: string } | null;
-      if (result?.queued) {
-        setBanner({
-          tone: "success",
-          message: `Queued for 2pm UK send window (${result.scheduledForUk ?? "today at 2:00 pm UK"}).`,
-        });
-        clearPulseError();
-        await loadAll();
-        setActionBusy(false);
-        return;
-      }
-      await runBackgroundJob(jobId, "Dispatching postbox…");
+      await runBackgroundJob(jobId, "Sending emails…", (result) => {
+        const r = result as { sent?: number; errors?: unknown[] } | null;
+        const sent = r?.sent ?? 0;
+        const errors = r?.errors?.length ?? 0;
+        if (sent > 0) {
+          return `Sent ${sent} email${sent === 1 ? "" : "s"}${errors > 0 ? ` (${errors} failed)` : ""}.`;
+        }
+        return "Send finished — no emails went out (check postbox has emails).";
+      });
     } catch (err) {
       setBanner({
         tone: "error",
@@ -557,8 +559,7 @@ export function App() {
           </p>
           <h1 className="text-xl font-bold tracking-tight text-slate-50">Command Center</h1>
           <p className="mt-0.5 text-xs text-slate-500">
-            {areaLabel}
-            {postcodeLabel ? ` · ${postcodeLabel}` : ""} · worst ratings first
+            Draft a lead → postbox → auto-sends 2pm UK
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -574,14 +575,6 @@ export function App() {
             }}
           />
           <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => setFastMode((v) => !v)}
-              className="min-h-[36px] rounded-lg border border-slate-700/80 bg-slate-900/60 px-2 text-[10px] font-semibold text-slate-400"
-              title="Toggle fast mode"
-            >
-              {fastMode ? "Fast" : "Full"}
-            </button>
             <button
               type="button"
               onClick={() => {
@@ -635,42 +628,7 @@ export function App() {
         </div>
       ) : null}
 
-      {!loading && !error ? (
-        <button
-          type="button"
-          disabled={actionBusy}
-          onClick={() => setFindModalOpen(true)}
-          className="mb-3 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-sky-500/40 bg-sky-950/50 text-sm font-bold text-sky-100 disabled:opacity-50"
-        >
-          Refresh takeaways in area
-        </button>
-      ) : null}
-
-      {!loading && !error ? (
-        <OpportunityAlert
-          leads={leads}
-          onShowHighPriority={() => {
-            showHighPriority();
-          }}
-        />
-      ) : null}
       <PostboxStatus queuedCount={filterCounts.approved ?? 0} />
-      <DailySendStatus dailyQuota={dailyQuota} resetDescription={dailyCapResetDescription} />
-      <div className="mt-6">
-        <OutreachPipeline
-          funnel={funnel}
-          onSelectStage={(filter) => {
-            setLeadFilter(filter);
-            window.scrollTo({ top: 380, behavior: "smooth" });
-          }}
-        />
-        {!fastMode ? (
-          <>
-            <ActivityFeed items={activityFeed} />
-            {complianceTip ? <ComplianceBanner tip={complianceTip} /> : null}
-          </>
-        ) : null}
-      </div>
 
       {!loading && !error ? (
         <LeadFilters value={leadFilter} onChange={setLeadFilter} counts={filterCounts} />
@@ -710,8 +668,6 @@ export function App() {
               canQuickDraft={canQuickDraftLead(lead)}
               onRowTap={() => void openLeadDrawer(lead)}
               onQuickDraft={() => void handleQuickDraft(lead)}
-              onDiscoverContacts={() => void handleDiscoverContacts(lead)}
-              onQueuePostbox={() => void handleQueuePostbox(lead)}
               onSwipeLeft={() => {
                 snoozeLead(lead.id);
                 setHiddenVersion((v) => v + 1);
@@ -727,7 +683,7 @@ export function App() {
       ) : null}
 
       <p className="mt-3 text-center text-[10px] text-slate-600">
-        Tap row for detail · Draft button or swipe right · Swipe left snooze 30d
+        Tap row for detail · Draft or swipe right · Swipe left snooze
       </p>
 
       <FixedActionBar
@@ -888,21 +844,17 @@ export function App() {
               }
             })();
           }}
-          onLoadFullDetail={
-            fastMode
-              ? () => {
-                  void (async () => {
-                    try {
-                      setDrawerLoading(true);
-                      const detail = await fetchLeadDetail(selectedLead.id);
-                      setSelectedLead(detail);
-                    } finally {
-                      setDrawerLoading(false);
-                    }
-                  })();
-                }
-              : undefined
-          }
+          onLoadFullDetail={() => {
+            void (async () => {
+              try {
+                setDrawerLoading(true);
+                const detail = await fetchLeadDetail(selectedLead.id);
+                setSelectedLead(detail);
+              } finally {
+                setDrawerLoading(false);
+              }
+            })();
+          }}
           onSnooze={() => {
             snoozeLead(selectedLead.id);
             setSelectedLead(null);

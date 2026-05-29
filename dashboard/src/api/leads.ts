@@ -112,11 +112,18 @@ export async function fetchLeadDetail(leadId: number): Promise<ApiLead> {
   return normalizeLead(data.lead);
 }
 
+export interface QuickDraftOutcome {
+  draft: string;
+  lane: "postbox" | "needs_eyes";
+  reason?: string;
+  emailDiscovered?: string | null;
+}
+
 export async function quickDraftLead(
   leadId: number,
   secret?: string,
   onProgress?: (message: string) => void,
-): Promise<string> {
+): Promise<QuickDraftOutcome> {
   const res = await fetch(`/api/leads/${leadId}/quick-draft`, {
     method: "POST",
     headers: authHeaders(secret),
@@ -145,15 +152,21 @@ export async function quickDraftLead(
       onProgress?.(job.progress ?? "Drafting with AI…");
     });
     const job = await promise;
-    const result = job.result as { draft?: string } | null;
+    const result = job.result as QuickDraftOutcome | null;
     const draft = result?.draft?.trim() ?? "";
     if (!draft) {
       throw new Error("Quick draft finished but no message was saved");
     }
-    return draft;
+    return {
+      draft,
+      lane: result?.lane ?? "needs_eyes",
+      reason: result?.reason,
+      emailDiscovered: result?.emailDiscovered ?? null,
+    };
   }
 
-  return body.draft?.trim() ?? "";
+  const draft = body.draft?.trim() ?? "";
+  return { draft, lane: "needs_eyes" };
 }
 
 export async function stopLeadSequence(leadId: number, secret?: string): Promise<void> {

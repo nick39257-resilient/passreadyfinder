@@ -30,11 +30,10 @@ export function SendConfirmModal({
         className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-bold text-slate-50">Dispatch postbox</h2>
+        <h2 className="text-lg font-bold text-slate-50">Send postbox now</h2>
         <p className="mt-2 text-sm text-slate-300">
-          <strong className="text-amber-200">{sendableCount}</strong> of{" "}
-          <strong>{approvedCount}</strong> in postbox will go out at{" "}
-          <strong className="text-amber-200">2:00 pm UK</strong> (not immediately).
+          Send <strong className="text-amber-200">{sendableCount}</strong> of{" "}
+          <strong>{approvedCount}</strong> queued emails right now via Resend.
         </p>
         {dailyCap ? (
           <p className="mt-2 text-xs text-slate-500">
@@ -43,7 +42,7 @@ export function SendConfirmModal({
           </p>
         ) : null}
         <p className="mt-2 text-xs text-slate-500">
-          First-touch emails are plain text (no links). Pacing applies between sends.
+          Or leave them — postbox also auto-sends at 2:00 pm UK daily.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button
@@ -60,7 +59,7 @@ export function SendConfirmModal({
             disabled={busy || sendableCount < 1}
             className="min-h-[48px] rounded-xl bg-amber-600 text-sm font-bold text-white disabled:opacity-50"
           >
-            {busy ? "Queuing…" : "Queue for 2pm UK"}
+            {busy ? "Sending…" : "Send now"}
           </button>
         </div>
       </div>

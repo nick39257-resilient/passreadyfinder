@@ -14,7 +14,6 @@ import {
   createJob,
   createSendConfirmToken,
   getJob,
-  updateJob,
 } from "../engine/store/jobs-repository.js";
 import {
   countApprovedLeads,
@@ -32,7 +31,7 @@ import {
   setLeadStatus,
 } from "../engine/store/leads-repository.js";
 import { fetchAuthorities } from "../engine/finder/authorities.js";
-import { updateLeadEmail } from "../engine/enrich/lead-email.js";
+import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "../engine/enrich/lead-email.js";
 import {
   getContactDiscoveryApi,
   getContactDiscoverySummaries,
@@ -54,8 +53,6 @@ import {
 import { formatRouteError } from "./quick-draft-handler.js";
 import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
 import { startJob } from "./job-runner.js";
-import { getNextUkSendWindowLabel } from "../engine/send-schedule.js";
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, "../..");
 const publicDir = path.join(projectRoot, "public");
@@ -715,21 +712,8 @@ export async function createApp(options?: {
         return;
       }
 
-      const scheduledForUk = getNextUkSendWindowLabel();
-      const jobId = await createJob("send", {
-        mode: "deferred_to_uk_2pm",
-        sendableCount,
-      });
-      await updateJob(jobId, {
-        status: "done",
-        progress: `Queued for UK send window (${scheduledForUk})`,
-        result: {
-          queued: true,
-          sendableCount,
-          scheduledForUk,
-          note: "Approved leads are sent automatically at 2pm UK time.",
-        },
-      });
+      const jobId = await createJob("send", { sendableCount });
+      startJob(jobId, "send");
       res.status(202).json({ jobId });
     } catch (err) {
       console.error(err);
@@ -801,15 +785,19 @@ export async function createApp(options?: {
     }
 
     try {
-      const row = await getLeadById(id);
+      let row = await getLeadById(id);
       if (!row) {
         res.status(404).json({ error: "Lead not found" });
         return;
       }
+      if (!row.email?.trim() && row.website?.trim()) {
+        await tryEnrichLeadEmailFromWebsite(id, row.website);
+        row = (await getLeadById(id)) ?? row;
+      }
       if (!row.email?.trim()) {
         res.status(409).json({
           error:
-            "No business email on file for this takeaway. Run Find leads (enrichment) or wait until a website email is discovered before adding to postbox.",
+            "No business email yet — open the lead, add an email, then tap Send to postbox.",
         });
         return;
       }

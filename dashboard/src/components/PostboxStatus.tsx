@@ -30,11 +30,11 @@ export function PostboxStatus({
       </div>
       <p className="mt-1 text-xs leading-snug text-slate-400">
         {empty ? (
-          <>Draft a takeaway, then tap <span className="text-slate-300">Send to postbox</span>.</>
+          <>Tap <span className="text-slate-300">Draft message</span> on a lead — good drafts with an email auto-queue here.</>
         ) : (
           <>
-            <span className="font-medium text-slate-300">Dispatches {nextDispatchLabel}</span>
-            <span className="text-slate-500"> · then check the Sent tab for replies</span>
+            <span className="font-medium text-slate-300">Auto-sends today at 2:00 pm UK</span>
+            <span className="text-slate-500"> · or tap Send now in the bar below</span>
           </>
         )}
       </p>

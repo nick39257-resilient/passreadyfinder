@@ -72,8 +72,8 @@ async function runJobBody(
         status: "running",
         progress: "Quick draft (ConsultantTip + Gemini)…",
       });
-      const draft = await quickDraftLeadById(leadId);
-      return { draft, leadId };
+      const result = await quickDraftLeadById(leadId);
+      return result;
     }
     case "contact_discovery": {
       const leadId = Number((params as { leadId?: number } | null)?.leadId);

@@ -321,11 +321,11 @@ export function LeadDetailDrawer({
             </button>
             <button
               type="button"
-              disabled={busy || lead.status !== "drafted" || !lead.email?.trim()}
+              disabled={busy || isInPostbox || lead.status !== "drafted"}
               onClick={onQueuePostbox}
               className="min-h-[52px] rounded-xl border border-amber-500/40 bg-amber-950/30 text-sm font-bold text-amber-100 disabled:opacity-50"
             >
-              {isInPostbox ? "In postbox" : "Send to postbox"}
+              {isInPostbox ? "In postbox (2pm)" : "Add to postbox"}
             </button>
             <button
               type="button"

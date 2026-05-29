@@ -17,15 +17,10 @@ function formatDraftPreview(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-const actionBtn =
-  "flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-bold leading-tight disabled:opacity-40";
-
 export function LeadRow({
   lead,
   onRowTap,
   onQuickDraft,
-  onQueuePostbox,
-  onDiscoverContacts,
   onSwipeLeft,
   onSwipeRight,
   canQuickDraft,
@@ -35,8 +30,6 @@ export function LeadRow({
   lead: ApiLead;
   onRowTap: () => void;
   onQuickDraft: () => void;
-  onQueuePostbox?: () => void;
-  onDiscoverContacts?: () => void;
   onSwipeLeft: () => void;
   onSwipeRight: () => void;
   canQuickDraft: boolean;
@@ -53,9 +46,8 @@ export function LeadRow({
   const [hint, setHint] = useState<"left" | "right" | null>(null);
 
   const statusStyle = statusPillStyles[lead.status] ?? "bg-slate-700 text-slate-200";
-  const canQueuePostbox = lead.status === "drafted" && Boolean(lead.email?.trim());
   const showDraftPreview = lead.status === "drafted" && Boolean(lead.draftPreview?.trim());
-  const contactScore = lead.contactScore ?? 0;
+  const inPostbox = lead.status === "approved";
 
   return (
     <li
@@ -71,10 +63,10 @@ export function LeadRow({
         aria-hidden
       >
         <span className={hint === "right" ? "text-emerald-400" : "text-transparent"}>
-          Quick draft →
+          Draft →
         </span>
         <span className={hint === "left" ? "text-amber-400" : "text-transparent"}>
-          ← Snooze 30d
+          ← Snooze
         </span>
       </div>
 
@@ -143,9 +135,9 @@ export function LeadRow({
                 >
                   {priorityLabel(tier)}
                 </span>
-                {contactScore > 0 ? (
-                  <span className="rounded-md bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-200 ring-1 ring-sky-500/30">
-                    Contact {contactScore}
+                {inPostbox ? (
+                  <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-500/30">
+                    2pm send
                   </span>
                 ) : null}
               </div>
@@ -175,25 +167,7 @@ export function LeadRow({
           </div>
         </button>
 
-        <div className="flex border-t border-slate-800/80 bg-slate-950/30">
-          {onDiscoverContacts ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={(e) => {
-                e.stopPropagation();
-                onDiscoverContacts();
-              }}
-              title="Find contact routes"
-              className={`${actionBtn} border-r border-slate-800/80 text-sky-200`}
-            >
-              <span className="text-base leading-none" aria-hidden>
-                🔍
-              </span>
-              <span>Contact</span>
-            </button>
-          ) : null}
-
+        {!inPostbox && lead.status !== "contacted" ? (
           <button
             type="button"
             disabled={busy || !canQuickDraft}
@@ -201,39 +175,12 @@ export function LeadRow({
               e.stopPropagation();
               onQuickDraft();
             }}
-            title={canQuickDraft ? "Quick-draft with AI" : "Open lead for follow-up options"}
-            className={`${actionBtn} border-r border-slate-800/80 text-emerald-400`}
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 border-t border-slate-800/80 bg-slate-950/30 text-sm font-bold text-emerald-400 disabled:opacity-40"
           >
-            <span className="text-base leading-none" aria-hidden>
-              ✎
-            </span>
-            <span>Draft</span>
+            <span aria-hidden>✎</span>
+            <span>{canQuickDraft ? "Draft message" : "Open for options"}</span>
           </button>
-
-          {onQueuePostbox ? (
-            <button
-              type="button"
-              disabled={busy || !canQueuePostbox}
-              onClick={(e) => {
-                e.stopPropagation();
-                onQueuePostbox();
-              }}
-              title={
-                canQueuePostbox
-                  ? "Send to postbox"
-                  : lead.status !== "drafted"
-                    ? "Only drafted leads can be queued"
-                    : "Needs a business email before postbox"
-              }
-              className={`${actionBtn} text-amber-200`}
-            >
-              <span className="text-base leading-none" aria-hidden>
-                📮
-              </span>
-              <span>Postbox</span>
-            </button>
-          ) : null}
-        </div>
+        ) : null}
       </div>
     </li>
   );

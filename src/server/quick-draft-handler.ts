@@ -3,8 +3,11 @@ import {
   createLlmClient,
   extractCity,
   generateDraftForLead,
+  routeDraftAfterSave,
   saveDraftMessage,
+  type LeadForDraft,
 } from "../engine/drafter.js";
+import { tryEnrichLeadEmailFromWebsite } from "../engine/enrich/lead-email.js";
 import { buildDraftVariables } from "../engine/intelligence/draft-variables.js";
 import { ensureLeadFsaScores } from "../engine/finder/fsa-detail.js";
 import {
@@ -36,11 +39,18 @@ export function formatRouteError(err: unknown): string {
   return String(err);
 }
 
-export async function quickDraftLeadById(leadId: number): Promise<string> {
+export interface QuickDraftResult {
+  draft: string;
+  lane: "postbox" | "needs_eyes";
+  reason?: string;
+  emailDiscovered?: string | null;
+}
+
+export async function quickDraftLeadById(leadId: number): Promise<QuickDraftResult> {
   await runMigrations();
   assertDraftEnv();
 
-  const row = await getLeadById(leadId);
+  let row = await getLeadById(leadId);
   if (!row) {
     throw new Error("Lead not found");
   }
@@ -52,6 +62,14 @@ export async function quickDraftLeadById(leadId: number): Promise<string> {
     throw new Error(
       "Lead already contacted — mark as replied before generating a follow-up draft",
     );
+  }
+
+  let emailDiscovered: string | null = null;
+  if (!row.email?.trim() && row.website?.trim()) {
+    emailDiscovered = await tryEnrichLeadEmailFromWebsite(leadId, row.website);
+    if (emailDiscovered) {
+      row = (await getLeadById(leadId)) ?? row;
+    }
   }
 
   const [competitors, localPassReadyCount] = await Promise.all([
@@ -71,7 +89,7 @@ export async function quickDraftLeadById(leadId: number): Promise<string> {
   }
 
   const consultantTip = resolveConsultantTip(fsaScores);
-  const leadForDraft = {
+  const leadForDraft: LeadForDraft = {
     id: row.id,
     business_name: row.business_name,
     address: row.address,
@@ -105,11 +123,18 @@ export async function quickDraftLeadById(leadId: number): Promise<string> {
   );
 
   await saveDraftMessage(leadId, draft);
-  return draft;
+  const routed = await routeDraftAfterSave({ lead: leadForDraft, draft });
+
+  return {
+    draft,
+    lane: routed.lane,
+    reason: routed.lane === "needs_eyes" ? routed.reason : undefined,
+    emailDiscovered,
+  };
 }
 
 /** Mark a reply and regenerate a follow-up draft that may include the WhatsApp link. */
-export async function markLeadRepliedAndDraftFollowUp(leadId: number): Promise<string> {
+export async function markLeadRepliedAndDraftFollowUp(leadId: number): Promise<QuickDraftResult> {
   await runMigrations();
   assertDraftEnv();
 

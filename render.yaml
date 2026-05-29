@@ -109,7 +109,7 @@ services:
     plan: starter
     repo: https://github.com/nick39257-resilient/passreadyfinder
     branch: main
-    schedule: "0 * * * *"
+    schedule: "5,20,35,50 13,14 * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install
     startCommand: npm run send-cron
     envVars:

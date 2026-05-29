@@ -1,6 +1,7 @@
 const UK_TIMEZONE = "Europe/London";
 const SEND_HOUR_UK = 14;
-const SEND_WINDOW_MINUTES = 10;
+/** Full hour so hourly Render cron reliably hits the window (BST/GMT). */
+const SEND_WINDOW_MINUTES = 60;
 
 function getUkDateParts(now: Date): { year: number; month: number; day: number; hour: number; minute: number } {
   const parts = new Intl.DateTimeFormat("en-GB", {

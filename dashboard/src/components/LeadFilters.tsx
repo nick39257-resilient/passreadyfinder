@@ -2,13 +2,9 @@ import type { LeadFilterKey } from "../lib/lead-insights";
 
 const FILTERS: { key: LeadFilterKey; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "needs_eyes", label: "Needs Eyes" },
-  { key: "contactable", label: "Contactable" },
-  { key: "new", label: "New" },
-  { key: "drafted", label: "Drafted" },
+  { key: "needs_eyes", label: "Needs you" },
   { key: "approved", label: "Postbox" },
   { key: "sent", label: "Sent" },
-  { key: "high", label: "High priority" },
 ];
 
 export function LeadFilters({
@@ -40,7 +36,7 @@ export function LeadFilters({
             >
               {f.label}
               <span className={`ml-1 tabular-nums ${active ? "text-emerald-100" : "text-slate-500"}`}>
-                {counts[f.key]}
+                {counts[f.key] ?? 0}
               </span>
             </button>
           );
