@@ -16,7 +16,7 @@ export function leadChangedSinceSync(
 
 export function formatSyncStatusLabel(lastSyncAt: string | null): string {
   if (!lastSyncAt) {
-    return "No FSA sync yet — first check imports matching takeaways";
+    return "No FSA sync yet — run Check changes (UK) to find mailable takeaways";
   }
   const when = new Date(lastSyncAt);
   if (Number.isNaN(when.getTime())) {

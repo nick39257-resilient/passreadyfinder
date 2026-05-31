@@ -98,7 +98,7 @@ export function App() {
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [findModalOpen, setFindModalOpen] = useState(false);
   const [pulseDismissed, setPulseDismissed] = useState(false);
-  const [areaLabel, setAreaLabel] = useState(() => readLocal(STORAGE_AREA) ?? "Preston");
+  const [areaLabel, setAreaLabel] = useState(() => readLocal(STORAGE_AREA) ?? "UK");
   const [postcodeLabel, setPostcodeLabel] = useState(
     () => readLocal(STORAGE_POSTCODE) ?? "",
   );
@@ -631,7 +631,7 @@ export function App() {
           </p>
           <h1 className="text-xl font-bold tracking-tight text-slate-50">Command Center</h1>
           <p className="mt-0.5 text-xs text-slate-500">
-            Next action on each row · FSA delta sync (free)
+            UK takeaways with email · ≤4★ · 30/day send cap
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
@@ -728,7 +728,7 @@ export function App() {
 
       {!loading && !error && visibleLeads.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">
-          No leads match this filter — try All or Check changes.
+          No mailable takeaways match this filter — run Check changes (UK) or try All.
         </p>
       ) : null}
 
@@ -765,7 +765,7 @@ export function App() {
 
       <FindAreaModal
         open={findModalOpen}
-        initialArea={readLocal(STORAGE_AREA) ?? "Preston"}
+        initialArea={readLocal(STORAGE_AREA) ?? "UK"}
         initialPostcodePrefix={readLocal(STORAGE_POSTCODE) ?? ""}
         onConfirm={(form) => void runFindForArea(form)}
         onCancel={() => setFindModalOpen(false)}

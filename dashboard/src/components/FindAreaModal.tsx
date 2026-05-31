@@ -50,24 +50,25 @@ export function FindAreaModal({
       >
         <h2 className="text-lg font-bold text-slate-50">Check FSA changes</h2>
         <p className="mt-2 text-sm text-slate-400">
-          Free FSA sync — after your first run, only takeaways with a new inspection date
-          are imported. OSM enriches changed leads only (no Google).
+          UK-wide takeaway sync (≤4★). Only takeaways with a discoverable email appear in your
+          list. Delta mode checks all councils — first run can take a while.
         </p>
 
         <label className="mt-4 block">
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Area (authority / town / county)
+            Area
           </span>
           <input
             type="text"
             value={area}
             onChange={(e) => setArea(e.target.value)}
-            placeholder="Preston or Lancashire"
+            placeholder="UK"
             className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-base text-slate-100 outline-none focus:ring-2 focus:ring-sky-500/40"
             autoComplete="off"
           />
           <span className="mt-1 block text-[11px] text-slate-500">
-            Tip: “Lancashire” will search multiple councils (Preston, Lancaster City, etc.).
+            Use <span className="font-semibold text-slate-400">UK</span> for all councils, or a town
+            / county (e.g. Preston, Lancashire).
           </span>
         </label>
 

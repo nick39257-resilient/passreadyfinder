@@ -10,8 +10,8 @@ import {
   establishmentToRawLead,
   iterateEstablishmentPages,
   resolveBusinessTypeIds,
-  resolveLocalAuthorityId,
 } from "./finder/fsa-finder.js";
+import { resolveAuthoritiesForFind, isUkWideArea } from "./finder/find-area.js";
 import { fetchEstablishmentScores } from "./finder/fsa-detail.js";
 import { isRateLimited } from "./rate-limit-queue.js";
 import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
@@ -77,7 +77,8 @@ function matchesPostcodePrefix(postcode: string, prefix: string | undefined): bo
 }
 
 async function fetchLeadsWithDeltaSync(options: {
-  localAuthorityName: string;
+  localAuthorityId: number;
+  authorityLabel: string;
   businessTypeIds: number[];
   targetRating: number;
   worstFirst: boolean;
@@ -86,7 +87,8 @@ async function fetchLeadsWithDeltaSync(options: {
   lastSyncTimestamp: string | null;
 }): Promise<FetchLeadsResult> {
   const {
-    localAuthorityName,
+    localAuthorityId,
+    authorityLabel,
     businessTypeIds,
     targetRating,
     worstFirst,
@@ -94,7 +96,6 @@ async function fetchLeadsWithDeltaSync(options: {
     postcodePrefix,
     lastSyncTimestamp,
   } = options;
-  const localAuthorityId = await resolveLocalAuthorityId(localAuthorityName);
   const seen = new Map<number, RawLead>();
   let apiRows = 0;
   let deltaRows = 0;
@@ -104,7 +105,7 @@ async function fetchLeadsWithDeltaSync(options: {
     for await (const page of iterateEstablishmentPages(localAuthorityId, businessTypeId)) {
       pagesFetched++;
       console.log(
-        `  /Establishments page ${page.pageNumber}/${page.totalPages} (type ${businessTypeId})…`,
+        `  ${authorityLabel}: page ${page.pageNumber}/${page.totalPages} (type ${businessTypeId})…`,
       );
       apiRows += page.establishments.length;
 
@@ -151,28 +152,9 @@ export async function runFindPipeline(options?: {
     options?.segmentation?.area ??
     (productConfig.area.mode === "localAuthority"
       ? productConfig.area.localAuthorityName
-      : "Preston");
-  const countyBundles: Record<string, string[]> = {
-    lancashire: [
-      "Preston",
-      "South Ribble",
-      "Chorley",
-      "Lancaster City",
-      "Fylde",
-      "Wyre",
-      "Ribble Valley",
-      "Pendle",
-      "Burnley",
-      "Hyndburn",
-      "Rossendale",
-      "West Lancashire",
-      "Blackpool",
-      "Blackburn with Darwen",
-    ],
-  };
-  const authorityNames =
-    countyBundles[areaName.trim().toLowerCase()] ?? [areaName];
-  const worstFirst = options?.segmentation?.worstFirst ?? false;
+      : "UK");
+  const authorityNames = await resolveAuthoritiesForFind(areaName);
+  const worstFirst = options?.segmentation?.worstFirst ?? true;
   const maxRating = productConfig.maxRating;
   const targetRating = options?.segmentation?.targetRating ?? maxRating;
   const postcodePrefix = options?.segmentation?.postcodePrefix;
@@ -189,17 +171,21 @@ export async function runFindPipeline(options?: {
     : `target ${targetRating}★`;
   const postcodeLabel = postcodePrefix ? `, postcode starts ${postcodePrefix}` : "";
 
+  const scopeLabel = isUkWideArea(areaName)
+    ? `UK (${authorityNames.length} councils)`
+    : areaName;
+
   if (fullResync) {
     console.log(
-      `Full resync: ${areaName}${postcodeLabel}, ${ratingLabel} (ignoring last sync)…`,
+      `Full resync: ${scopeLabel}${postcodeLabel}, ${ratingLabel} (ignoring last sync)…`,
     );
   } else if (lastSyncTimestamp) {
     console.log(
-      `Delta-sync: ${areaName}${postcodeLabel}, RatingDate > ${lastSyncTimestamp}, ${ratingLabel}…`,
+      `Delta-sync: ${scopeLabel}${postcodeLabel}, RatingDate > ${lastSyncTimestamp}, ${ratingLabel}…`,
     );
   } else {
     console.log(
-      `Initial sync: ${areaName}${postcodeLabel}, ${ratingLabel} (no last_sync_timestamp yet)…`,
+      `Initial sync: ${scopeLabel}${postcodeLabel}, ${ratingLabel} (no last_sync_timestamp yet)…`,
     );
   }
 
@@ -209,9 +195,16 @@ export async function runFindPipeline(options?: {
   let pagesFetched = 0;
 
   try {
-    for (const authorityName of authorityNames) {
+    for (let i = 0; i < authorityNames.length; i++) {
+      const authority = authorityNames[i]!;
+      if (authorityNames.length > 1) {
+        console.log(
+          `Authority ${i + 1}/${authorityNames.length}: ${authority.name}`,
+        );
+      }
       const fetchResult = await fetchLeadsWithDeltaSync({
-        localAuthorityName: authorityName,
+        localAuthorityId: authority.id,
+        authorityLabel: authority.name,
         businessTypeIds,
         targetRating,
         worstFirst,
@@ -290,11 +283,18 @@ export async function runFindPipeline(options?: {
   let withWebsite = 0;
 
   if (!options?.skipEnrichment && scored.length > 0) {
-    const enrichLimit = lastSyncTimestamp && !fullResync
-      ? scored.length
-      : productConfig.enrichTopN;
+    const enrichLimit =
+      lastSyncTimestamp && !fullResync
+        ? scored.length
+        : Math.min(scored.length, productConfig.enrichTopN);
     const toEnrich = scored.slice(0, enrichLimit);
-    console.log(`Enriching ${toEnrich.length} lead(s) via Overpass API…`);
+    if (scored.length > enrichLimit) {
+      console.log(
+        `Enriching top ${enrichLimit} of ${scored.length} lead(s) (enrichTopN cap)…`,
+      );
+    } else {
+      console.log(`Enriching ${toEnrich.length} lead(s) via Overpass API…`);
+    }
 
     for (const lead of toEnrich) {
       try {

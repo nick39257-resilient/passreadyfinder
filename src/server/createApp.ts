@@ -36,6 +36,7 @@ import {
   leadChangedSinceSync,
 } from "../engine/sync/sync-label.js";
 import { getLastSyncTimestamp } from "../engine/sync/fsa-sync-state.js";
+import { isMailableDashboardLead } from "../engine/lead-display-policy.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "../engine/enrich/lead-email.js";
 import {
   getContactDiscoveryApi,
@@ -233,26 +234,38 @@ export async function createApp(options?: {
     try {
       const lastSyncAt = await getLastSyncTimestamp();
       const rows = await getAllLeads();
-      let summaries = new Map<number, { contactScore: number; contactable: boolean }>();
+      let summaries = new Map<
+        number,
+        { contactScore: number; contactable: boolean; email: string | null }
+      >();
       try {
         summaries = await getContactDiscoverySummaries(rows.map((r) => r.id));
       } catch (summaryErr) {
         console.error("Contact discovery summaries unavailable:", summaryErr);
       }
-      const leads = await Promise.all(
+      const mappedLeads = await Promise.all(
         rows.map(async (row) => {
           const summary = summaries.get(row.id);
+          const resolvedEmail = row.email?.trim() || summary?.email?.trim() || null;
           const mapped = await mapLeadRowToApiLead(row, {
             includeComparables: false,
             contactScore: summary?.contactScore ?? 0,
             contactable:
               summary?.contactable ??
-              Boolean(row.email?.trim() || row.phone?.trim()),
+              Boolean(resolvedEmail || row.phone?.trim()),
           });
           return {
             ...mapped,
+            email: resolvedEmail,
             recentlyChanged: leadChangedSinceSync(row.updated_at, lastSyncAt),
           };
+        }),
+      );
+      const leads = mappedLeads.filter((lead) =>
+        isMailableDashboardLead({
+          businessType: lead.businessType,
+          fsaRating: lead.fsaRating,
+          email: lead.email,
         }),
       );
       leads.sort((a, b) => b.riskScore - a.riskScore || b.id - a.id);
@@ -604,7 +617,7 @@ export async function createApp(options?: {
     const worstFirst = req.body?.worstFirst !== false;
 
     if (!area) {
-      res.status(400).json({ error: "area is required (local authority name, e.g. Preston)" });
+      res.status(400).json({ error: "area is required (e.g. UK, Preston, Lancashire)" });
       return;
     }
     if (!worstFirst && !targetRating) {

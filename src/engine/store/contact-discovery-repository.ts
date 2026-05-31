@@ -311,8 +311,8 @@ export async function updateContactDiscoveryManual(
 /** Sync discovered email/phone/website back to leads table when empty or improved. */
 export async function getContactDiscoverySummaries(
   leadIds: number[],
-): Promise<Map<number, { contactScore: number; contactable: boolean }>> {
-  const map = new Map<number, { contactScore: number; contactable: boolean }>();
+): Promise<Map<number, { contactScore: number; contactable: boolean; email: string | null }>> {
+  const map = new Map<number, { contactScore: number; contactable: boolean; email: string | null }>();
   if (leadIds.length === 0) {
     return map;
   }
@@ -338,6 +338,7 @@ export async function getContactDiscoverySummaries(
     map.set(id, {
       contactScore: Number(row.contact_score ?? 0),
       contactable,
+      email: (row.email as string)?.trim() || null,
     });
   }
   return map;

@@ -61,20 +61,6 @@ export function getLeadNextAction(lead: ApiLead): LeadNextAction {
   }
 
   if (lead.status === "new") {
-    if (!lead.email?.trim() && !lead.phone?.trim() && !lead.website?.trim()) {
-      return {
-        kind: "find_contacts",
-        hint: "No contact yet — scan FSA + OSM (free)",
-        buttonLabel: "Find contacts",
-      };
-    }
-    if (!lead.email?.trim() && (lead.website?.trim() || lead.phone?.trim())) {
-      return {
-        kind: "find_contacts",
-        hint: "Find email or phone before drafting",
-        buttonLabel: "Find contacts",
-      };
-    }
     return { kind: "draft", hint: "Ready to draft outreach", buttonLabel: "Draft message" };
   }
 

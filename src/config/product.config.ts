@@ -14,19 +14,19 @@ export type AreaConfig =
 
 export const productConfig = {
   /** FSA BusinessType names — resolved to IDs at runtime via /BusinessTypes */
-  businessTypeNames: ["Takeaway/sandwich shop", "Restaurant/Cafe/Canteen"],
+  businessTypeNames: ["Takeaway/sandwich shop"],
 
-  /** Geographic area to search */
+  /** Geographic area to search (UK = all FSA local authorities) */
   area: {
     mode: "localAuthority",
-    localAuthorityName: "Preston",
+    localAuthorityName: "UK",
   } as AreaConfig,
 
   /** Only keep establishments with numeric FSA rating 0–maxRating (inclusive) */
-  maxRating: 2,
+  maxRating: 4,
 
-  /** Only run OSM enrichment on the top N leads by FSA-only score */
-  enrichTopN: 200,
+  /** Cap OSM/email enrichment per find run when matches exceed this (delta runs usually smaller). */
+  enrichTopN: 500,
 
   /** Scoring weights — see scorer.ts for formula */
   scoring: {
