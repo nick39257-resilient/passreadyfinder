@@ -13,7 +13,41 @@ export type LeadFilterKey =
   | "approved"
   | "sent"
   | "replies"
+  | "call"
+  | "whatsapp"
   | "high";
+
+/** Same follow-up pool as Call — not replied / converted / suppressed. */
+function isOutboundFollowUpCandidate(lead: ApiLead): boolean {
+  if (
+    lead.status === "suppressed" ||
+    lead.status === "replied" ||
+    lead.status === "opted_in" ||
+    lead.status === "trial_started" ||
+    lead.status === "nurture"
+  ) {
+    return false;
+  }
+  if (lead.repliedAt?.trim()) {
+    return false;
+  }
+  return ["new", "drafted", "approved", "contacted"].includes(lead.status);
+}
+
+function hasCallablePhone(phone: string | null | undefined): boolean {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return digits.length >= 10;
+}
+
+/** Phone follow-up — especially after email with no marked reply. */
+export function isCallListLead(lead: ApiLead): boolean {
+  return isOutboundFollowUpCandidate(lead) && hasCallablePhone(lead.phone);
+}
+
+/** WhatsApp follow-up when we have a wa.me link to the business. */
+export function isWhatsAppListLead(lead: ApiLead): boolean {
+  return isOutboundFollowUpCandidate(lead) && Boolean(lead.whatsappUrl?.trim());
+}
 
 /** True when you marked them as replied or they converted from a reply path. */
 export function isReplyLead(lead: ApiLead): boolean {
@@ -118,6 +152,10 @@ export function matchesLeadFilter(lead: ApiLead, filter: LeadFilterKey): boolean
       );
     case "replies":
       return isReplyLead(lead);
+    case "call":
+      return isCallListLead(lead);
+    case "whatsapp":
+      return isWhatsAppListLead(lead);
     case "high":
       return isHighPriorityLead(lead);
     default:
@@ -133,7 +171,7 @@ export function showLeadInRadarList(lead: ApiLead, filter: LeadFilterKey): boole
   if (filter === "all") {
     return true;
   }
-  if (filter === "sent" || filter === "replies") {
+  if (filter === "sent" || filter === "replies" || filter === "call" || filter === "whatsapp") {
     return matchesLeadFilter(lead, filter);
   }
   if (
@@ -153,7 +191,11 @@ export function emptyStateForFilter(filter: LeadFilterKey): string {
     case "sent":
       return "No sent emails in this view — check Gmail for replies, then open each lead and tap Replied.";
     case "replies":
-      return "No replies marked yet — when someone emails back, open Sent, tap the lead, then tap Replied.";
+      return "No replies yet — Gmail replies auto-appear here when Resend inbound is configured; otherwise mark Replied on Sent.";
+    case "call":
+      return "No phone numbers for open leads — run Find + enrich, or check OSM on lead detail.";
+    case "whatsapp":
+      return "No WhatsApp numbers yet — phones come from Find/OSM; run Discover contacts on a lead for wa.me links from their site.";
     case "approved":
       return "Postbox is empty — approve a draft to queue for sending.";
     case "needs_eyes":

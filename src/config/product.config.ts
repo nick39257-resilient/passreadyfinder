@@ -77,6 +77,9 @@ export const productConfig = {
     /** Pre-filled WhatsApp opener — [Business Name] replaced per lead */
     whatsappPrefillTemplate:
       "Curious if this might help [Business Name] like it did our kitchen — happy to show you",
+    /** Outbound wa.me to the business (their number) — [Business Name] replaced per lead */
+    whatsappOutboundTemplate:
+      "Hi — we built a simple food-safety log for our kitchen and it helped before inspection. Would it be useful for [Business Name]?",
     /** Leads to draft per `npm run draft` run */
     draftBatchSize: 5,
     /** Minimum ms between Gemini calls (serialized queue). */

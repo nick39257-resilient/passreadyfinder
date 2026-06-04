@@ -65,6 +65,8 @@ export interface ApiLead {
   recentlyChanged?: boolean;
   contactedAt?: string | null;
   repliedAt?: string | null;
+  /** Tap-to-chat wa.me link to the business (server-built). */
+  whatsappUrl?: string | null;
 }
 
 export interface LeadsListResponse {
@@ -103,6 +105,7 @@ function normalizeLead(lead: ApiLead): ApiLead {
       contactGap: 0,
     },
     recentlyChanged: lead.recentlyChanged ?? false,
+    whatsappUrl: lead.whatsappUrl ?? null,
   };
 }
 

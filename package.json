@@ -18,6 +18,7 @@
     "enrich": "npx tsx src/engine/enricher.ts",
     "enrich-emails": "tsx src/cli/enrich-emails.ts",
     "diagnose": "tsx src/cli/diagnose-outreach.ts",
+    "call-list": "tsx src/cli/call-list.ts",
     "smoke": "tsx scripts/smoke-test.mjs",
     "test:outreach-exclusions": "tsx scripts/test-outreach-exclusions.mjs",
     "test:pulse-status": "tsx scripts/test-pulse-status.mjs",

@@ -5,6 +5,7 @@
  */
 import "dotenv/config";
 import { getDeliverabilityStatus } from "../engine/deliverability.js";
+import { buildOutboundWaMeLink } from "../engine/whatsapp-link.js";
 import { getLeadStatusCounts, getFunnelStats } from "../engine/store/stats-repository.js";
 import { closeDb, getDb, runMigrations } from "../engine/store/db.js";
 
@@ -25,6 +26,21 @@ async function main(): Promise<void> {
   const counts = await getLeadStatusCounts();
   const funnel = await getFunnelStats();
   const deliverability = await getDeliverabilityStatus();
+
+  const rowsForWa = await db.execute(`
+    SELECT business_name, phone, status, replied_at
+    FROM leads
+  `);
+  let whatsappReady = 0;
+  for (const row of rowsForWa.rows) {
+    const url = buildOutboundWaMeLink({
+      businessName: String(row.business_name ?? ""),
+      phone: row.phone as string | null,
+    });
+    if (url) {
+      whatsappReady++;
+    }
+  }
 
   const contact = await db.execute(`
     SELECT
@@ -66,6 +82,7 @@ async function main(): Promise<void> {
   line("Total leads", total);
   line("With business email", withEmail, pct(withEmail, total));
   line("With phone (OSM)", withPhone, pct(withPhone, total));
+  line("WhatsApp-ready (wa.me)", whatsappReady, pct(whatsappReady, total));
   line("With website", withWebsite, pct(withWebsite, total));
   line("With draft text", withDraft);
   line("Send-ready (approved+email)", sendReady);

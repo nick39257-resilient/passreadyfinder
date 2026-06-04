@@ -69,6 +69,8 @@ function countByFilter(
     "approved",
     "sent",
     "replies",
+    "call",
+    "whatsapp",
     "contactable",
     "new",
     "drafted",
@@ -755,6 +757,8 @@ export function App() {
                 setHiddenVersion((v) => v + 1);
               }}
               onSwipeRight={() => handleLeadAction(lead)}
+              emphasizePhone={leadFilter === "call"}
+              emphasizeWhatsApp={leadFilter === "whatsapp"}
             />
           ))}
         </ul>

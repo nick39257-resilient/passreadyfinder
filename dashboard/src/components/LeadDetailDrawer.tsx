@@ -121,6 +121,19 @@ export function LeadDetailDrawer({
             <div className="min-w-0 flex-1">
               <h2 className="text-xl font-bold leading-tight">{lead.businessName}</h2>
               <p className="mt-1 text-xs text-slate-500">{lead.postcode}</p>
+              {lead.phone?.trim() ? (
+                <p className="mt-1 text-xs text-slate-400">Phone: {lead.phone.trim()}</p>
+              ) : null}
+              {lead.whatsappUrl ? (
+                <a
+                  href={lead.whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex min-h-[48px] items-center justify-center rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-bold text-white ring-1 ring-emerald-400/40"
+                >
+                  Open WhatsApp
+                </a>
+              ) : null}
               {lead.email ? (
                 <p className="mt-1 text-xs text-emerald-400/90">Email: {lead.email}</p>
               ) : (

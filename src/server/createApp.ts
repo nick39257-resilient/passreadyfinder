@@ -37,6 +37,7 @@ import {
 } from "../engine/sync/sync-label.js";
 import { getLastSyncTimestamp } from "../engine/sync/fsa-sync-state.js";
 import { includeInDashboardList } from "../engine/lead-display-policy.js";
+import { buildOutboundWaMeLink } from "../engine/whatsapp-link.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "../engine/enrich/lead-email.js";
 import {
   getContactDiscoveryApi,
@@ -58,6 +59,7 @@ import {
 } from "../engine/outreach-halt.js";
 import { formatRouteError } from "./quick-draft-handler.js";
 import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
+import { handleResendInboundWebhook } from "./resend-inbound-webhook.js";
 import { startJob } from "./job-runner.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, "../..");
@@ -128,6 +130,15 @@ export async function createApp(options?: {
   await ensureMigrations();
 
   const app = express();
+
+  app.post(
+    "/api/webhooks/resend",
+    express.raw({ type: "application/json" }),
+    (req, res) => {
+      void handleResendInboundWebhook(req, res);
+    },
+  );
+
   app.use(express.json());
 
   app.get("/health", (_req, res) => {
@@ -236,7 +247,13 @@ export async function createApp(options?: {
       const rows = await getAllLeads();
       let summaries = new Map<
         number,
-        { contactScore: number; contactable: boolean; email: string | null }
+        {
+          contactScore: number;
+          contactable: boolean;
+          email: string | null;
+          phone: string | null;
+          whatsapp: string | null;
+        }
       >();
       try {
         summaries = await getContactDiscoverySummaries(rows.map((r) => r.id));
@@ -247,16 +264,25 @@ export async function createApp(options?: {
         rows.map(async (row) => {
           const summary = summaries.get(row.id);
           const resolvedEmail = row.email?.trim() || summary?.email?.trim() || null;
+          const resolvedPhone = row.phone?.trim() || summary?.phone?.trim() || null;
+          const resolvedWhatsapp = summary?.whatsapp?.trim() || null;
           const mapped = await mapLeadRowToApiLead(row, {
             includeComparables: false,
             contactScore: summary?.contactScore ?? 0,
             contactable:
               summary?.contactable ??
-              Boolean(resolvedEmail || row.phone?.trim()),
+              Boolean(resolvedEmail || resolvedPhone),
+          });
+          const whatsappUrl = buildOutboundWaMeLink({
+            businessName: mapped.businessName,
+            phone: resolvedPhone,
+            whatsapp: resolvedWhatsapp,
           });
           return {
             ...mapped,
             email: resolvedEmail,
+            phone: resolvedPhone ?? mapped.phone,
+            whatsappUrl,
             recentlyChanged: leadChangedSinceSync(row.updated_at, lastSyncAt),
           };
         }),
@@ -298,13 +324,23 @@ export async function createApp(options?: {
         return;
       }
       const contactDiscovery = await getContactDiscoveryApi(id);
+      const mapped = await mapLeadRowToApiLead(row, {
+        ensureFsaScores: true,
+        contactScore: contactDiscovery?.contactScore ?? 0,
+        contactable: contactDiscovery?.contactable ?? false,
+        contactDiscovery,
+      });
+      const resolvedPhone = row.phone?.trim() || contactDiscovery?.phone?.trim() || null;
       res.json({
-        lead: await mapLeadRowToApiLead(row, {
-          ensureFsaScores: true,
-          contactScore: contactDiscovery?.contactScore ?? 0,
-          contactable: contactDiscovery?.contactable ?? false,
-          contactDiscovery,
-        }),
+        lead: {
+          ...mapped,
+          phone: resolvedPhone ?? mapped.phone,
+          whatsappUrl: buildOutboundWaMeLink({
+            businessName: mapped.businessName,
+            phone: resolvedPhone,
+            whatsapp: contactDiscovery?.whatsapp ?? null,
+          }),
+        },
       });
     } catch (err) {
       console.error(err);

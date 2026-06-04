@@ -26,6 +26,8 @@ export function LeadRow({
   onSwipeRight,
   busy,
   busyLabel = "Working…",
+  emphasizePhone = false,
+  emphasizeWhatsApp = false,
 }: {
   lead: ApiLead;
   onRowTap: () => void;
@@ -34,6 +36,8 @@ export function LeadRow({
   onSwipeRight: () => void;
   busy?: boolean;
   busyLabel?: string;
+  emphasizePhone?: boolean;
+  emphasizeWhatsApp?: boolean;
 }) {
   const band = lead.riskBand as RiskBand;
   const tier = priorityFromBand(band);
@@ -125,6 +129,28 @@ export function LeadRow({
               </p>
 
               <p className="mt-1 text-xs leading-snug text-sky-200/90">{next.hint}</p>
+
+              {emphasizeWhatsApp && lead.whatsappUrl ? (
+                <a
+                  href={lead.whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-block min-h-[48px] rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-bold text-white ring-1 ring-emerald-400/40"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  WhatsApp {lead.businessName}
+                </a>
+              ) : null}
+
+              {emphasizePhone && lead.phone?.trim() ? (
+                <a
+                  href={`tel:${lead.phone.replace(/\s+/g, "")}`}
+                  className="mt-2 inline-block min-h-[48px] rounded-xl bg-sky-600/90 px-4 py-2.5 text-sm font-bold text-white ring-1 ring-sky-500/50"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Call {lead.phone.trim()}
+                </a>
+              ) : null}
 
               <div className="mt-1.5 flex flex-wrap items-center gap-1">
                 <span

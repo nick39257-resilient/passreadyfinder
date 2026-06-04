@@ -1,5 +1,6 @@
 import type { DeliveryAppStatus } from "../../types/lead.js";
 import type { RawLead } from "../../types/fsa.js";
+import { normalizeOutreachEmail } from "../outreach-halt.js";
 import { getDb } from "./db.js";
 
 export interface LeadUpsertInput extends RawLead {
@@ -246,4 +247,30 @@ export async function countLeads(): Promise<number> {
   const db = getDb();
   const result = await db.execute(`SELECT COUNT(*) as count FROM leads`);
   return Number(result.rows[0].count);
+}
+
+/** Match inbound reply to the business email we previously sent to. */
+export async function findLeadIdByBusinessEmail(email: string): Promise<number | null> {
+  const normalized = normalizeOutreachEmail(email);
+  if (!normalized) {
+    return null;
+  }
+  const db = getDb();
+  const result = await db.execute({
+    sql: `
+      SELECT id
+      FROM leads
+      WHERE LOWER(TRIM(email)) = ?
+      ORDER BY
+        CASE WHEN status = 'contacted' THEN 0 WHEN status = 'approved' THEN 1 ELSE 2 END,
+        contacted_at DESC,
+        updated_at DESC
+      LIMIT 1
+    `,
+    args: [normalized],
+  });
+  if (result.rows.length === 0) {
+    return null;
+  }
+  return Number(result.rows[0].id);
 }
