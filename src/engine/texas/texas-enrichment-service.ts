@@ -1,8 +1,5 @@
-import {
-  canCallApolloToday,
-  findOwnerEmailViaApollo,
-  isApolloConfigured,
-} from "../services/apollo-service.js";
+import { findOwnerEmailViaApollo, isApolloConfigured } from "../services/apollo-service.js";
+import { productConfig } from "../../config/product.config.js";
 import { normalizeOutreachEmail } from "../outreach-halt.js";
 import { runMigrations } from "../store/db.js";
 import {
@@ -20,7 +17,7 @@ import {
 export type TexasApolloEnrichmentResult = {
   leadId: number;
   businessName: string;
-  outcome: "email_found" | "no_match" | "skipped_has_email" | "apollo_cap_reached";
+  outcome: "email_found" | "no_match" | "skipped_has_email";
   email: string | null;
   ownerName: string | null;
   detail: string;
@@ -74,17 +71,6 @@ export async function enrichTexasLeadViaApollo(
     };
   }
 
-  if (!(await canCallApolloToday())) {
-    return {
-      leadId: row.id,
-      businessName: row.business_name,
-      outcome: "apollo_cap_reached",
-      email: null,
-      ownerName: null,
-      detail: "apollo_daily_cap",
-    };
-  }
-
   const apollo = await findOwnerEmailViaApollo(texasLeadToApolloInput(row));
 
   if (apollo?.email) {
@@ -122,6 +108,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function apolloSuccessfulFindCap(): number {
+  return productConfig.enrichment.apolloSuccessfulFindCap;
+}
+
 export type TexasApolloBatchSummary = {
   scanned: number;
   emailFound: number;
@@ -136,6 +126,7 @@ export type TexasApolloBatchSummary = {
  */
 export async function runTexasApolloEnrichmentBatch(options?: {
   limit?: number;
+  retryAttempted?: boolean;
 }): Promise<TexasApolloBatchSummary> {
   if (!isApolloConfigured()) {
     throw new Error(
@@ -146,7 +137,9 @@ export async function runTexasApolloEnrichmentBatch(options?: {
   await runMigrations();
 
   const limit = options?.limit ?? texasProductConfig.enrichment.defaultBatchLimit;
-  const leads = await getTexasLeadsNeedingApolloEnrichment(limit);
+  const leads = await getTexasLeadsNeedingApolloEnrichment(limit, {
+    retryAttempted: options?.retryAttempted,
+  });
 
   const summary: TexasApolloBatchSummary = {
     scanned: 0,
@@ -156,13 +149,39 @@ export async function runTexasApolloEnrichmentBatch(options?: {
     capStopped: false,
   };
 
+  const findCap = apolloSuccessfulFindCap();
   console.log(
-    `Texas Apollo enrichment: ${leads.length} lead(s) queued (critical + risk score order, limit ${limit})\n`,
+    `Texas Apollo enrichment: ${leads.length} lead(s) queued (critical + risk score order, limit ${limit})`,
+  );
+  console.log(
+    `Safety cap: stop after ${findCap} successful email find(s); no limit on rows scanned or API no-matches.\n`,
   );
 
   for (let i = 0; i < leads.length; i++) {
+    if (summary.emailFound >= findCap) {
+      summary.capStopped = true;
+      console.log(
+        `\nStopped: ${findCap} successful email find(s) reached (reserve remaining Apollo credits).`,
+      );
+      break;
+    }
+
     const row = leads[i];
-    const result = await enrichTexasLeadViaApollo(row);
+    let result: TexasApolloEnrichmentResult;
+    try {
+      result = await enrichTexasLeadViaApollo(row);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      summary.noMatch++;
+      summary.scanned++;
+      console.log(`— [${row.risk_score}] ${row.business_name}: Apollo error — ${message}`);
+      await markTexasApolloEnrichmentAttempted(row.id).catch(() => undefined);
+      if (i < leads.length - 1) {
+        await sleep(delayMs());
+      }
+      continue;
+    }
+
     summary.scanned++;
 
     if (result.outcome === "email_found") {
@@ -175,12 +194,6 @@ export async function runTexasApolloEnrichmentBatch(options?: {
       console.log(`— [${row.risk_score}] ${result.businessName}: no Apollo match`);
     } else if (result.outcome === "skipped_has_email") {
       summary.skipped++;
-    } else if (result.outcome === "apollo_cap_reached") {
-      summary.capStopped = true;
-      console.log(
-        `\nApollo daily credit cap reached — stopped after ${summary.scanned} lead(s).`,
-      );
-      break;
     }
 
     if (i < leads.length - 1 && !summary.capStopped) {

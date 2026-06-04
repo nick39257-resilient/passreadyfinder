@@ -201,14 +201,18 @@ export async function markTexasApolloEnrichmentAttempted(leadId: number): Promis
  */
 export async function getTexasLeadsNeedingApolloEnrichment(
   limit: number,
+  options?: { retryAttempted?: boolean },
 ): Promise<TexasLeadRow[]> {
   const db = getDb();
+  const attemptedClause = options?.retryAttempted
+    ? ""
+    : "AND apollo_enriched_at IS NULL";
   const result = await db.execute({
     sql: `
       SELECT * FROM texas_leads
       WHERE (email IS NULL OR TRIM(email) = '')
         AND status NOT IN ('EMAIL_SENT', 'FORM_SUBMITTED')
-        AND apollo_enriched_at IS NULL
+        ${attemptedClause}
       ORDER BY
         CASE WHEN intervention_level = 'CRITICAL_INTERVENTION' THEN 0 ELSE 1 END,
         risk_score DESC,

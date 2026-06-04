@@ -144,12 +144,17 @@ export function isApolloConfigured(): boolean {
   return Boolean(apolloApiKey()) && productConfig.enrichment.apolloEnabled;
 }
 
+/** When apolloDailyCap is 0, API lookups are not capped (Texas batch scans full queue). */
 export async function canCallApolloToday(): Promise<boolean> {
   if (!isApolloConfigured()) {
     return false;
   }
+  const cap = productConfig.enrichment.apolloDailyCap;
+  if (!cap || cap <= 0) {
+    return true;
+  }
   const used = await getApolloCreditsUsedToday();
-  return used < productConfig.enrichment.apolloDailyCap;
+  return used < cap;
 }
 
 async function findOwnerEmailViaApolloInner(input: {
@@ -158,10 +163,6 @@ async function findOwnerEmailViaApolloInner(input: {
   postcode: string;
   website?: string | null;
 }): Promise<ApolloOwnerMatch | null> {
-  if (!(await canCallApolloToday())) {
-    return null;
-  }
-
   const city = extractCity(input.address, input.postcode);
   const domain = domainFromWebsite(input.website);
 

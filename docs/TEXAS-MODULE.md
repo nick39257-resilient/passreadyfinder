@@ -46,8 +46,8 @@ Override feed URL: `TEXAS_AUSTIN_INSPECTIONS_URL`.
 - **Service:** `src/engine/texas/texas-enrichment-service.ts` — uses shared `findOwnerEmailViaApollo()` + `APOLLO_API_KEY`
 - **Queue order:** `CRITICAL_INTERVENTION` first, then `risk_score DESC` (mid-70s+ before lower scores)
 - **Matching fields:** `business_name`, address/city/county/zip, optional `website` (domain boost)
-- **One-off run:** `npm run texas-enrich-apollo` or `npm run texas-enrich-apollo -- --limit=50`
-- Respects `apolloDailyCap` (default 3 credits/day; override with `APOLLO_DAILY_CAP`). Skips leads already attempted (`apollo_enriched_at` set).
+- **One-off run:** `npm run texas-enrich-apollo` — add `--retry-attempted` to re-scan prior no-matches after a capped run
+- Scans the full queued batch (no per-row API cap). Stops after `apolloSuccessfulFindCap` successful emails (default 80; `APOLLO_SUCCESSFUL_FIND_CAP`). No-matches log and continue. Skips leads already attempted (`apollo_enriched_at` set).
 
 ## Mobile outreach send
 
