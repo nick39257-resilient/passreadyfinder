@@ -78,6 +78,9 @@ export async function runMigrations(): Promise<void> {
 
   const { runContactDiscoveryMigrations } = await import("./contact-discovery-repository.js");
   await runContactDiscoveryMigrations();
+
+  const { runTexasMigrations } = await import("./texas-migrations.js");
+  await runTexasMigrations();
 }
 
 export async function closeDb(): Promise<void> {

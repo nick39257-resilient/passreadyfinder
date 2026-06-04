@@ -147,7 +147,7 @@ export async function logQueueDrafterResult(result: {
 }
 
 export async function logEngineError(
-  source: "find" | "draft" | "send" | "system",
+  source: "find" | "find_texas" | "draft" | "send" | "system",
   message: string,
   detail?: string,
 ): Promise<void> {

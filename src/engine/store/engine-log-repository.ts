@@ -1,6 +1,6 @@
 import { getDb } from "./db.js";
 
-export type EngineLogSource = "find" | "draft" | "send" | "system";
+export type EngineLogSource = "find" | "find_texas" | "draft" | "send" | "system";
 export type EngineLogLevel = "info" | "error";
 
 export interface EngineLogEntry {

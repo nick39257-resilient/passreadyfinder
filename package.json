@@ -22,6 +22,7 @@
     "test:fsa-finder": "tsx src/engine/finder/fsa-finder.test.ts",
     "test:authorities": "tsx src/engine/finder/authorities.test.ts",
     "test:authorities:live": "tsx src/engine/finder/authorities.test.ts --live",
+    "test:texas": "tsx src/engine/texas/texas-risk-score.test.ts && tsx src/engine/texas/hb2844.test.ts",
     "diagnose": "tsx src/cli/diagnose-outreach.ts",
     "call-list": "tsx src/cli/call-list.ts",
     "smoke": "tsx scripts/smoke-test.mjs",

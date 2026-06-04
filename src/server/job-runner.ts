@@ -1,4 +1,6 @@
 import { runFindLeadsJob } from "../engine/find-leads-job.js";
+import { runFindTexasLeadsJob } from "../engine/find-texas-leads-job.js";
+import type { TexasFindJobParams } from "../types/texas.js";
 import { runQueueDrafter } from "../engine/queue-drafter.js";
 import { runSender } from "../engine/sender.js";
 import { runAutoDraftAll } from "../engine/auto-draft-all.js";
@@ -42,6 +44,16 @@ async function runJobBody(
       return runFindLeadsJob({
         segmentation: findParams,
       });
+    }
+    case "find_texas": {
+      const texasParams = params as TexasFindJobParams | undefined;
+      await updateJob(jobId, {
+        status: "running",
+        progress: texasParams?.mobileOnly
+          ? "Ingesting Texas mobile food units (open data)…"
+          : "Ingesting Texas health inspection open data…",
+      });
+      return runFindTexasLeadsJob({ segmentation: texasParams });
     }
     case "draft": {
       await updateJob(jobId, {

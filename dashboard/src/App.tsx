@@ -46,6 +46,14 @@ import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
 import { isOutreachHaltedStatus } from "./lib/outreach-halt";
 import { readLocal, removeLocal, writeLocal } from "./lib/safe-storage";
 import { getLeadNextAction } from "./lib/lead-next-action";
+import { TexasCommandCenter } from "./components/TexasCommandCenter";
+
+function isTexasCommandCenterRoute(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.location.pathname.includes("/texas");
+}
 
 const STORAGE_AREA = "passready_area";
 const STORAGE_POSTCODE = "passready_postcode_prefix";
@@ -85,6 +93,10 @@ function countByFilter(
 }
 
 export function App() {
+  if (isTexasCommandCenterRoute()) {
+    return <TexasCommandCenter />;
+  }
+
   const [leads, setLeads] = useState<ApiLead[]>([]);
   const [pulse, setPulse] = useState<SystemPulseState>("idle");
   const [pulseLabel, setPulseLabel] = useState("Idle");
@@ -649,6 +661,12 @@ export function App() {
           <p className="mt-0.5 text-xs text-slate-500">
             UK takeaways with email · ≤4★ · 30/day send cap
           </p>
+          <a
+            href="/dashboard/texas"
+            className="mt-2 inline-flex min-h-12 items-center rounded-lg border border-amber-700/60 bg-amber-950/40 px-3 text-xs font-semibold text-amber-200"
+          >
+            Texas Command Center →
+          </a>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <SystemPulse

@@ -62,6 +62,7 @@ import { formatRouteError } from "./quick-draft-handler.js";
 import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
 import { handleResendInboundWebhook } from "./resend-inbound-webhook.js";
 import { startJob } from "./job-runner.js";
+import { mountTexasRoutes } from "./texas-routes.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, "../..");
 const publicDir = path.join(projectRoot, "public");
@@ -141,6 +142,8 @@ export async function createApp(options?: {
   );
 
   app.use(express.json());
+
+  mountTexasRoutes(app, requireControlAuth);
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true });
