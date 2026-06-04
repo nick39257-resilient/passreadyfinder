@@ -63,6 +63,8 @@ export interface ApiLead {
   contactable: boolean;
   contactDiscovery: ApiContactDiscovery | null;
   recentlyChanged?: boolean;
+  contactedAt?: string | null;
+  repliedAt?: string | null;
 }
 
 export interface LeadsListResponse {

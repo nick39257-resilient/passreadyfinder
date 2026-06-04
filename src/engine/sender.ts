@@ -21,7 +21,12 @@ import {
 } from "./store/sender-repository.js";
 import { isEmailSuppressed, normalizeOutreachEmail } from "./outreach-halt.js";
 
-const EMAIL_SUBJECT = "upcoming fsa inspection";
+/** Override in .env — avoid scare-word subjects that hurt opens/spam scores. */
+function outreachEmailSubject(): string {
+  const custom = process.env.OUTREACH_EMAIL_SUBJECT?.trim();
+  if (custom) return custom;
+  return "Quick question about your kitchen records";
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -176,7 +181,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
       const { data, error } = await resend.emails.send({
         from: fromEmail,
         to,
-        subject: EMAIL_SUBJECT,
+        subject: outreachEmailSubject(),
         text,
         ...(html ? { html } : {}),
       });

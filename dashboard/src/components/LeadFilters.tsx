@@ -6,6 +6,7 @@ const FILTERS: { key: LeadFilterKey; label: string }[] = [
   { key: "needs_eyes", label: "Needs you" },
   { key: "approved", label: "Postbox" },
   { key: "sent", label: "Sent" },
+  { key: "replies", label: "Replies" },
 ];
 
 export function LeadFilters({

@@ -1,0 +1,172 @@
+#!/usr/bin/env node
+/**
+ * Outreach funnel health check — run: npm run diagnose
+ * Does not print secrets; reads Turso/local DB only.
+ */
+import "dotenv/config";
+import { getDeliverabilityStatus } from "../engine/deliverability.js";
+import { getLeadStatusCounts, getFunnelStats } from "../engine/store/stats-repository.js";
+import { closeDb, getDb, runMigrations } from "../engine/store/db.js";
+
+function pct(n: number, total: number): string {
+  if (total <= 0) return "0%";
+  return `${Math.round((n / total) * 100)}%`;
+}
+
+function line(label: string, value: number | string, note?: string): void {
+  const pad = label.padEnd(28);
+  console.log(`  ${pad} ${value}${note ? `  — ${note}` : ""}`);
+}
+
+async function main(): Promise<void> {
+  await runMigrations();
+  const db = getDb();
+
+  const counts = await getLeadStatusCounts();
+  const funnel = await getFunnelStats();
+  const deliverability = await getDeliverabilityStatus();
+
+  const contact = await db.execute(`
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN email IS NOT NULL AND TRIM(email) != '' THEN 1 ELSE 0 END) AS with_email,
+      SUM(CASE WHEN phone IS NOT NULL AND TRIM(phone) != '' THEN 1 ELSE 0 END) AS with_phone,
+      SUM(CASE WHEN website IS NOT NULL AND TRIM(website) != '' THEN 1 ELSE 0 END) AS with_website,
+      SUM(CASE WHEN draft_message IS NOT NULL AND TRIM(draft_message) != '' THEN 1 ELSE 0 END) AS with_draft,
+      SUM(CASE WHEN status = 'approved' AND draft_message IS NOT NULL
+          AND email IS NOT NULL AND TRIM(email) != '' THEN 1 ELSE 0 END) AS send_ready
+    FROM leads
+  `);
+  const c = contact.rows[0] ?? {};
+  const total = Number(c.total ?? 0);
+  const withEmail = Number(c.with_email ?? 0);
+  const withPhone = Number(c.with_phone ?? 0);
+  const withWebsite = Number(c.with_website ?? 0);
+  const withDraft = Number(c.with_draft ?? 0);
+  const sendReady = Number(c.send_ready ?? 0);
+
+  const emailEvents = await db.execute(`
+    SELECT event_type, COUNT(*) AS n
+    FROM email_events
+    GROUP BY event_type
+  `);
+  const eventMap = new Map<string, number>();
+  for (const row of emailEvents.rows) {
+    eventMap.set(String(row.event_type), Number(row.n));
+  }
+
+  const trialUrl = process.env.TRIAL_URL?.trim() || "(not set — defaults to passready.uk in drafter)";
+  const testFallback = process.env.ALLOW_TEST_EMAIL_FALLBACK?.trim().toLowerCase() === "true";
+  const subject =
+    process.env.OUTREACH_EMAIL_SUBJECT?.trim() || "Quick question about your kitchen records";
+
+  console.log("\n=== PassFinder outreach diagnose ===\n");
+
+  console.log("Leads in database");
+  line("Total leads", total);
+  line("With business email", withEmail, pct(withEmail, total));
+  line("With phone (OSM)", withPhone, pct(withPhone, total));
+  line("With website", withWebsite, pct(withWebsite, total));
+  line("With draft text", withDraft);
+  line("Send-ready (approved+email)", sendReady);
+
+  console.log("\nStatus breakdown");
+  line("new", counts.new);
+  line("drafted", counts.drafted);
+  line("approved (postbox)", counts.approved);
+  line("contacted (email sent)", counts.contacted);
+  line("replied", counts.replied);
+  line("trial_started", counts.trial_started);
+  line("opted_in", counts.opted_in);
+  line("nurture", counts.nurture);
+  line("suppressed", counts.suppressed);
+
+  console.log("\nLegacy funnel counters");
+  line("identified", funnel.identified);
+  line("drafted (broad)", funnel.drafted);
+  line("approved", funnel.approved);
+  line("contacted+opted_in", funnel.converted, "not the same as trial_started");
+
+  console.log("\nEmail events (Resend log)");
+  for (const [type, n] of [...eventMap.entries()].sort()) {
+    line(type, n);
+  }
+  if (eventMap.size === 0) {
+    line("(none)", 0, "no sends logged yet");
+  }
+
+  console.log("\nDeliverability");
+  line("Send locked", deliverability.sendLocked ? "YES" : "no");
+  line("Bounce rate", `${(deliverability.bounceRate * 100).toFixed(1)}%`);
+  line("Threshold", `${(deliverability.bounceThreshold * 100).toFixed(0)}%`);
+
+  console.log("\nConfig (non-secret)");
+  line("TRIAL_URL", trialUrl);
+  line("Test email fallback", testFallback ? "ON — risky in prod" : "off");
+  line("Email subject", subject);
+  line(
+    "First-touch links",
+    "stripped until reply",
+    "trial URL only after they reply",
+  );
+
+  console.log("\nInbox vs app");
+  line(
+    "Auto-detect Gmail replies",
+    "no",
+    "open Sent tab → Replied button when you get a reply",
+  );
+
+  console.log("\n--- What to do next ---\n");
+  const tips: string[] = [];
+
+  if (total === 0) {
+    tips.push("Run `npm run find` for your target area (product.config.ts).");
+  }
+  if (total > 0 && withEmail < total * 0.25) {
+    tips.push(
+      `Only ${pct(withEmail, total)} have email — run \`npm run enrich-emails\` then call/WhatsApp leads with phone.`,
+    );
+  }
+  if (sendReady === 0 && counts.approved > 0) {
+    tips.push("Approved leads lack email — add emails in dashboard before postbox send.");
+  }
+  if (counts.approved > 0 && counts.contacted === 0 && !deliverability.sendLocked) {
+    tips.push("Postbox has approvals but nothing sent — run `npm run send` or check 2pm cron.");
+  }
+  if (deliverability.sendLocked) {
+    tips.push("Sending is LOCKED due to bounces — fix domain/DKIM in Resend before more sends.");
+  }
+  if (testFallback) {
+    tips.push("ALLOW_TEST_EMAIL_FALLBACK=true — real owners may never get mail. Turn off for live sends.");
+  }
+  if (counts.contacted > 0 && counts.replied === 0) {
+    tips.push(
+      "Emails went out but no replies — try softer subject (OUTREACH_EMAIL_SUBJECT), phone top 10 leads, shorter personal edit to drafts.",
+    );
+  }
+  if (counts.replied > 0 && counts.trial_started === 0) {
+    tips.push(
+      "You have replies — send trial/WhatsApp in follow-up and mark trial_started in dashboard when they sign up.",
+    );
+  }
+  if (counts.trial_started === 0 && counts.replied === 0 && counts.contacted === 0) {
+    tips.push("Pipeline stuck before send — draft → approve → postbox → send.");
+  }
+
+  if (tips.length === 0) {
+    tips.push("Funnel looks active — keep reply-first follow-up; mark conversions when trials start.");
+  }
+
+  for (const t of tips) {
+    console.log(`• ${t}`);
+  }
+  console.log("");
+}
+
+main()
+  .then(() => closeDb())
+  .catch((err) => {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  });

@@ -36,7 +36,7 @@ import {
   leadChangedSinceSync,
 } from "../engine/sync/sync-label.js";
 import { getLastSyncTimestamp } from "../engine/sync/fsa-sync-state.js";
-import { isMailableDashboardLead } from "../engine/lead-display-policy.js";
+import { includeInDashboardList } from "../engine/lead-display-policy.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "../engine/enrich/lead-email.js";
 import {
   getContactDiscoveryApi,
@@ -262,10 +262,11 @@ export async function createApp(options?: {
         }),
       );
       const leads = mappedLeads.filter((lead) =>
-        isMailableDashboardLead({
+        includeInDashboardList({
           businessType: lead.businessType,
           fsaRating: lead.fsaRating,
           email: lead.email,
+          status: lead.status,
         }),
       );
       leads.sort((a, b) => b.riskScore - a.riskScore || b.id - a.id);

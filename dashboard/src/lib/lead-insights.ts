@@ -12,7 +12,17 @@ export type LeadFilterKey =
   | "drafted"
   | "approved"
   | "sent"
+  | "replies"
   | "high";
+
+/** True when you marked them as replied or they converted from a reply path. */
+export function isReplyLead(lead: ApiLead): boolean {
+  return (
+    lead.status === "replied" ||
+    lead.status === "trial_started" ||
+    Boolean(lead.repliedAt?.trim())
+  );
+}
 
 export function priorityFromBand(band: RiskBand): PriorityTier {
   if (band === "critical" || band === "high") {
@@ -100,11 +110,58 @@ export function matchesLeadFilter(lead: ApiLead, filter: LeadFilterKey): boolean
     case "approved":
       return lead.status === "approved";
     case "sent":
-      return lead.status === "contacted" || lead.status === "replied" || lead.status === "opted_in";
+      return (
+        lead.status === "contacted" ||
+        lead.status === "replied" ||
+        lead.status === "opted_in" ||
+        lead.status === "trial_started"
+      );
+    case "replies":
+      return isReplyLead(lead);
     case "high":
       return isHighPriorityLead(lead);
     default:
       return true;
+  }
+}
+
+/**
+ * Main list hides emailed leads unless you're on Sent / Replies / All —
+ * otherwise contacted rows vanish after send (easy to think replies are missing).
+ */
+export function showLeadInRadarList(lead: ApiLead, filter: LeadFilterKey): boolean {
+  if (filter === "all") {
+    return true;
+  }
+  if (filter === "sent" || filter === "replies") {
+    return matchesLeadFilter(lead, filter);
+  }
+  if (
+    lead.status === "contacted" ||
+    lead.status === "nurture" ||
+    lead.status === "opted_in" ||
+    lead.status === "replied" ||
+    lead.status === "trial_started"
+  ) {
+    return false;
+  }
+  return matchesLeadFilter(lead, filter);
+}
+
+export function emptyStateForFilter(filter: LeadFilterKey): string {
+  switch (filter) {
+    case "sent":
+      return "No sent emails in this view — check Gmail for replies, then open each lead and tap Replied.";
+    case "replies":
+      return "No replies marked yet — when someone emails back, open Sent, tap the lead, then tap Replied.";
+    case "approved":
+      return "Postbox is empty — approve a draft to queue for sending.";
+    case "needs_eyes":
+      return "No drafts waiting — run Draft or open a lead for Quick draft.";
+    case "changed":
+      return "No new FSA changes since last sync — run Check changes (UK).";
+    default:
+      return "Nothing matches this filter — try All or run Check changes (UK).";
   }
 }
 

@@ -31,3 +31,28 @@ export function isMailableDashboardLead(input: {
     hasUsableEmail(input.email)
   );
 }
+
+const OUTBOUND_STATUSES = new Set([
+  "contacted",
+  "replied",
+  "opted_in",
+  "trial_started",
+  "nurture",
+]);
+
+/** Keep emailed / replied leads visible even if they no longer pass the mailable filter. */
+export function isOutboundDashboardLead(status: string | null | undefined): boolean {
+  return OUTBOUND_STATUSES.has((status ?? "").trim().toLowerCase());
+}
+
+export function includeInDashboardList(input: {
+  businessType: string;
+  fsaRating: number | null;
+  email: string | null | undefined;
+  status: string;
+}): boolean {
+  if (isOutboundDashboardLead(input.status)) {
+    return true;
+  }
+  return isMailableDashboardLead(input);
+}

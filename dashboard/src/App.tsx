@@ -38,7 +38,9 @@ import {
 import { pollJobUntilDone } from "./lib/job-poll";
 import {
   type LeadFilterKey,
-  matchesLeadFilter,
+  showLeadInRadarList,
+  isReplyLead,
+  emptyStateForFilter,
 } from "./lib/lead-insights";
 import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
 import { isOutreachHaltedStatus } from "./lib/outreach-halt";
@@ -56,20 +58,27 @@ function canQuickDraftLead(lead: ApiLead): boolean {
   return lead.status !== "contacted" && lead.status !== "approved";
 }
 
-function countByFilter(leads: ApiLead[]): Record<LeadFilterKey, number> {
+function countByFilter(
+  leads: ApiLead[],
+  isHidden: (leadId: number) => boolean,
+): Record<LeadFilterKey, number> {
   const keys: LeadFilterKey[] = [
     "all",
     "changed",
     "needs_eyes",
     "approved",
     "sent",
+    "replies",
     "contactable",
     "new",
     "drafted",
     "high",
   ];
   return Object.fromEntries(
-    keys.map((key) => [key, leads.filter((l) => matchesLeadFilter(l, key)).length]),
+    keys.map((key) => [
+      key,
+      leads.filter((l) => !isHidden(l.id) && showLeadInRadarList(l, key)).length,
+    ]),
   ) as Record<LeadFilterKey, number>;
 }
 
@@ -184,9 +193,8 @@ export function App() {
   const visibleLeads = useMemo(() => {
     void hiddenVersion;
     return leads
-      .filter((lead) => lead.status !== "contacted" && lead.status !== "nurture")
       .filter((lead) => !isLeadHidden(lead.id))
-      .filter((lead) => matchesLeadFilter(lead, leadFilter))
+      .filter((lead) => showLeadInRadarList(lead, leadFilter))
       .sort((a, b) => {
         const ra = a.fsaRating ?? 99;
         const rb = b.fsaRating ?? 99;
@@ -198,7 +206,7 @@ export function App() {
   }, [leads, leadFilter, hiddenVersion]);
 
   const filterCounts = useMemo(
-    () => countByFilter(leads.filter((l) => !isLeadHidden(l.id))),
+    () => countByFilter(leads, isLeadHidden),
     [leads, hiddenVersion],
   );
 
@@ -689,12 +697,12 @@ export function App() {
         <div className="mb-3 rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm text-slate-200">
           {(filterCounts.needs_eyes ?? 0) === 0 &&
           (filterCounts.approved ?? 0) === 0 &&
-          leads.filter((l) => l.status === "replied").length === 0 ? (
+          leads.filter(isReplyLead).length === 0 ? (
             <span>Nothing needs you right now. ✓</span>
           ) : (
             <span className="tabular-nums">
               {filterCounts.needs_eyes} drafts need your eyes · {filterCounts.approved} queued for 2pm ·{" "}
-              {leads.filter((l) => l.status === "replied").length} replies to action
+              {leads.filter(isReplyLead).length} marked repl{leads.filter(isReplyLead).length === 1 ? "y" : "ies"} — check Gmail, then tap <strong className="font-semibold text-slate-100">Sent</strong> → open lead → <strong className="font-semibold text-slate-100">Replied</strong>
             </span>
           )}
         </div>
@@ -727,8 +735,8 @@ export function App() {
       ) : null}
 
       {!loading && !error && visibleLeads.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-500">
-          No mailable takeaways match this filter — run Check changes (UK) or try All.
+        <p className="py-8 text-center text-sm leading-relaxed text-slate-500">
+          {emptyStateForFilter(leadFilter)}
         </p>
       ) : null}
 

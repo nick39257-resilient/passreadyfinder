@@ -63,6 +63,8 @@ export interface ApiLeadDetail {
   contactScore: number;
   contactable: boolean;
   contactDiscovery: ApiContactDiscovery | null;
+  contactedAt: string | null;
+  repliedAt: string | null;
 }
 
 function readStatus(row: LeadRow & { status?: string }): string {
@@ -168,5 +170,7 @@ export async function mapLeadRowToApiLead(
     contactScore: options?.contactScore ?? 0,
     contactable: options?.contactable ?? false,
     contactDiscovery: options?.contactDiscovery ?? null,
+    contactedAt: row.contacted_at ?? null,
+    repliedAt: row.replied_at ?? null,
   };
 }
