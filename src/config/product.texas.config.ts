@@ -24,6 +24,9 @@ export const texasProductConfig = {
   },
   outreach: {
     productName: "PassReady",
+    emailSubject:
+      process.env.TEXAS_OUTREACH_EMAIL_SUBJECT ??
+      "HB 2844 mobile compliance — PassReady",
     scoreUrl: process.env.TEXAS_SCORE_URL ?? "https://score.passready.us",
     siteUrl: process.env.TEXAS_SITE_URL ?? "https://passready.us",
     hb2844MobileTemplate:

@@ -1,0 +1,180 @@
+import { Resend } from "resend";
+import { texasProductConfig } from "../../config/product.texas.config.js";
+import {
+  TEXAS_STATUS_EMAIL_SENT,
+  TEXAS_STATUS_FORM_SUBMITTED,
+} from "../../types/texas.js";
+import { buildHb2844MobileOutreachMessage } from "./hb2844.js";
+import { findOwnerEmailViaApollo } from "../services/apollo-service.js";
+import { tryWebsiteContactForm } from "../services/contact-form-service.js";
+import { normalizeOutreachEmail } from "../outreach-halt.js";
+import { runMigrations } from "../store/db.js";
+import {
+  getTexasLeadById,
+  markTexasLeadEmailSent,
+  markTexasLeadFormSubmitted,
+  updateTexasLeadEmailFromApollo,
+  type TexasLeadRow,
+} from "../store/texas-leads-repository.js";
+
+export type TexasOutreachResult = {
+  leadId: number;
+  channel: "email" | "contact_form";
+  status: typeof TEXAS_STATUS_EMAIL_SENT | typeof TEXAS_STATUS_FORM_SUBMITTED;
+  resendId?: string;
+  contactPageUrl?: string | null;
+};
+
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} is required in .env`);
+  }
+  return value;
+}
+
+function texasEmailSubject(): string {
+  return (
+    process.env.TEXAS_OUTREACH_EMAIL_SUBJECT?.trim() ||
+    texasProductConfig.outreach.emailSubject
+  );
+}
+
+function texasContactFormForceSubmit(): boolean {
+  if (process.env.TEXAS_CONTACT_FORM_AUTO_SUBMIT?.trim().toLowerCase() === "true") {
+    return true;
+  }
+  if (process.env.CONTACT_FORM_AUTO_SUBMIT?.trim().toLowerCase() === "true") {
+    return true;
+  }
+  return false;
+}
+
+function resolvePitchText(row: TexasLeadRow): string {
+  const draft = row.draft_message?.trim();
+  if (draft) {
+    return draft;
+  }
+  return buildHb2844MobileOutreachMessage({
+    ownerName: row.owner_name?.trim() || "there",
+    businessName: row.business_name,
+  });
+}
+
+async function resolveEmailForTexasLead(row: TexasLeadRow): Promise<string | null> {
+  const existing = normalizeOutreachEmail(row.email);
+  if (existing) {
+    return existing;
+  }
+
+  if (!process.env.APOLLO_API_KEY?.trim()) {
+    return null;
+  }
+
+  const apollo = await findOwnerEmailViaApollo({
+    businessName: row.business_name,
+    address: [row.address, row.city, row.county].filter(Boolean).join(", ") || row.business_name,
+    postcode: row.zip?.trim() || "TX",
+    website: row.website,
+  });
+
+  if (!apollo?.email) {
+    return null;
+  }
+
+  await updateTexasLeadEmailFromApollo({
+    leadId: row.id,
+    email: apollo.email,
+    ownerName: apollo.ownerName,
+  });
+
+  return apollo.email.trim().toLowerCase();
+}
+
+async function sendTexasEmail(row: TexasLeadRow, to: string, text: string): Promise<string> {
+  const resend = new Resend(requireEnv("RESEND_API_KEY"));
+  const fromEmail = requireEnv("FROM_EMAIL");
+
+  const { data, error } = await resend.emails.send({
+    from: fromEmail,
+    to,
+    subject: texasEmailSubject(),
+    text,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data?.id) {
+    throw new Error("Resend did not return a message id");
+  }
+  return data.id;
+}
+
+/**
+ * Execute HB 2844 outreach for one Texas lead: Resend email or Playwright contact form.
+ */
+export async function executeTexasLeadOutreach(leadId: number): Promise<TexasOutreachResult> {
+  await runMigrations();
+
+  const row = await getTexasLeadById(leadId);
+  if (!row) {
+    throw new Error("Texas lead not found");
+  }
+
+  if (row.status === TEXAS_STATUS_EMAIL_SENT || row.status === TEXAS_STATUS_FORM_SUBMITTED) {
+    throw new Error(`Outreach already completed (${row.status})`);
+  }
+
+  const pitch = resolvePitchText(row);
+  const to = await resolveEmailForTexasLead(row);
+
+  if (to) {
+    const resendId = await sendTexasEmail(row, to, pitch);
+    await markTexasLeadEmailSent({ leadId: row.id, resendId });
+
+    return {
+      leadId: row.id,
+      channel: "email",
+      status: TEXAS_STATUS_EMAIL_SENT,
+      resendId,
+    };
+  }
+
+  if (row.website?.trim()) {
+    const website = row.website?.trim();
+    if (!website) {
+      throw new Error("No website on file for contact form outreach");
+    }
+
+    const form = await tryWebsiteContactForm({
+      website,
+      businessName: row.business_name,
+      message: pitch,
+      forceSubmit: texasContactFormForceSubmit(),
+    });
+
+    if (!form.submitted) {
+      const hint = texasContactFormForceSubmit()
+        ? ""
+        : " Enable CONTACT_FORM_AUTO_SUBMIT=true or TEXAS_CONTACT_FORM_AUTO_SUBMIT=true on the server.";
+      throw new Error(`Contact form not submitted (${form.reason}).${hint}`);
+    }
+
+    await markTexasLeadFormSubmitted({
+      leadId: row.id,
+      contactPageUrl: form.contactPageUrl,
+    });
+
+    return {
+      leadId: row.id,
+      channel: "contact_form",
+      status: TEXAS_STATUS_FORM_SUBMITTED,
+      contactPageUrl: form.contactPageUrl,
+    };
+  }
+
+  throw new Error(
+    "No outreach path — need a valid email or a website URL on this Texas lead",
+  );
+}

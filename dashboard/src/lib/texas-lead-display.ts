@@ -64,6 +64,58 @@ export function normalizeTexasLead(raw: unknown): ApiTexasLead {
     lastInspectionDate:
       (r.lastInspectionDate as string | null) ?? (r.last_inspection_date as string | null) ?? null,
     status: formatTexasField(r.status, "new"),
+    statusLabel: formatTexasField(
+      r.statusLabel ?? r.status_label,
+      texasStatusLabelFromCode(formatTexasField(r.status, "new")),
+    ),
+    website: (r.website as string | null) ?? null,
+    outreachChannel: (() => {
+      const fromApi =
+        r.outreachChannel === "email" ||
+        r.outreachChannel === "contact_form" ||
+        r.outreachChannel === "unavailable"
+          ? r.outreachChannel
+          : r.outreach_channel === "email" ||
+              r.outreach_channel === "contact_form" ||
+              r.outreach_channel === "unavailable"
+            ? (r.outreach_channel as "email" | "contact_form" | "unavailable")
+            : null;
+      if (fromApi) {
+        return fromApi;
+      }
+      const status = formatTexasField(r.status, "new");
+      const email = (r.email as string | null) ?? null;
+      const website = (r.website as string | null) ?? null;
+      return deriveOutreachChannel(status, email, website);
+    })(),
+    outreachButtonLabel: (() => {
+      const label = r.outreachButtonLabel ?? r.outreach_button_label;
+      if (typeof label === "string" && label.trim()) {
+        return label;
+      }
+      const ch =
+        r.outreachChannel === "email"
+          ? "email"
+          : r.outreachChannel === "contact_form"
+            ? "contact_form"
+            : deriveOutreachChannel(
+                formatTexasField(r.status, "new"),
+                (r.email as string | null) ?? null,
+                (r.website as string | null) ?? null,
+              );
+      if (ch === "email") {
+        return "Send Email";
+      }
+      if (ch === "contact_form") {
+        return "Submit Contact Form";
+      }
+      return "No contact path";
+    })(),
+    outreachComplete:
+      r.outreachComplete === true ||
+      r.outreach_complete === true ||
+      r.status === "EMAIL_SENT" ||
+      r.status === "FORM_SUBMITTED",
     hb2844DraftPreview:
       typeof r.hb2844DraftPreview === "string"
         ? r.hb2844DraftPreview
@@ -80,6 +132,36 @@ export function formatTexasLocation(lead: Pick<ApiTexasLead, "city" | "county" |
     formatTexasField(lead.zip, ""),
   ].filter((p) => p && p !== "—");
   return parts.length > 0 ? parts.join(", ") : "—";
+}
+
+function texasStatusLabelFromCode(status: string): string {
+  if (status === "EMAIL_SENT") {
+    return "Email Sent";
+  }
+  if (status === "FORM_SUBMITTED") {
+    return "Form Submitted";
+  }
+  if (status === "ready_to_review") {
+    return "Ready to review";
+  }
+  return status.replace(/_/g, " ");
+}
+
+function deriveOutreachChannel(
+  status: string,
+  email: string | null,
+  website: string | null,
+): "email" | "contact_form" | "unavailable" {
+  if (status === "EMAIL_SENT" || status === "FORM_SUBMITTED") {
+    return "unavailable";
+  }
+  if (email?.trim()) {
+    return "email";
+  }
+  if (website?.trim()) {
+    return "contact_form";
+  }
+  return "unavailable";
 }
 
 export function formatVendorTier(tier: string | null | undefined): string {

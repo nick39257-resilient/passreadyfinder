@@ -41,6 +41,14 @@ Override feed URL: `TEXAS_AUSTIN_INSPECTIONS_URL`.
 - **Outreach template** — `texas_outreach_templates.hb2844_mobile_july_2026` + `draft_message` on each mobile lead.
 - **Re-sync existing rows:** `npm run texas-reclassify` or `POST /api/texas/jobs/reclassify` (control auth). Runs automatically after each Texas ingest.
 
+## Mobile outreach send
+
+- **API:** `POST /api/texas/leads/:id/send-outreach` (control auth)
+- **Email path:** Resend (`RESEND_API_KEY`, `FROM_EMAIL`) using `draft_message` / HB 2844 pitch → status `EMAIL_SENT`
+- **Form path:** Playwright contact form when no email but `website` is set → status `FORM_SUBMITTED` (requires `CONTACT_FORM_AUTO_SUBMIT=true` or `TEXAS_CONTACT_FORM_AUTO_SUBMIT=true`)
+- **Apollo:** On send, attempts owner lookup when email is missing and `APOLLO_API_KEY` is set
+- **Dashboard:** Texas lead modal — orange **Send Email** / **Submit Contact Form** button; corner **×** to dismiss
+
 ## Env
 
 ```env

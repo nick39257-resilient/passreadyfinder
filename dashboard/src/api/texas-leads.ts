@@ -24,7 +24,22 @@ export interface ApiTexasLead {
   isCritical: boolean;
   lastInspectionDate: string | null;
   status: string;
+  statusLabel: string;
+  website: string | null;
+  outreachChannel: "email" | "contact_form" | "unavailable";
+  outreachButtonLabel: string;
+  outreachComplete: boolean;
   hb2844DraftPreview: string | null;
+}
+
+export interface TexasSendOutreachResult {
+  ok: boolean;
+  result: {
+    leadId: number;
+    channel: "email" | "contact_form";
+    status: string;
+  };
+  lead: ApiTexasLead | null;
 }
 
 export interface TexasStats {
@@ -89,4 +104,18 @@ export async function startTexasFindJob(
     await parseTexasError(res, "Texas find failed");
   }
   return res.json() as Promise<{ jobId: string }>;
+}
+
+export async function sendTexasLeadOutreach(
+  leadId: number,
+  secret?: string,
+): Promise<TexasSendOutreachResult> {
+  const res = await fetch(`/api/texas/leads/${leadId}/send-outreach`, {
+    method: "POST",
+    headers: texasAuthHeaders(secret),
+  });
+  if (!res.ok) {
+    await parseTexasError(res, "Texas outreach send failed");
+  }
+  return res.json() as Promise<TexasSendOutreachResult>;
 }

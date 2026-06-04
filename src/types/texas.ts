@@ -8,6 +8,9 @@ export type TexasInterventionLevel = "CRITICAL_INTERVENTION" | null;
 
 export const TEXAS_CRITICAL_RISK_THRESHOLD = 79;
 
+export const TEXAS_STATUS_EMAIL_SENT = "EMAIL_SENT" as const;
+export const TEXAS_STATUS_FORM_SUBMITTED = "FORM_SUBMITTED" as const;
+
 export interface TexasLeadInput {
   externalId: string;
   source: string;
@@ -19,6 +22,7 @@ export interface TexasLeadInput {
   zip: string | null;
   phone: string | null;
   email: string | null;
+  website: string | null;
   ownerName: string | null;
   inspectionScore: number | null;
   demerits: number | null;

@@ -1,6 +1,28 @@
 import { getDb } from "./db.js";
 import { upsertHb2844MobileTemplate } from "./texas-outreach-repository.js";
 
+const TEXAS_LEAD_EXTRA_COLUMNS = [
+  "website TEXT",
+  "apollo_enriched_at TEXT",
+  "contact_form_page_url TEXT",
+  "outreach_sent_at TEXT",
+  "resend_message_id TEXT",
+] as const;
+
+async function columnExists(table: string, column: string): Promise<boolean> {
+  const db = getDb();
+  const result = await db.execute(`PRAGMA table_info(${table})`);
+  return result.rows.some((row) => row.name === column);
+}
+
+async function addColumnIfMissing(table: string, columnDef: string): Promise<void> {
+  const columnName = columnDef.split(" ")[0];
+  if (!(await columnExists(table, columnName))) {
+    const db = getDb();
+    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+  }
+}
+
 export async function runTexasMigrations(): Promise<void> {
   const db = getDb();
   await db.batch(
@@ -47,6 +69,10 @@ export async function runTexasMigrations(): Promise<void> {
     ],
     "write",
   );
+
+  for (const column of TEXAS_LEAD_EXTRA_COLUMNS) {
+    await addColumnIfMissing("texas_leads", column);
+  }
 
   await upsertHb2844MobileTemplate();
 }

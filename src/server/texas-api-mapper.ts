@@ -1,4 +1,11 @@
 import { buildHb2844MobileOutreachMessage } from "../engine/texas/hb2844.js";
+import {
+  isTexasOutreachComplete,
+  resolveTexasOutreachChannel,
+  texasOutreachButtonLabel,
+  texasStatusDisplayLabel,
+  type TexasOutreachChannel,
+} from "../engine/texas/texas-outreach-channel.js";
 import type { TexasLeadRow } from "../engine/store/texas-leads-repository.js";
 
 export interface ApiTexasLead {
@@ -23,6 +30,11 @@ export interface ApiTexasLead {
   isCritical: boolean;
   lastInspectionDate: string | null;
   status: string;
+  statusLabel: string;
+  website: string | null;
+  outreachChannel: TexasOutreachChannel;
+  outreachButtonLabel: string;
+  outreachComplete: boolean;
   hb2844DraftPreview: string | null;
 }
 
@@ -37,6 +49,8 @@ export function mapTexasLeadRowToApi(row: TexasLeadRow): ApiTexasLead {
       })
     : null;
 
+  const outreachChannel = resolveTexasOutreachChannel(row);
+
   return {
     id: row.id,
     region: row.region,
@@ -47,6 +61,7 @@ export function mapTexasLeadRowToApi(row: TexasLeadRow): ApiTexasLead {
     zip: row.zip,
     phone: row.phone,
     email: row.email,
+    website: row.website ?? null,
     ownerName: row.owner_name,
     inspectionScore: row.inspection_score,
     demerits: row.demerits,
@@ -59,6 +74,10 @@ export function mapTexasLeadRowToApi(row: TexasLeadRow): ApiTexasLead {
     isCritical: row.intervention_level === "CRITICAL_INTERVENTION",
     lastInspectionDate: row.last_inspection_date,
     status: row.status,
+    statusLabel: texasStatusDisplayLabel(row.status),
+    outreachChannel,
+    outreachButtonLabel: texasOutreachButtonLabel(outreachChannel),
+    outreachComplete: isTexasOutreachComplete(row.status),
     hb2844DraftPreview,
   };
 }

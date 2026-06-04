@@ -143,6 +143,13 @@ export function mapOpenDataRowToTexasLead(
     zip: pickString(raw, ["zip", "zip_code", "postal_code"]),
     phone: pickString(raw, ["phone", "phone_number"]),
     email: pickString(raw, ["email", "contact_email"]),
+    website: pickString(raw, [
+      "website",
+      "web_site",
+      "url",
+      "business_url",
+      "site_url",
+    ]),
     ownerName: pickString(raw, ["owner_name", "owner", "contact_name"]),
     inspectionScore,
     demerits,

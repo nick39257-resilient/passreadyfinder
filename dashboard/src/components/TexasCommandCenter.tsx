@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchTexasLeads,
   fetchTexasStats,
+  sendTexasLeadOutreach,
   startTexasFindJob,
   type ApiTexasLead,
 } from "../api/texas-leads";
@@ -50,6 +51,11 @@ export function TexasCommandCenter() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<ApiTexasLead | null>(null);
+  const [sendBusy, setSendBusy] = useState(false);
+  const [sendFeedback, setSendFeedback] = useState<{
+    tone: "success" | "error" | "info";
+    text: string;
+  } | null>(null);
   const [needsSecret, setNeedsSecret] = useState(false);
 
   useEffect(() => {
@@ -101,6 +107,47 @@ export function TexasCommandCenter() {
     } catch {
       /* ignore */
     }
+  };
+
+  const patchLeadInList = (updated: ApiTexasLead) => {
+    setLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+    setSelected(updated);
+  };
+
+  const runSendOutreach = async () => {
+    if (!selected) {
+      return;
+    }
+    setSendBusy(true);
+    setSendFeedback({ tone: "info", text: "Running outreach…" });
+    try {
+      const secret = ensureControlSecret(getControlSecret());
+      const { lead } = await sendTexasLeadOutreach(selected.id, secret);
+      if (lead) {
+        patchLeadInList(lead);
+        setSendFeedback({
+          tone: "success",
+          text:
+            lead.statusLabel ||
+            (lead.status === "EMAIL_SENT" ? "Email sent" : "Form submitted"),
+        });
+      } else {
+        setSendFeedback({ tone: "success", text: "Outreach completed." });
+      }
+    } catch (e) {
+      setSendFeedback({
+        tone: "error",
+        text: e instanceof Error ? e.message : "Outreach failed",
+      });
+    } finally {
+      setSendBusy(false);
+    }
+  };
+
+  const openLead = (lead: ApiTexasLead) => {
+    setSelected(lead);
+    setSendFeedback(null);
+    setSendBusy(false);
   };
 
   const runIngest = async () => {
@@ -234,7 +281,7 @@ export function TexasCommandCenter() {
                     <TexasLeadCard
                       key={lead.id}
                       lead={lead}
-                      onTap={() => setSelected(lead)}
+                      onTap={() => openLead(lead)}
                     />
                   ))}
                 </ul>
@@ -251,7 +298,7 @@ export function TexasCommandCenter() {
                     <TexasLeadCard
                       key={lead.id}
                       lead={lead}
-                      onTap={() => setSelected(lead)}
+                      onTap={() => openLead(lead)}
                     />
                   ))}
                 </ul>
@@ -276,13 +323,22 @@ export function TexasCommandCenter() {
         <div
           className="fixed inset-0 z-50 flex items-end bg-black/70 p-4"
           role="dialog"
+          aria-modal="true"
           onClick={() => setSelected(null)}
         >
           <div
-            className="max-h-[80vh] w-full overflow-y-auto rounded-2xl border border-amber-800 bg-slate-900 p-4"
+            className="relative max-h-[80vh] w-full overflow-y-auto rounded-2xl border border-amber-800 bg-slate-900 p-4 pb-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-bold">
+            <button
+              type="button"
+              className="absolute right-3 top-3 flex min-h-12 min-w-12 items-center justify-center rounded-xl border border-slate-600 text-lg text-slate-300"
+              aria-label="Close"
+              onClick={() => setSelected(null)}
+            >
+              ×
+            </button>
+            <h3 className="pr-14 text-lg font-bold">
               {formatTexasField(selected.businessName, "Unknown venue")}
             </h3>
             <p className="mt-1 text-sm text-amber-300">
@@ -291,7 +347,14 @@ export function TexasCommandCenter() {
                 ? ` · ${formatTexasField(selected.interventionLevel)}`
                 : ""}
             </p>
+            {selected.outreachComplete ? (
+              <p className="mt-2 inline-block rounded-lg bg-emerald-900/50 px-3 py-1 text-xs font-semibold text-emerald-200">
+                {formatTexasField(selected.statusLabel, selected.status)}
+              </p>
+            ) : null}
             <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
+              <dt>Status</dt>
+              <dd>{formatTexasField(selected.statusLabel, selected.status)}</dd>
               <dt>Inspection</dt>
               <dd>{formatTexasScore(selected.inspectionScore)}</dd>
               <dt>Demerits</dt>
@@ -300,6 +363,10 @@ export function TexasCommandCenter() {
               <dd>{formatTexasField(selected.vehicleType)}</dd>
               <dt>Location</dt>
               <dd>{formatTexasLocation(selected)}</dd>
+              <dt>Email</dt>
+              <dd>{formatTexasField(selected.email)}</dd>
+              <dt>Website</dt>
+              <dd>{formatTexasField(selected.website)}</dd>
               <dt>DSHS license</dt>
               <dd>{formatTexasField(selected.dshsLicenseStatus)}</dd>
               <dt>HB 2844 tier</dt>
@@ -311,13 +378,42 @@ export function TexasCommandCenter() {
                 {selected.hb2844DraftPreview}
               </p>
             ) : null}
-            <button
-              type="button"
-              className="mt-4 min-h-12 w-full rounded-xl bg-slate-700 text-sm font-semibold"
-              onClick={() => setSelected(null)}
-            >
-              Close
-            </button>
+            {sendFeedback ? (
+              <p
+                className={`mt-4 rounded-lg p-3 text-sm ${
+                  sendFeedback.tone === "success"
+                    ? "bg-emerald-950/60 text-emerald-100"
+                    : sendFeedback.tone === "error"
+                      ? "bg-red-950/60 text-red-200"
+                      : "bg-slate-800/80 text-amber-100"
+                }`}
+              >
+                {formatTexasField(sendFeedback.text)}
+              </p>
+            ) : null}
+            <div className="mt-4 flex flex-col gap-2">
+              {!selected.outreachComplete &&
+              selected.outreachChannel !== "unavailable" ? (
+                <button
+                  type="button"
+                  disabled={sendBusy}
+                  onClick={() => void runSendOutreach()}
+                  className="min-h-12 w-full rounded-2xl bg-amber-600 text-sm font-bold text-slate-950 disabled:opacity-50"
+                >
+                  {sendBusy
+                    ? "Sending…"
+                    : formatTexasField(
+                        selected.outreachButtonLabel,
+                        "Send outreach",
+                      )}
+                </button>
+              ) : !selected.outreachComplete ? (
+                <p className="text-xs text-slate-500">
+                  No email or website on file — add contact data or run Apollo enrichment
+                  before outreach.
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

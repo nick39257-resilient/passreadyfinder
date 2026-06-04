@@ -15,7 +15,12 @@ export interface TexasLeadRow {
   zip: string | null;
   phone: string | null;
   email: string | null;
+  website: string | null;
   owner_name: string | null;
+  apollo_enriched_at: string | null;
+  contact_form_page_url: string | null;
+  outreach_sent_at: string | null;
+  resend_message_id: string | null;
   inspection_score: number | null;
   demerits: number | null;
   vehicle_type: string | null;
@@ -47,10 +52,10 @@ export async function upsertTexasLead(input: TexasLeadInput): Promise<number> {
   await db.execute({
     sql: `INSERT INTO texas_leads (
       external_id, source, region, business_name, address, city, county, zip,
-      phone, email, owner_name, inspection_score, demerits, vehicle_type,
+      phone, email, website, owner_name, inspection_score, demerits, vehicle_type,
       is_mobile_vendor, vendor_tier, dshs_license_status, risk_score,
       intervention_level, last_inspection_date, draft_message, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(external_id, source) DO UPDATE SET
       business_name = excluded.business_name,
       address = excluded.address,
@@ -59,6 +64,7 @@ export async function upsertTexasLead(input: TexasLeadInput): Promise<number> {
       zip = excluded.zip,
       phone = COALESCE(excluded.phone, phone),
       email = COALESCE(excluded.email, email),
+      website = COALESCE(excluded.website, website),
       owner_name = COALESCE(excluded.owner_name, owner_name),
       inspection_score = excluded.inspection_score,
       demerits = excluded.demerits,
@@ -85,6 +91,7 @@ export async function upsertTexasLead(input: TexasLeadInput): Promise<number> {
       input.zip,
       input.phone,
       input.email,
+      input.website,
       input.ownerName,
       input.inspectionScore,
       input.demerits,
@@ -152,6 +159,61 @@ export async function updateTexasMobileLeadMetadata(input: {
       WHERE id = ?
     `,
     args: [input.vendorTier, draftMessage, input.leadId],
+  });
+}
+
+export async function updateTexasLeadEmailFromApollo(input: {
+  leadId: number;
+  email: string;
+  ownerName: string | null;
+}): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE texas_leads SET
+        email = ?,
+        owner_name = COALESCE(?, owner_name),
+        apollo_enriched_at = datetime('now'),
+        updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [input.email.trim().toLowerCase(), input.ownerName?.trim() ?? null, input.leadId],
+  });
+}
+
+export async function markTexasLeadEmailSent(input: {
+  leadId: number;
+  resendId: string;
+}): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE texas_leads SET
+        status = 'EMAIL_SENT',
+        resend_message_id = ?,
+        outreach_sent_at = datetime('now'),
+        updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [input.resendId, input.leadId],
+  });
+}
+
+export async function markTexasLeadFormSubmitted(input: {
+  leadId: number;
+  contactPageUrl: string | null;
+}): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE texas_leads SET
+        status = 'FORM_SUBMITTED',
+        contact_form_page_url = ?,
+        outreach_sent_at = datetime('now'),
+        updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [input.contactPageUrl, input.leadId],
   });
 }
 

@@ -66,6 +66,11 @@ export function TexasLeadCard({
               {lead.vendorTier ? ` · ${formatVendorTier(lead.vendorTier)}` : ""}
             </span>
           ) : null}
+          {lead.outreachComplete ? (
+            <span className="rounded bg-emerald-900/60 px-1.5 py-0.5 text-emerald-100">
+              {formatTexasField(lead.statusLabel, lead.status)}
+            </span>
+          ) : null}
         </div>
 
         {location !== "—" ? (

@@ -5,6 +5,7 @@ import {
   getAllTexasLeads,
   getTexasLeadById,
 } from "../engine/store/texas-leads-repository.js";
+import { executeTexasLeadOutreach } from "../engine/texas/texas-outreach-executor.js";
 import { mapTexasLeadRowToApi } from "./texas-api-mapper.js";
 import { createJob } from "../engine/store/jobs-repository.js";
 import { startJob } from "./job-runner.js";
@@ -57,6 +58,32 @@ export function mountTexasRoutes(
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to load Texas lead" });
+    }
+  });
+
+  app.post("/api/texas/leads/:id/send-outreach", requireControlAuth, async (req, res) => {
+    try {
+      await runMigrations();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id < 1) {
+        res.status(400).json({ error: "Invalid lead id" });
+        return;
+      }
+      const result = await executeTexasLeadOutreach(id);
+      const row = await getTexasLeadById(id);
+      res.json({
+        ok: true,
+        result,
+        lead: row ? mapTexasLeadRowToApi(row) : null,
+      });
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : "Texas outreach failed";
+      const status =
+        message.includes("not found") || message.includes("already completed")
+          ? 400
+          : 500;
+      res.status(status).json({ error: message });
     }
   });
 

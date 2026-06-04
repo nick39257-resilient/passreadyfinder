@@ -53,6 +53,8 @@ function joinUrl(base: string, path: string): string {
 async function runContactFormAttempt(input: {
   website: string;
   businessName: string;
+  message?: string;
+  forceSubmit?: boolean;
 }): Promise<ContactFormAttemptResult> {
   const siteUrl = normalizeWebsiteUrl(input.website);
   if (!siteUrl) {
@@ -128,14 +130,18 @@ async function runContactFormAttempt(input: {
         );
       }
       if (await messageField.isVisible({ timeout: actionTimeout() }).catch(() => false)) {
-        const msg = contactFormMessage().replace(
-          "[Business Name]",
-          input.businessName.trim(),
-        );
+        const custom = input.message?.trim();
+        const msg = custom
+          ? custom
+          : contactFormMessage().replace(
+              "[Business Name]",
+              input.businessName.trim(),
+            );
         await messageField.fill(msg, { timeout: actionTimeout() });
       }
 
-      if (!autoSubmitEnabled()) {
+      const shouldSubmit = input.forceSubmit === true || autoSubmitEnabled();
+      if (!shouldSubmit) {
         return {
           submitted: false,
           contactPageUrl,
@@ -182,6 +188,8 @@ async function runContactFormAttempt(input: {
 export async function tryWebsiteContactForm(input: {
   website: string;
   businessName: string;
+  message?: string;
+  forceSubmit?: boolean;
 }): Promise<ContactFormAttemptResult> {
   try {
     return await withTimeout(
