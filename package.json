@@ -17,6 +17,8 @@
     "send-cron": "tsx src/cli/send-cron.ts",
     "enrich": "npx tsx src/engine/enricher.ts",
     "enrich-emails": "tsx src/cli/enrich-emails.ts",
+    "enrich-phase1": "tsx src/cli/enrich-phase1.ts",
+    "test:lead-guardrails": "tsx src/engine/lead-guardrails.test.ts",
     "diagnose": "tsx src/cli/diagnose-outreach.ts",
     "call-list": "tsx src/cli/call-list.ts",
     "smoke": "tsx scripts/smoke-test.mjs",
@@ -45,7 +47,11 @@
     "resend": "^6.12.3",
     "zod": "^4.4.3"
   },
+  "optionalDependencies": {
+    "playwright": "^1.52.0"
+  },
   "devDependencies": {
+    "playwright": "^1.52.0",
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.1",
     "@vercel/node": "^5.8.4",

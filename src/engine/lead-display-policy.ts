@@ -52,6 +52,8 @@ const OUTBOUND_STATUSES = new Set([
   "opted_in",
   "trial_started",
   "nurture",
+  "ready_to_review",
+  "form_submitted",
 ]);
 
 /** Keep emailed / replied leads visible even if they no longer pass the mailable filter. */

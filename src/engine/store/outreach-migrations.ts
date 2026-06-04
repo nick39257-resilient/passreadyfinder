@@ -18,6 +18,13 @@ const LEAD_PHASE_B_COLUMNS = [
   "flag_for_review INTEGER NOT NULL DEFAULT 0",
   "needs_eyes_reason TEXT",
   "needs_eyes_updated_at TEXT",
+  "enrichment_status TEXT NOT NULL DEFAULT 'PENDING'",
+  "contact_method TEXT",
+  "owner_name TEXT",
+  "enrichment_detail TEXT",
+  "apollo_enriched_at TEXT",
+  "contact_form_submitted_at TEXT",
+  "contact_form_page_url TEXT",
 ] as const;
 
 async function columnExists(table: string, column: string): Promise<boolean> {

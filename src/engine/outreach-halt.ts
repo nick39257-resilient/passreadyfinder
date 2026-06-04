@@ -10,6 +10,7 @@ export const OUTREACH_HALTED_STATUSES = [
   "opted_in",
   "trial_started",
   "nurture",
+  "form_submitted",
 ] as const;
 
 export type OutreachHaltedStatus = (typeof OUTREACH_HALTED_STATUSES)[number];

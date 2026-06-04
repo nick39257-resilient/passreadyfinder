@@ -15,7 +15,9 @@ import { resolveAuthoritiesForFind, isUkWideArea } from "./finder/find-area.js";
 import { fetchEstablishmentScores } from "./finder/fsa-detail.js";
 import { isRateLimited } from "./rate-limit-queue.js";
 import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
+import { runPhase1EnrichmentForLead } from "./enrich/lead-enrichment-phase1.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "./enrich/lead-email.js";
+import { exclusionReason, isExcludedLead } from "./lead-guardrails.js";
 import { calculateLeadScore } from "./score/scorer.js";
 import { getDb, runMigrations } from "./store/db.js";
 import {
@@ -41,6 +43,7 @@ export interface PipelineResult {
   syncTimestampUpdated: boolean;
   deltaMode?: boolean;
   fullResync?: boolean;
+  excludedByGuardrail?: number;
 }
 
 interface FetchLeadsResult {
@@ -48,6 +51,7 @@ interface FetchLeadsResult {
   apiRows: number;
   deltaRows: number;
   pagesFetched: number;
+  excludedByGuardrail: number;
 }
 
 /**
@@ -100,6 +104,7 @@ async function fetchLeadsWithDeltaSync(options: {
   let apiRows = 0;
   let deltaRows = 0;
   let pagesFetched = 0;
+  let excludedByGuardrail = 0;
 
   for (const businessTypeId of businessTypeIds) {
     for await (const page of iterateEstablishmentPages(localAuthorityId, businessTypeId)) {
@@ -116,6 +121,10 @@ async function fetchLeadsWithDeltaSync(options: {
         deltaRows++;
 
         const lead = establishmentToRawLead(est);
+        if (isExcludedLead(lead)) {
+          excludedByGuardrail++;
+          continue;
+        }
         if (
           !matchesRatingFilter(lead.fsaRating, { worstFirst, maxRating, targetRating })
         ) {
@@ -134,6 +143,7 @@ async function fetchLeadsWithDeltaSync(options: {
     apiRows,
     deltaRows,
     pagesFetched,
+    excludedByGuardrail,
   };
 }
 
@@ -193,6 +203,7 @@ export async function runFindPipeline(options?: {
   let apiRows = 0;
   let deltaRows = 0;
   let pagesFetched = 0;
+  let excludedByGuardrail = 0;
 
   try {
     for (let i = 0; i < authorityNames.length; i++) {
@@ -215,6 +226,7 @@ export async function runFindPipeline(options?: {
       apiRows += fetchResult.apiRows;
       deltaRows += fetchResult.deltaRows;
       pagesFetched += fetchResult.pagesFetched;
+      excludedByGuardrail += fetchResult.excludedByGuardrail;
       for (const lead of fetchResult.leads) {
         merged.set(lead.fsaId, lead);
       }
@@ -229,7 +241,7 @@ export async function runFindPipeline(options?: {
 
   const rawLeads = Array.from(merged.values());
   console.log(
-    `  Done: ${pagesFetched} page(s), ${apiRows} API rows, ${deltaRows} delta rows, ${rawLeads.length} match target rating.`,
+    `  Done: ${pagesFetched} page(s), ${apiRows} API rows, ${deltaRows} delta rows, ${excludedByGuardrail} excluded (cafe/coffee/etc.), ${rawLeads.length} kept.`,
   );
 
   const scored = rawLeads.map((lead) => ({
@@ -331,6 +343,20 @@ export async function runFindPipeline(options?: {
           if (osm.website) {
             await tryEnrichLeadEmailFromWebsite(leadId, osm.website);
           }
+          try {
+            const phase1 = await runPhase1EnrichmentForLead(leadId, {
+              allowContactForm: false,
+            });
+            if (phase1.enrichmentStatus === "EMAIL_FOUND") {
+              process.stdout.write("+");
+            } else if (phase1.contactMethod === "CONTACT_FORM") {
+              process.stdout.write("f");
+            }
+          } catch (phaseErr) {
+            console.warn(
+              `\n  Phase1 enrich failed for ${lead.businessName}: ${phaseErr instanceof Error ? phaseErr.message : phaseErr}`,
+            );
+          }
         }
 
         enriched++;
@@ -365,6 +391,7 @@ export async function runFindPipeline(options?: {
     syncTimestampUpdated: true,
     deltaMode: !fullResync && Boolean(storedLastSync),
     fullResync,
+    excludedByGuardrail,
   };
 }
 

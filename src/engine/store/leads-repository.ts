@@ -118,6 +118,10 @@ export interface LeadRow {
   replied_at?: string | null;
   flag_for_review?: number | null;
   needs_eyes_reason?: string | null;
+  enrichment_status?: string | null;
+  contact_method?: string | null;
+  owner_name?: string | null;
+  enrichment_detail?: string | null;
   needs_eyes_updated_at?: string | null;
   created_at: string;
   updated_at: string;

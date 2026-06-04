@@ -14,7 +14,11 @@ export type AreaConfig =
 
 export const productConfig = {
   /** FSA BusinessType names — resolved to IDs at runtime via /BusinessTypes */
-  businessTypeNames: ["Takeaway/sandwich shop"],
+  businessTypeNames: [
+    "Takeaway/sandwich shop",
+    "Restaurant/Cafe/Caterer",
+    "Mobile caterer",
+  ],
 
   /** Geographic area to search (UK = all FSA local authorities) */
   area: {
@@ -27,6 +31,15 @@ export const productConfig = {
 
   /** Cap OSM/email enrichment per find run when matches exceed this (delta runs usually smaller). */
   enrichTopN: 500,
+
+  /** Phase 1 enrichment — Apollo + optional contact-form fallback */
+  enrichment: {
+    apolloEnabled: true,
+    apolloDailyCap: 50,
+    contactFormMessage:
+      "Hi — I'm a kitchen manager in Preston. I built PassReady for [Business Name] and our own takeaway team (EHO checklists, allergens, multilingual). Free FSA score check: https://score.passready.uk — happy to share a 7-day trial if useful.",
+    contactFormAutoSubmit: false,
+  },
 
   /** Scoring weights — see scorer.ts for formula */
   scoring: {

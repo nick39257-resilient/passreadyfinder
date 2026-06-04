@@ -96,6 +96,17 @@ async function main(): Promise<void> {
     "Website but no email (run enrich-emails)",
     Number(websiteNoEmail.rows[0]?.n ?? 0),
   );
+  const enrichStats = await db.execute(`
+    SELECT enrichment_status, COUNT(*) AS n FROM leads GROUP BY enrichment_status
+  `);
+  console.log("\nEnrichment status");
+  for (const row of enrichStats.rows) {
+    line(String(row.enrichment_status ?? "null"), Number(row.n ?? 0));
+  }
+  const rtr = await db.execute(`SELECT COUNT(*) AS n FROM leads WHERE status = 'ready_to_review'`);
+  line("ready_to_review leads", Number(rtr.rows[0]?.n ?? 0));
+  const forms = await db.execute(`SELECT COUNT(*) AS n FROM leads WHERE status = 'form_submitted'`);
+  line("form_submitted leads", Number(forms.rows[0]?.n ?? 0));
   line("With draft text", withDraft);
   line("Send-ready (approved+email)", sendReady);
 
