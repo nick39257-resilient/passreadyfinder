@@ -11,8 +11,21 @@ import {
   getControlSecret,
   setControlSecret,
 } from "../lib/control-secret";
-import { pollJobUntilDone } from "../lib/job-poll";
+import { pollJobUntilDone, type JobStatus } from "../lib/job-poll";
+import {
+  formatTexasField,
+  formatTexasScore,
+  formatTexasLocation,
+  formatVendorTier,
+} from "../lib/texas-lead-display";
 import { TexasLeadCard } from "./TexasLeadCard";
+
+function jobProgressLabel(job: JobStatus): string {
+  if (typeof job.progress === "string" && job.progress.trim()) {
+    return job.progress;
+  }
+  return formatTexasField(job.status, "Running…");
+}
 
 type RecordFilter = "all" | "mobile";
 
@@ -103,7 +116,10 @@ export function TexasCommandCenter() {
         secret,
       );
       setMessage("Texas ingest running…");
-      await pollJobUntilDone(jobId, (p) => setMessage(p));
+      const { promise } = pollJobUntilDone(jobId, (job) => {
+        setMessage(jobProgressLabel(job));
+      });
+      await promise;
       await load();
       setMessage("Texas ingest complete.");
     } catch (e) {
@@ -183,7 +199,8 @@ export function TexasCommandCenter() {
 
         {stats ? (
           <p className="mt-2 text-xs text-slate-500">
-            {stats.total} total · {stats.mobile} mobile · {stats.critical} critical (≥79)
+            {formatTexasScore(stats.total)} total · {formatTexasScore(stats.mobile)} mobile ·{" "}
+            {formatTexasScore(stats.critical)} critical (≥79)
           </p>
         ) : null}
       </header>
@@ -193,7 +210,9 @@ export function TexasCommandCenter() {
           <p className="rounded-lg bg-red-950/60 p-3 text-sm text-red-200">{error}</p>
         ) : null}
         {message ? (
-          <p className="mb-3 rounded-lg bg-slate-800/80 p-3 text-sm text-amber-100">{message}</p>
+          <p className="mb-3 rounded-lg bg-slate-800/80 p-3 text-sm text-amber-100">
+            {formatTexasField(message)}
+          </p>
         ) : null}
 
         {loading ? (
@@ -263,24 +282,31 @@ export function TexasCommandCenter() {
             className="max-h-[80vh] w-full overflow-y-auto rounded-2xl border border-amber-800 bg-slate-900 p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-bold">{selected.businessName}</h3>
+            <h3 className="text-lg font-bold">
+              {formatTexasField(selected.businessName, "Unknown venue")}
+            </h3>
             <p className="mt-1 text-sm text-amber-300">
-              Texas Risk Score: {selected.texasRiskScore}
-              {selected.interventionLevel ? ` · ${selected.interventionLevel}` : ""}
+              Texas Risk Score: {formatTexasScore(selected.texasRiskScore)}
+              {selected.interventionLevel
+                ? ` · ${formatTexasField(selected.interventionLevel)}`
+                : ""}
             </p>
             <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
               <dt>Inspection</dt>
-              <dd>{selected.inspectionScore ?? "—"}</dd>
+              <dd>{formatTexasScore(selected.inspectionScore)}</dd>
               <dt>Demerits</dt>
-              <dd>{selected.demerits ?? "—"}</dd>
+              <dd>{formatTexasScore(selected.demerits)}</dd>
               <dt>Vehicle</dt>
-              <dd>{selected.vehicleType ?? "—"}</dd>
+              <dd>{formatTexasField(selected.vehicleType)}</dd>
+              <dt>Location</dt>
+              <dd>{formatTexasLocation(selected)}</dd>
               <dt>DSHS license</dt>
-              <dd>{selected.dshsLicenseStatus}</dd>
+              <dd>{formatTexasField(selected.dshsLicenseStatus)}</dd>
               <dt>HB 2844 tier</dt>
-              <dd>{selected.vendorTier ?? "—"}</dd>
+              <dd>{formatVendorTier(selected.vendorTier)}</dd>
             </dl>
-            {selected.hb2844DraftPreview ? (
+            {typeof selected.hb2844DraftPreview === "string" &&
+            selected.hb2844DraftPreview.trim() ? (
               <p className="mt-4 text-sm leading-relaxed text-slate-300">
                 {selected.hb2844DraftPreview}
               </p>

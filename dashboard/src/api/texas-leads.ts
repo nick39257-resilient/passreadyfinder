@@ -1,5 +1,6 @@
 import { authHeaders } from "../lib/auth-headers.js";
 import { getControlSecret } from "../lib/control-secret.js";
+import { normalizeTexasLead } from "../lib/texas-lead-display.js";
 
 export interface ApiTexasLead {
   id: number;
@@ -53,8 +54,9 @@ export async function fetchTexasLeads(
   if (!res.ok) {
     await parseTexasError(res, "Texas leads failed");
   }
-  const data = (await res.json()) as { leads: ApiTexasLead[] };
-  return data.leads;
+  const data = (await res.json()) as { leads?: unknown };
+  const rows = Array.isArray(data.leads) ? data.leads : [];
+  return rows.map(normalizeTexasLead);
 }
 
 export async function fetchTexasStats(secret?: string): Promise<TexasStats> {

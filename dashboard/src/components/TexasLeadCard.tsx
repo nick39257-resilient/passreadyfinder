@@ -1,4 +1,10 @@
 import type { ApiTexasLead } from "../api/texas-leads";
+import {
+  formatTexasField,
+  formatTexasLocation,
+  formatTexasScore,
+  formatVendorTier,
+} from "../lib/texas-lead-display";
 
 export function TexasLeadCard({
   lead,
@@ -7,7 +13,13 @@ export function TexasLeadCard({
   lead: ApiTexasLead;
   onTap?: () => void;
 }) {
-  const critical = lead.isCritical;
+  const critical = Boolean(lead.isCritical);
+  const businessName = formatTexasField(lead.businessName, "Unknown venue");
+  const riskScore = formatTexasScore(lead.texasRiskScore);
+  const location = formatTexasLocation(lead);
+  const draftPreview =
+    typeof lead.hb2844DraftPreview === "string" ? lead.hb2844DraftPreview : null;
+
   return (
     <li>
       <button
@@ -20,7 +32,7 @@ export function TexasLeadCard({
         }`}
       >
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <h3 className="text-base font-semibold text-slate-100">{lead.businessName}</h3>
+          <h3 className="text-base font-semibold text-slate-100">{businessName}</h3>
           <span
             className={`rounded-full px-2.5 py-1 text-xs font-bold ${
               critical
@@ -28,7 +40,7 @@ export function TexasLeadCard({
                 : "bg-amber-700/80 text-amber-50"
             }`}
           >
-            Risk {lead.texasRiskScore}
+            Risk {riskScore}
           </span>
         </div>
 
@@ -40,26 +52,28 @@ export function TexasLeadCard({
 
         <div className="flex flex-wrap gap-2 text-xs text-slate-400">
           {lead.inspectionScore != null ? (
-            <span>Inspection {lead.inspectionScore}</span>
+            <span>Inspection {formatTexasScore(lead.inspectionScore)}</span>
           ) : null}
-          {lead.demerits != null ? <span>Demerits {lead.demerits}</span> : null}
-          {lead.vehicleType ? <span>{lead.vehicleType}</span> : null}
+          {lead.demerits != null ? (
+            <span>Demerits {formatTexasScore(lead.demerits)}</span>
+          ) : null}
+          {lead.vehicleType ? (
+            <span>{formatTexasField(lead.vehicleType)}</span>
+          ) : null}
           {lead.isMobileVendor ? (
             <span className="rounded bg-amber-900/60 px-1.5 py-0.5 text-amber-100">
               Mobile unit
-              {lead.vendorTier ? ` · ${lead.vendorTier.replace("_", " ")}` : ""}
+              {lead.vendorTier ? ` · ${formatVendorTier(lead.vendorTier)}` : ""}
             </span>
           ) : null}
         </div>
 
-        {(lead.city || lead.county) && (
-          <p className="text-xs text-slate-500">
-            {[lead.city, lead.county, lead.zip].filter(Boolean).join(", ")}
-          </p>
-        )}
+        {location !== "—" ? (
+          <p className="text-xs text-slate-500">{location}</p>
+        ) : null}
 
-        {lead.hb2844DraftPreview && lead.isMobileVendor ? (
-          <p className="line-clamp-2 text-xs text-slate-400">{lead.hb2844DraftPreview}</p>
+        {draftPreview && lead.isMobileVendor ? (
+          <p className="line-clamp-2 text-xs text-slate-400">{draftPreview}</p>
         ) : null}
       </button>
     </li>
