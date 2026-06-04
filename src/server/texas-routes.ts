@@ -16,7 +16,7 @@ export function mountTexasRoutes(
   app: Express,
   requireControlAuth: ControlAuth,
 ): void {
-  app.get("/api/texas/stats", async (_req, res) => {
+  app.get("/api/texas/stats", requireControlAuth, async (_req, res) => {
     try {
       await runMigrations();
       const counts = await countTexasLeads();
@@ -27,7 +27,7 @@ export function mountTexasRoutes(
     }
   });
 
-  app.get("/api/texas/leads", async (req, res) => {
+  app.get("/api/texas/leads", requireControlAuth, async (req, res) => {
     try {
       await runMigrations();
       const mobileOnly =
@@ -40,7 +40,7 @@ export function mountTexasRoutes(
     }
   });
 
-  app.get("/api/texas/leads/:id", async (req, res) => {
+  app.get("/api/texas/leads/:id", requireControlAuth, async (req, res) => {
     try {
       await runMigrations();
       const id = Number(req.params.id);

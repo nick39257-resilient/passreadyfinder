@@ -1,3 +1,6 @@
+import { authHeaders } from "../lib/auth-headers.js";
+import { getControlSecret } from "../lib/control-secret.js";
+
 export interface ApiTexasLead {
   id: number;
   region: string;
@@ -30,36 +33,50 @@ export interface TexasStats {
   critical: number;
 }
 
-export async function fetchTexasLeads(mobileOnly: boolean): Promise<ApiTexasLead[]> {
+function texasAuthHeaders(secret?: string): Record<string, string> {
+  return authHeaders(secret ?? getControlSecret());
+}
+
+async function parseTexasError(res: Response, fallback: string): Promise<never> {
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  throw new Error(body.error ?? `${fallback} (${res.status})`);
+}
+
+export async function fetchTexasLeads(
+  mobileOnly: boolean,
+  secret?: string,
+): Promise<ApiTexasLead[]> {
   const q = mobileOnly ? "?mobileOnly=1" : "";
-  const res = await fetch(`/api/texas/leads${q}`);
+  const res = await fetch(`/api/texas/leads${q}`, {
+    headers: texasAuthHeaders(secret),
+  });
   if (!res.ok) {
-    throw new Error(`Texas leads failed (${res.status})`);
+    await parseTexasError(res, "Texas leads failed");
   }
   const data = (await res.json()) as { leads: ApiTexasLead[] };
   return data.leads;
 }
 
-export async function fetchTexasStats(): Promise<TexasStats> {
-  const res = await fetch("/api/texas/stats");
+export async function fetchTexasStats(secret?: string): Promise<TexasStats> {
+  const res = await fetch("/api/texas/stats", {
+    headers: texasAuthHeaders(secret),
+  });
   if (!res.ok) {
-    throw new Error(`Texas stats failed (${res.status})`);
+    await parseTexasError(res, "Texas stats failed");
   }
   return res.json() as Promise<TexasStats>;
 }
 
-export async function startTexasFindJob(options: {
-  mobileOnly?: boolean;
-  limit?: number;
-}): Promise<{ jobId: string }> {
-  const secret = sessionStorage.getItem("passready_control_secret");
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (secret) {
-    headers.Authorization = `Bearer ${secret}`;
-  }
+export async function startTexasFindJob(
+  options: {
+    mobileOnly?: boolean;
+    limit?: number;
+  },
+  secret?: string,
+): Promise<{ jobId: string }> {
   const res = await fetch("/api/texas/jobs/find", {
     method: "POST",
-    headers,
+    headers: texasAuthHeaders(secret),
     body: JSON.stringify({
       mobileOnly: options.mobileOnly === true,
       limit: options.limit ?? 500,
@@ -67,8 +84,7 @@ export async function startTexasFindJob(options: {
     }),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(err.error ?? `Texas find failed (${res.status})`);
+    await parseTexasError(res, "Texas find failed");
   }
   return res.json() as Promise<{ jobId: string }>;
 }
