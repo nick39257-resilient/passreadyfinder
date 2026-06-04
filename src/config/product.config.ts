@@ -35,7 +35,7 @@ export const productConfig = {
   /** Phase 1 enrichment — Apollo + optional contact-form fallback */
   enrichment: {
     apolloEnabled: true,
-    apolloDailyCap: 50,
+    apolloDailyCap: Number(process.env.APOLLO_DAILY_CAP) || 3,
     contactFormMessage:
       "Hi — I'm a kitchen manager in Preston. I built PassReady for [Business Name] and our own takeaway team (EHO checklists, allergens, multilingual). Free FSA score check: https://score.passready.uk — happy to share a 7-day trial if useful.",
     contactFormAutoSubmit: false,

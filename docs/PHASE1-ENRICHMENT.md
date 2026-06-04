@@ -17,7 +17,7 @@ PassFinder uses **Turso (SQLite)** + TypeScript — not Prisma/PostgreSQL. Schem
 ## Step 2 — Apollo.io
 
 - Set `APOLLO_API_KEY` in Render.
-- Free-tier daily cap: `product.config.enrichment.apolloDailyCap` (default 50).
+- Daily cap: `product.config.enrichment.apolloDailyCap` (default 3; set `APOLLO_DAILY_CAP` in `.env`).
 - Flow: website scrape → Apollo `mixed_people/search` (+ optional `people/match`) → owner titles.
 - On email found: `enrichment_status=EMAIL_FOUND`, `status=ready_to_review`.
 
