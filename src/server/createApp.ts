@@ -62,6 +62,10 @@ import { formatRouteError } from "./quick-draft-handler.js";
 import { mapLeadRowToApiLead } from "./lead-api-mapper.js";
 import { handleResendInboundWebhook } from "./resend-inbound-webhook.js";
 import { startJob } from "./job-runner.js";
+import {
+  reclaimAllInFlightJobs,
+  reclaimOrphanedJobsOnStartup,
+} from "../engine/store/job-stale-reclaim.js";
 import { mountTexasRoutes } from "./texas-routes.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, "../..");
@@ -102,11 +106,16 @@ function mountDashboard(app: express.Express): void {
 }
 
 let migrationsDone = false;
+let startupJobsReclaimed = false;
 
 async function ensureMigrations(): Promise<void> {
   if (!migrationsDone) {
     await runMigrations();
     migrationsDone = true;
+  }
+  if (!startupJobsReclaimed) {
+    startupJobsReclaimed = true;
+    await reclaimOrphanedJobsOnStartup();
   }
 }
 
@@ -618,6 +627,18 @@ export async function createApp(options?: {
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch deliverability" });
+    }
+  });
+
+  app.post("/api/jobs/reset-stuck", requireControlAuth, async (_req, res) => {
+    try {
+      const reclaimed = await reclaimAllInFlightJobs(
+        "Manually reset — dashboard pulse cleared",
+      );
+      res.json({ reclaimed, pulse: "idle" });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to reset stuck jobs" });
     }
   });
 

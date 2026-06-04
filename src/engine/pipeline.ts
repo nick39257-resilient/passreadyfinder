@@ -160,6 +160,7 @@ async function fetchLeadsWithDeltaSync(options: {
 export async function runFindPipeline(options?: {
   skipEnrichment?: boolean;
   segmentation?: FindJobParams;
+  onProgress?: (message: string) => void | Promise<void>;
 }): Promise<PipelineResult> {
   await runMigrations();
 
@@ -224,9 +225,27 @@ export async function runFindPipeline(options?: {
   let pagesFetched = 0;
   let excludedByGuardrail = 0;
 
+  const reportProgress = async (message: string) => {
+    await options?.onProgress?.(message);
+  };
+
+  const heartbeatMs = 25_000;
+  const heartbeat =
+    options?.onProgress &&
+    setInterval(() => {
+      void reportProgress(
+        `FSA find running… ${merged.size} lead(s), ${pagesFetched} page(s) fetched`,
+      );
+    }, heartbeatMs);
+
   try {
+    await reportProgress(`Resolving ${authorityNames.length} local authority/authorities…`);
+
     for (let i = 0; i < authorityNames.length; i++) {
       const authority = authorityNames[i]!;
+      await reportProgress(
+        `FSA ${i + 1}/${authorityNames.length}: ${authority.name}…`,
+      );
       if (authorityNames.length > 1) {
         console.log(
           `Authority ${i + 1}/${authorityNames.length}: ${authority.name}`,
@@ -256,6 +275,10 @@ export async function runFindPipeline(options?: {
       err instanceof Error ? err.message : err,
     );
     throw err;
+  } finally {
+    if (heartbeat) {
+      clearInterval(heartbeat);
+    }
   }
 
   const rawLeads = Array.from(merged.values());
@@ -327,7 +350,15 @@ export async function runFindPipeline(options?: {
       console.log(`Enriching ${toEnrich.length} lead(s) via Overpass API…`);
     }
 
-    for (const lead of toEnrich) {
+    await reportProgress(`OSM enrichment: ${toEnrich.length} lead(s)…`);
+
+    for (let enrichIdx = 0; enrichIdx < toEnrich.length; enrichIdx++) {
+      const lead = toEnrich[enrichIdx]!;
+      if (enrichIdx % 10 === 0) {
+        await reportProgress(
+          `OSM ${enrichIdx + 1}/${toEnrich.length}: ${lead.businessName}…`,
+        );
+      }
       try {
         const osm = await enrichFromOsm({
           fsaId: lead.fsaId,

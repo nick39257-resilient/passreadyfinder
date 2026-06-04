@@ -16,6 +16,10 @@ import {
 } from "../daily-send-cap.js";
 import { countNeedsEyesDrafts, getLeadStatusCounts } from "../store/stats-repository.js";
 import { runMigrations } from "../store/db.js";
+import {
+  findJobStillRunning,
+  reclaimStaleJobs,
+} from "../store/job-stale-reclaim.js";
 
 export type SystemPulseState =
   | "idle"
@@ -75,8 +79,13 @@ export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
   ]);
   const feed = logs.map(mapFeedEntry);
 
-  const runningFind = recentJobs.some((j) => j.type === "find" && j.status === "running");
-  const runningDraft = recentJobs.some((j) => j.type === "draft" && j.status === "running");
+  await reclaimStaleJobs();
+  const jobsAfterReclaim = await getRecentJobs(20);
+
+  const runningFind = findJobStillRunning(jobsAfterReclaim);
+  const runningDraft = jobsAfterReclaim.some(
+    (j) => j.type === "draft" && j.status === "running",
+  );
 
   let pulse: SystemPulseState = "idle";
   let errorMessage: string | null = null;
@@ -86,7 +95,7 @@ export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
   } else if (runningDraft) {
     pulse = "drafting";
   } else {
-    const jobError = resolveRecentJobPulseError(recentJobs);
+    const jobError = resolveRecentJobPulseError(jobsAfterReclaim);
     const logError = resolveEngineLogPulseError(latestError);
     const resolvedError = jobError ?? logError;
     if (resolvedError) {

@@ -56,7 +56,11 @@ async function runJobBody(
           : "Checking FSA for rating changes since last sync…",
       });
       return runFindLeadsJob({
+        jobId,
         segmentation: findParams,
+        onProgress: async (message) => {
+          await updateJob(jobId, { progress: message });
+        },
       });
     }
     case "find_texas": {
@@ -133,12 +137,12 @@ async function logSendJobOutcome(result: unknown): Promise<void> {
   }
 }
 
-async function ensureJobNotStuckRunning(
+async function ensureJobNotStuckInFlight(
   jobId: string,
   fallbackError: string,
 ): Promise<void> {
   const job = await getJob(jobId);
-  if (job?.status === "running") {
+  if (job?.status === "running" || job?.status === "pending") {
     await updateJob(jobId, {
       status: "failed",
       progress: "Failed",
@@ -150,8 +154,8 @@ async function ensureJobNotStuckRunning(
 /** Fire-and-forget background job on the always-on server. */
 export function startJob(jobId: string, type: JobType): void {
   void (async () => {
-    let succeeded = false;
     try {
+      await updateJob(jobId, { status: "running", progress: "Starting…" });
       const result = await withTimeout(
         jobTimeoutMs(type),
         `job_${type}`,
@@ -162,7 +166,6 @@ export function startJob(jobId: string, type: JobType): void {
         progress: "Complete",
         result,
       });
-      succeeded = true;
       if (type === "send") {
         await logSendJobOutcome(result);
       }
@@ -180,12 +183,10 @@ export function startJob(jobId: string, type: JobType): void {
         error: message,
       });
     } finally {
-      if (!succeeded) {
-        await ensureJobNotStuckRunning(
-          jobId,
-          "Job ended without completion — pulse reset to idle",
-        );
-      }
+      await ensureJobNotStuckInFlight(
+        jobId,
+        "Job ended without completion — pulse reset to idle",
+      );
     }
   })();
 }

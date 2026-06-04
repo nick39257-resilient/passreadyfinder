@@ -9,8 +9,10 @@ export type FindLeadsJobResult = PipelineResult;
  * Finder workflow — scrape FSA, score, enrich, upsert DB only. No drafting or sending.
  */
 export async function runFindLeadsJob(options?: {
+  jobId?: string;
   skipEnrichment?: boolean;
   segmentation?: FindJobParams;
+  onProgress?: (message: string) => void | Promise<void>;
 }): Promise<FindLeadsJobResult> {
   await runMigrations();
   console.log("FindLeads: scrape → score → store (no drafting)\n");
@@ -18,6 +20,7 @@ export async function runFindLeadsJob(options?: {
     const result = await runFindPipeline({
       skipEnrichment: options?.skipEnrichment,
       segmentation: options?.segmentation,
+      onProgress: options?.onProgress,
     });
     await logFindLeadsResult({ stored: result.stored, fetched: result.fetched });
     return result;
