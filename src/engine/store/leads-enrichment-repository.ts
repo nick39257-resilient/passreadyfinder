@@ -81,6 +81,24 @@ export async function markLeadEnrichmentFailed(
   });
 }
 
+/** Clear stuck PENDING after Phase 1 abort/timeout so UI is not left in a scraping state. */
+export async function resetLeadEnrichmentIfStillPending(
+  leadId: number,
+  detail: string,
+): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE leads SET
+        enrichment_status = 'FAILED',
+        enrichment_detail = ?,
+        updated_at = datetime('now')
+      WHERE id = ? AND enrichment_status = 'PENDING'
+    `,
+    args: [detail.slice(0, 500), leadId],
+  });
+}
+
 export function enrichmentStatusFromRow(
   row: { enrichment_status?: string | null },
 ): EnrichmentStatus {

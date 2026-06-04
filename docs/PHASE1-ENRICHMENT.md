@@ -2,6 +2,13 @@
 
 PassFinder uses **Turso (SQLite)** + TypeScript — not Prisma/PostgreSQL. Schema changes run via `outreach-migrations.ts` on startup.
 
+## Timeouts (avoid hung Scraping pulse on Render)
+
+- Playwright: **15s max per website**; `browser.close()` always in `finally`.
+- Apollo: **15s per request**, **30s per lead lookup** (returns null on timeout).
+- Phase 1: **45s per lead**; `PENDING` enrichment cleared in `finally` if still stuck.
+- Find jobs: global timeout + `finally` so job status never stays `running` (UI **Scraping** → idle).
+
 ## Step 1 — Guardrails
 
 - Skips leads whose **business name** matches: Cafe, Coffee, Roasters, Bakery, Tea Room, Sandwich Bar.

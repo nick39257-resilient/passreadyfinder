@@ -13,6 +13,20 @@ import {
   type JobType,
 } from "../engine/store/jobs-repository.js";
 import type { DraftJobParams, FindJobParams } from "../types/segmentation.js";
+import { OperationTimeoutError, withTimeout } from "../engine/services/service-timeout.js";
+
+const JOB_TIMEOUT_MS: Partial<Record<JobType, number>> = {
+  find: 2 * 60 * 60 * 1000,
+  find_texas: 45 * 60 * 1000,
+  draft_all: 60 * 60 * 1000,
+  contact_discovery: 20 * 60 * 1000,
+};
+
+const DEFAULT_JOB_TIMEOUT_MS = 60 * 60 * 1000;
+
+function jobTimeoutMs(type: JobType): number {
+  return JOB_TIMEOUT_MS[type] ?? DEFAULT_JOB_TIMEOUT_MS;
+}
 
 async function runJobBody(
   jobId: string,
@@ -119,27 +133,59 @@ async function logSendJobOutcome(result: unknown): Promise<void> {
   }
 }
 
+async function ensureJobNotStuckRunning(
+  jobId: string,
+  fallbackError: string,
+): Promise<void> {
+  const job = await getJob(jobId);
+  if (job?.status === "running") {
+    await updateJob(jobId, {
+      status: "failed",
+      progress: "Failed",
+      error: fallbackError,
+    });
+  }
+}
+
 /** Fire-and-forget background job on the always-on server. */
 export function startJob(jobId: string, type: JobType): void {
   void (async () => {
+    let succeeded = false;
     try {
-      const result = await runJobBody(jobId, type);
+      const result = await withTimeout(
+        jobTimeoutMs(type),
+        `job_${type}`,
+        () => runJobBody(jobId, type),
+      );
       await updateJob(jobId, {
         status: "done",
         progress: "Complete",
         result,
       });
+      succeeded = true;
       if (type === "send") {
         await logSendJobOutcome(result);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message =
+        err instanceof OperationTimeoutError
+          ? `Job timed out after ${jobTimeoutMs(type) / 1000}s`
+          : err instanceof Error
+            ? err.message
+            : String(err);
       console.error(`Job ${jobId} (${type}) failed:`, err);
       await updateJob(jobId, {
         status: "failed",
         progress: "Failed",
         error: message,
       });
+    } finally {
+      if (!succeeded) {
+        await ensureJobNotStuckRunning(
+          jobId,
+          "Job ended without completion — pulse reset to idle",
+        );
+      }
     }
   })();
 }

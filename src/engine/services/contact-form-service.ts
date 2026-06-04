@@ -1,5 +1,13 @@
 import { productConfig } from "../../config/product.config.js";
 import { normalizeWebsiteUrl } from "../contact-discovery/fetch-page.js";
+import {
+  closeBrowserSafe,
+  remainingMs,
+  withTimeout,
+} from "./service-timeout.js";
+
+/** Hard cap per website — abort and skip if exceeded. */
+export const CONTACT_FORM_SITE_BUDGET_MS = 15_000;
 
 const CONTACT_PATHS = ["/contact", "/contact-us", "/contactus", "/get-in-touch", "/enquiry", "/"];
 
@@ -24,6 +32,9 @@ function autoSubmitEnabled(): boolean {
 }
 
 type PlaywrightModule = typeof import("playwright");
+type PlaywrightBrowser = Awaited<
+  ReturnType<PlaywrightModule["chromium"]["launch"]>
+>;
 
 async function loadPlaywright(): Promise<PlaywrightModule> {
   try {
@@ -39,11 +50,7 @@ function joinUrl(base: string, path: string): string {
   return new URL(path, base).toString();
 }
 
-/**
- * Attempt to submit a website contact form (headless Chromium).
- * Default: dry-run (find form only) unless CONTACT_FORM_AUTO_SUBMIT=true.
- */
-export async function tryWebsiteContactForm(input: {
+async function runContactFormAttempt(input: {
   website: string;
   businessName: string;
 }): Promise<ContactFormAttemptResult> {
@@ -52,23 +59,48 @@ export async function tryWebsiteContactForm(input: {
     return { submitted: false, contactPageUrl: null, reason: "invalid_website" };
   }
 
+  const deadline = Date.now() + CONTACT_FORM_SITE_BUDGET_MS;
+  const actionTimeout = () => Math.min(15_000, Math.max(1_000, remainingMs(deadline)));
+
   const { chromium } = await loadPlaywright();
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  let browser: PlaywrightBrowser | null = null;
 
   try {
+    browser = await chromium.launch({
+      headless: true,
+      timeout: actionTimeout(),
+    });
+    const page = await browser.newPage();
+    page.setDefaultTimeout(actionTimeout());
+    page.setDefaultNavigationTimeout(actionTimeout());
+
     let contactPageUrl: string | null = null;
     let formFound = false;
 
     for (const path of CONTACT_PATHS) {
+      if (remainingMs(deadline) <= 0) {
+        return {
+          submitted: false,
+          contactPageUrl,
+          reason: "site_timeout_15s",
+        };
+      }
+
       const url = joinUrl(siteUrl, path);
       try {
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15_000 });
+        await page.goto(url, {
+          waitUntil: "domcontentloaded",
+          timeout: actionTimeout(),
+        });
       } catch {
         continue;
       }
 
-      const hasForm = await page.locator("form").first().isVisible().catch(() => false);
+      const hasForm = await page
+        .locator("form")
+        .first()
+        .isVisible({ timeout: actionTimeout() })
+        .catch(() => false);
       if (!hasForm) {
         continue;
       }
@@ -86,15 +118,21 @@ export async function tryWebsiteContactForm(input: {
         .locator('textarea, input[name*="message" i], [contenteditable="true"]')
         .first();
 
-      if (await nameField.isVisible().catch(() => false)) {
-        await nameField.fill("Nick — PassReady");
+      if (await nameField.isVisible({ timeout: actionTimeout() }).catch(() => false)) {
+        await nameField.fill("Nick — PassReady", { timeout: actionTimeout() });
       }
-      if (await emailField.isVisible().catch(() => false)) {
-        await emailField.fill(process.env.CONTACT_FORM_FROM_EMAIL?.trim() || "nick@passready.uk");
+      if (await emailField.isVisible({ timeout: actionTimeout() }).catch(() => false)) {
+        await emailField.fill(
+          process.env.CONTACT_FORM_FROM_EMAIL?.trim() || "nick@passready.uk",
+          { timeout: actionTimeout() },
+        );
       }
-      if (await messageField.isVisible().catch(() => false)) {
-        const msg = contactFormMessage().replace("[Business Name]", input.businessName.trim());
-        await messageField.fill(msg);
+      if (await messageField.isVisible({ timeout: actionTimeout() }).catch(() => false)) {
+        const msg = contactFormMessage().replace(
+          "[Business Name]",
+          input.businessName.trim(),
+        );
+        await messageField.fill(msg, { timeout: actionTimeout() });
       }
 
       if (!autoSubmitEnabled()) {
@@ -110,9 +148,9 @@ export async function tryWebsiteContactForm(input: {
           'button[type="submit"], input[type="submit"], button:has-text("Send"), button:has-text("Submit")',
         )
         .first();
-      if (await submit.isVisible().catch(() => false)) {
-        await submit.click();
-        await page.waitForTimeout(2_500);
+      if (await submit.isVisible({ timeout: actionTimeout() }).catch(() => false)) {
+        await submit.click({ timeout: actionTimeout() });
+        await page.waitForTimeout(Math.min(2_500, remainingMs(deadline)));
         return {
           submitted: true,
           contactPageUrl,
@@ -132,6 +170,31 @@ export async function tryWebsiteContactForm(input: {
     }
     return { submitted: false, contactPageUrl, reason: "unknown" };
   } finally {
-    await browser.close();
+    await closeBrowserSafe(browser);
+  }
+}
+
+/**
+ * Attempt to submit a website contact form (headless Chromium).
+ * Default: dry-run (find form only) unless CONTACT_FORM_AUTO_SUBMIT=true.
+ * Aborts after {@link CONTACT_FORM_SITE_BUDGET_MS} per website.
+ */
+export async function tryWebsiteContactForm(input: {
+  website: string;
+  businessName: string;
+}): Promise<ContactFormAttemptResult> {
+  try {
+    return await withTimeout(
+      CONTACT_FORM_SITE_BUDGET_MS,
+      "contact_form_site",
+      () => runContactFormAttempt(input),
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      submitted: false,
+      contactPageUrl: null,
+      reason: message.includes("timed out") ? "site_timeout_15s" : `contact_form_error:${message}`,
+    };
   }
 }

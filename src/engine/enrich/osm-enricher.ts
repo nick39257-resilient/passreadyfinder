@@ -3,7 +3,17 @@ import type { OsmEnrichmentResult, DeliveryAppStatus } from "../../types/lead.js
 import { overpassResponseSchema } from "../../validation/osm.schemas.js";
 import { getOsmCache, setOsmCache } from "../store/leads-repository.js";
 
+/** Required by OSM / Overpass usage policy — never use the default fetch UA. */
+export const OSM_USER_AGENT = "PassReadyFinder/1.0 (contact@passready.co.uk)";
+
+/** Minimum gap between consecutive Overpass HTTP requests (1 req/s policy + buffer). */
+export const OSM_REQUEST_INTERVAL_MS = 1200;
+
+const OVERPASS_FETCH_TIMEOUT_MS = 30_000;
+
 type OverpassElement = ReturnType<typeof overpassResponseSchema.parse>["elements"][number];
+
+let lastOsmNetworkRequestAt = 0;
 
 function escapeOverpassRegex(value: string): string {
   return value.replace(/[\\.*+?^${}()|[\]\\]/g, "\\$&");
@@ -50,6 +60,10 @@ function normalizeEmail(raw: string | undefined): string | null {
   return trimmed;
 }
 
+function emptyOsmResult(): OsmEnrichmentResult {
+  return { phone: null, website: null, email: null, onDeliveryApp: "unknown" };
+}
+
 function extractContact(element: OverpassElement): OsmEnrichmentResult {
   const tags = element.tags ?? {};
   const phone =
@@ -68,7 +82,6 @@ function extractContact(element: OverpassElement): OsmEnrichmentResult {
 }
 
 function sanitizeNameForOverpass(name: string): string {
-  // Use first meaningful token — avoids regex breakage on "T/A", slashes, etc.
   const cleaned = name.replace(/\s+t\/a\s+.*/i, "").trim();
   const token = cleaned.split(/[\s/]+/).find((w) => w.length >= 3) ?? cleaned;
   return escapeOverpassRegex(token.slice(0, 30));
@@ -88,24 +101,49 @@ function buildOverpassQuery(businessName: string, lat: number, lon: number): str
   `.trim();
 }
 
-async function queryOverpass(query: string): Promise<ReturnType<typeof overpassResponseSchema.parse>> {
-  const response = await fetch(productConfig.osm.overpassUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-      "User-Agent": "passreadyfinder/1.0 (contact enrichment; passready)",
-    },
-    body: `data=${encodeURIComponent(query)}`,
-  });
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Overpass API error ${response.status}: ${text.slice(0, 200)}`);
+/** Enforce ≥1.2s between live Overpass network calls (shared across all callers). */
+export async function waitForOsmRateLimit(): Promise<void> {
+  const elapsed = Date.now() - lastOsmNetworkRequestAt;
+  const waitMs = OSM_REQUEST_INTERVAL_MS - elapsed;
+  if (waitMs > 0) {
+    await sleep(waitMs);
   }
+  lastOsmNetworkRequestAt = Date.now();
+}
 
-  const json: unknown = await response.json();
-  return overpassResponseSchema.parse(json);
+async function queryOverpass(
+  query: string,
+  contextLabel: string,
+): Promise<ReturnType<typeof overpassResponseSchema.parse>> {
+  await waitForOsmRateLimit();
+
+  try {
+    const response = await fetch(productConfig.osm.overpassUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+        "User-Agent": OSM_USER_AGENT,
+      },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: AbortSignal.timeout(OVERPASS_FETCH_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Overpass API error ${response.status}: ${text.slice(0, 200)}`);
+    }
+
+    const json: unknown = await response.json();
+    return overpassResponseSchema.parse(json);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`OSM Overpass fetch failed (${contextLabel}): ${message}`);
+  }
 }
 
 function pickBestMatch(
@@ -165,31 +203,47 @@ export async function enrichFromOsm(input: EnrichInput): Promise<OsmEnrichmentRe
   }
 
   if (!input.latitude || !input.longitude) {
-    const empty: OsmEnrichmentResult = {
-      phone: null,
-      website: null,
-      email: null,
-      onDeliveryApp: "unknown",
-    };
-    await setOsmCache(input.fsaId, { ...empty });
+    const empty = emptyOsmResult();
+    try {
+      await setOsmCache(input.fsaId, { ...empty });
+    } catch {
+      /* cache write optional */
+    }
     return empty;
   }
 
-  const query = buildOverpassQuery(input.businessName, input.latitude, input.longitude);
-  const response = await queryOverpass(query);
-  const match = pickBestMatch(response.elements, input.businessName);
-  const result = match
-    ? extractContact(match)
-    : { phone: null, website: null, email: null, onDeliveryApp: "unknown" as const };
+  const contextLabel = `${input.businessName} (fsa ${input.fsaId})`;
 
-  await setOsmCache(input.fsaId, {
-    ...result,
-    rawResponse: JSON.stringify(response).slice(0, 4000),
-  });
+  try {
+    const query = buildOverpassQuery(input.businessName, input.latitude, input.longitude);
+    const response = await queryOverpass(query, contextLabel);
+    const match = pickBestMatch(response.elements, input.businessName);
+    const result = match ? extractContact(match) : emptyOsmResult();
 
-  return result;
-}
+    try {
+      await setOsmCache(input.fsaId, {
+        ...result,
+        rawResponse: JSON.stringify(response).slice(0, 4000),
+      });
+    } catch (cacheErr) {
+      console.warn(
+        `OSM cache write failed for ${contextLabel}: ${
+          cacheErr instanceof Error ? cacheErr.message : cacheErr
+        }`,
+      );
+    }
 
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+    return result;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`OSM lookup failed for ${contextLabel}: ${message}`);
+
+    const empty = emptyOsmResult();
+    try {
+      await setOsmCache(input.fsaId, { ...empty });
+    } catch {
+      /* avoid retry storm on next run */
+    }
+    return empty;
+  }
 }

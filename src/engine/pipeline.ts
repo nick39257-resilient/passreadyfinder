@@ -14,7 +14,11 @@ import {
 import { resolveAuthoritiesForFind, isUkWideArea } from "./finder/find-area.js";
 import { fetchEstablishmentScores } from "./finder/fsa-detail.js";
 import { isRateLimited } from "./rate-limit-queue.js";
-import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
+import {
+  enrichFromOsm,
+  OSM_REQUEST_INTERVAL_MS,
+  sleep,
+} from "./enrich/osm-enricher.js";
 import { runPhase1EnrichmentForLead } from "./enrich/lead-enrichment-phase1.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "./enrich/lead-email.js";
 import { isExcludedLead } from "./lead-guardrails.js";
@@ -381,11 +385,11 @@ export async function runFindPipeline(options?: {
         process.stdout.write(".");
       } catch (err) {
         console.warn(
-          `\n  OSM lookup failed for ${lead.businessName}: ${err instanceof Error ? err.message : err}`,
+          `\n  OSM enrichment step failed for ${lead.businessName}: ${err instanceof Error ? err.message : err}`,
         );
       }
 
-      await sleep(productConfig.osm.requestDelayMs);
+      await sleep(OSM_REQUEST_INTERVAL_MS);
     }
     console.log("\n  Enrichment complete.");
   }

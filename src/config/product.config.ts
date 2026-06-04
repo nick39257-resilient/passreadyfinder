@@ -69,7 +69,8 @@ export const productConfig = {
   osm: {
     overpassUrl: "https://overpass-api.de/api/interpreter",
     searchRadiusMetres: 150,
-    requestDelayMs: 1100,
+    /** ≥1.2s between Overpass calls (see osm-enricher OSM_REQUEST_INTERVAL_MS). */
+    requestDelayMs: 1200,
   },
 
   /**

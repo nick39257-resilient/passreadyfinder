@@ -1,6 +1,9 @@
 import "dotenv/config";
-import { productConfig } from "../config/product.config.js";
-import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
+import {
+  enrichFromOsm,
+  OSM_REQUEST_INTERVAL_MS,
+  sleep,
+} from "./enrich/osm-enricher.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "./enrich/lead-email.js";
 import { getLeadById } from "./store/leads-repository.js";
 import { runMigrations, closeDb } from "./store/db.js";
@@ -10,7 +13,7 @@ import {
   updateLeadContact,
 } from "./store/enricher-repository.js";
 
-const DELAY_MS = productConfig.osm.requestDelayMs;
+const DELAY_MS = OSM_REQUEST_INTERVAL_MS;
 
 export interface EnrichRunResult {
   processed: number;
@@ -89,7 +92,7 @@ export async function runOsmEnricher(): Promise<EnrichRunResult> {
       console.error(`  ✗ ${message}\n`);
     }
 
-    if (i < leads.length - 1 && !wasCached) {
+    if (i < leads.length - 1) {
       await sleep(DELAY_MS);
     }
   }

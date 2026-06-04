@@ -1,5 +1,6 @@
 import { findOwnerEmailViaApollo, isApolloConfigured } from "../services/apollo-service.js";
 import { tryWebsiteContactForm } from "../services/contact-form-service.js";
+import { withTimeout } from "../services/service-timeout.js";
 import type { EnrichmentStatus, ContactMethod } from "../../types/enrichment.js";
 import {
   LEAD_STATUS_FORM_SUBMITTED,
@@ -10,9 +11,13 @@ import {
   markLeadEnrichmentFailed,
   markLeadEmailFromApollo,
   markLeadFormSubmitted,
+  resetLeadEnrichmentIfStillPending,
   setLeadEnrichmentPending,
 } from "../store/leads-enrichment-repository.js";
 import { tryEnrichLeadEmailFromWebsite } from "./lead-email.js";
+
+/** Per-lead Phase 1 cap (website scrape + Apollo + optional Playwright). */
+const PHASE1_LEAD_TIMEOUT_MS = 45_000;
 
 export type Phase1EnrichmentResult = {
   leadId: number;
@@ -23,7 +28,7 @@ export type Phase1EnrichmentResult = {
   detail: string;
 };
 
-export async function runPhase1EnrichmentForLead(
+async function runPhase1EnrichmentForLeadInner(
   leadId: number,
   options?: { allowContactForm?: boolean },
 ): Promise<Phase1EnrichmentResult> {
@@ -45,29 +50,29 @@ export async function runPhase1EnrichmentForLead(
 
   await setLeadEnrichmentPending(leadId);
 
-  if (row.website?.trim()) {
-    const scraped = await tryEnrichLeadEmailFromWebsite(leadId, row.website);
-    if (scraped) {
-      await markLeadEmailFromApollo({
-        leadId,
-        email: scraped,
-        ownerName: null,
-        status: LEAD_STATUS_READY_TO_REVIEW,
-        contactMethod: "EMAIL",
-      });
-      return {
-        leadId,
-        enrichmentStatus: "EMAIL_FOUND",
-        contactMethod: "EMAIL",
-        email: scraped,
-        ownerName: null,
-        detail: "website_scrape",
-      };
+  try {
+    if (row.website?.trim()) {
+      const scraped = await tryEnrichLeadEmailFromWebsite(leadId, row.website);
+      if (scraped) {
+        await markLeadEmailFromApollo({
+          leadId,
+          email: scraped,
+          ownerName: null,
+          status: LEAD_STATUS_READY_TO_REVIEW,
+          contactMethod: "EMAIL",
+        });
+        return {
+          leadId,
+          enrichmentStatus: "EMAIL_FOUND",
+          contactMethod: "EMAIL",
+          email: scraped,
+          ownerName: null,
+          detail: "website_scrape",
+        };
+      }
     }
-  }
 
-  if (isApolloConfigured()) {
-    try {
+    if (isApolloConfigured()) {
       const apollo = await findOwnerEmailViaApollo({
         businessName: row.business_name,
         address: row.address,
@@ -91,26 +96,13 @@ export async function runPhase1EnrichmentForLead(
           detail: `apollo:${apollo.source}`,
         };
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await markLeadEnrichmentFailed(leadId, `apollo_error:${message}`);
-      return {
-        leadId,
-        enrichmentStatus: "FAILED",
-        contactMethod: null,
-        email: null,
-        ownerName: null,
-        detail: message,
-      };
     }
-  }
 
-  const allowForm =
-    options?.allowContactForm === true ||
-    process.env.PHASE1_CONTACT_FORM?.trim().toLowerCase() === "true";
+    const allowForm =
+      options?.allowContactForm === true ||
+      process.env.PHASE1_CONTACT_FORM?.trim().toLowerCase() === "true";
 
-  if (allowForm && row.website?.trim()) {
-    try {
+    if (allowForm && row.website?.trim()) {
       const form = await tryWebsiteContactForm({
         website: row.website,
         businessName: row.business_name,
@@ -140,27 +132,54 @@ export async function runPhase1EnrichmentForLead(
           detail: `${form.reason}@${form.contactPageUrl}`,
         };
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await markLeadEnrichmentFailed(leadId, `contact_form:${message}`);
-      return {
-        leadId,
-        enrichmentStatus: "FAILED",
-        contactMethod: null,
-        email: null,
-        ownerName: null,
-        detail: message,
-      };
     }
-  }
 
-  await markLeadEnrichmentFailed(leadId, "no_website_no_apollo_match");
-  return {
-    leadId,
-    enrichmentStatus: "FAILED",
-    contactMethod: null,
-    email: null,
-    ownerName: null,
-    detail: "no_route",
-  };
+    await markLeadEnrichmentFailed(leadId, "no_website_no_apollo_match");
+    return {
+      leadId,
+      enrichmentStatus: "FAILED",
+      contactMethod: null,
+      email: null,
+      ownerName: null,
+      detail: "no_route",
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await markLeadEnrichmentFailed(leadId, `phase1_error:${message}`);
+    return {
+      leadId,
+      enrichmentStatus: "FAILED",
+      contactMethod: null,
+      email: null,
+      ownerName: null,
+      detail: message,
+    };
+  } finally {
+    await resetLeadEnrichmentIfStillPending(leadId, "phase1_idle_reset");
+  }
+}
+
+export async function runPhase1EnrichmentForLead(
+  leadId: number,
+  options?: { allowContactForm?: boolean },
+): Promise<Phase1EnrichmentResult> {
+  try {
+    return await withTimeout(
+      PHASE1_LEAD_TIMEOUT_MS,
+      "phase1_lead_enrichment",
+      () => runPhase1EnrichmentForLeadInner(leadId, options),
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await markLeadEnrichmentFailed(leadId, `phase1_timeout:${message}`);
+    await resetLeadEnrichmentIfStillPending(leadId, "phase1_timeout_reset");
+    return {
+      leadId,
+      enrichmentStatus: "FAILED",
+      contactMethod: null,
+      email: null,
+      ownerName: null,
+      detail: message,
+    };
+  }
 }

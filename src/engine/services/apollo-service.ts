@@ -1,7 +1,14 @@
 import { productConfig } from "../../config/product.config.js";
 import { getSetting, setSetting } from "../store/outreach-migrations.js";
+import { withTimeout } from "./service-timeout.js";
 
 const APOLLO_BASE = "https://api.apollo.io/api/v1";
+
+/** Per HTTP request to Apollo. */
+export const APOLLO_HTTP_TIMEOUT_MS = 15_000;
+
+/** Whole owner lookup (search + optional match) — abort so find jobs cannot hang. */
+export const APOLLO_LEAD_LOOKUP_TIMEOUT_MS = 30_000;
 
 const OWNER_TITLE_KEYWORDS = [
   "owner",
@@ -104,7 +111,7 @@ async function apolloFetch<T>(path: string, body: Record<string, unknown>): Prom
       "X-Api-Key": key,
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(APOLLO_HTTP_TIMEOUT_MS),
   });
 
   if (res.status === 429) {
@@ -145,8 +152,7 @@ export async function canCallApolloToday(): Promise<boolean> {
   return used < productConfig.enrichment.apolloDailyCap;
 }
 
-/** Find owner/decision-maker email via Apollo free API (mixed search + optional people/match). */
-export async function findOwnerEmailViaApollo(input: {
+async function findOwnerEmailViaApolloInner(input: {
   businessName: string;
   address: string;
   postcode: string;
@@ -238,4 +244,24 @@ export async function findOwnerEmailViaApollo(input: {
   }
 
   return null;
+}
+
+/** Find owner/decision-maker email via Apollo (mixed search + optional people/match). Never hangs indefinitely. */
+export async function findOwnerEmailViaApollo(input: {
+  businessName: string;
+  address: string;
+  postcode: string;
+  website?: string | null;
+}): Promise<ApolloOwnerMatch | null> {
+  try {
+    return await withTimeout(
+      APOLLO_LEAD_LOOKUP_TIMEOUT_MS,
+      "apollo_lead_lookup",
+      () => findOwnerEmailViaApolloInner(input),
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`Apollo lookup aborted for ${input.businessName}: ${message}`);
+    return null;
+  }
 }
