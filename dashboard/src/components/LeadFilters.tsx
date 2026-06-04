@@ -5,7 +5,7 @@ const FILTERS: { key: LeadFilterKey; label: string }[] = [
   { key: "changed", label: "New/changed" },
   { key: "needs_eyes", label: "Needs you" },
   { key: "approved", label: "Postbox" },
-  { key: "whatsapp", label: "WhatsApp" },
+  { key: "whatsapp", label: "WA mobile" },
   { key: "call", label: "Call" },
   { key: "sent", label: "Sent" },
   { key: "replies", label: "Replies" },

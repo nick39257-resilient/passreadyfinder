@@ -195,7 +195,7 @@ export function emptyStateForFilter(filter: LeadFilterKey): string {
     case "call":
       return "No phone numbers for open leads — run Find + enrich, or check OSM on lead detail.";
     case "whatsapp":
-      return "No WhatsApp numbers yet — phones come from Find/OSM; run Discover contacts on a lead for wa.me links from their site.";
+      return "No UK mobiles (07…) or wa.me links — OSM landlines stay on Call tab; run Discover contacts to find WhatsApp on their website.";
     case "approved":
       return "Postbox is empty — approve a draft to queue for sending.";
     case "needs_eyes":

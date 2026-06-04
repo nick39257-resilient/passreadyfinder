@@ -15,7 +15,7 @@ import { resolveAuthoritiesForFind, isUkWideArea } from "./finder/find-area.js";
 import { fetchEstablishmentScores } from "./finder/fsa-detail.js";
 import { isRateLimited } from "./rate-limit-queue.js";
 import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
-import { tryEnrichLeadEmailFromWebsite } from "./enrich/lead-email.js";
+import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "./enrich/lead-email.js";
 import { calculateLeadScore } from "./score/scorer.js";
 import { getDb, runMigrations } from "./store/db.js";
 import {
@@ -318,13 +318,17 @@ export async function runFindPipeline(options?: {
           leadScore,
         });
 
-        if (osm.website) {
-          const idRow = await getDb().execute({
-            sql: `SELECT id FROM leads WHERE fsa_id = ? LIMIT 1`,
-            args: [lead.fsaId],
-          });
-          const leadId = Number(idRow.rows[0]?.id);
-          if (Number.isInteger(leadId)) {
+        const idRow = await getDb().execute({
+          sql: `SELECT id, email FROM leads WHERE fsa_id = ? LIMIT 1`,
+          args: [lead.fsaId],
+        });
+        const leadId = Number(idRow.rows[0]?.id);
+        const existingEmail = String(idRow.rows[0]?.email ?? "").trim();
+        if (Number.isInteger(leadId)) {
+          if (osm.email && !existingEmail) {
+            await updateLeadEmail(leadId, osm.email);
+          }
+          if (osm.website) {
             await tryEnrichLeadEmailFromWebsite(leadId, osm.website);
           }
         }

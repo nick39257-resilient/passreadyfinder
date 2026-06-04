@@ -50,8 +50,11 @@ export function FindAreaModal({
       >
         <h2 className="text-lg font-bold text-slate-50">Check FSA changes</h2>
         <p className="mt-2 text-sm text-slate-400">
-          UK-wide takeaway sync (≤4★). Only takeaways with a discoverable email appear in your
-          list. Delta mode checks all councils — first run can take a while.
+          UK-wide takeaway sync (≤4★). Leads appear when they have an email, phone, or website.
+          Emails are scraped from websites during find — run{" "}
+          <span className="font-semibold text-slate-300">Discover contacts</span> or{" "}
+          <span className="font-semibold text-slate-300">npm run enrich-emails</span> to fill gaps.
+          Delta mode only imports FSA rating changes since last sync.
         </p>
 
         <label className="mt-4 block">

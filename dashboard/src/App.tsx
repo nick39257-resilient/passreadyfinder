@@ -114,6 +114,9 @@ export function App() {
     () => readLocal(STORAGE_POSTCODE) ?? "",
   );
   const [syncLabel, setSyncLabel] = useState<string | null>(null);
+  const [outreachLandingUrl, setOutreachLandingUrl] = useState(
+    "https://score.passready.uk",
+  );
 
   const applySystemStatus = useCallback((status: SystemStatusResponse) => {
     if (status.pulse !== "error") {
@@ -169,6 +172,9 @@ export function App() {
 
   useEffect(() => {
     void fetchAppConfig().then((config) => {
+      if (config.outreachLandingUrl?.trim()) {
+        setOutreachLandingUrl(config.outreachLandingUrl.trim());
+      }
       if (config.requiresControlSecret && !getControlSecret()) {
         setBanner({
           tone: "info",
@@ -800,6 +806,7 @@ export function App() {
       {selectedLead ? (
         <LeadDetailDrawer
           lead={selectedLead}
+          outreachLandingUrl={outreachLandingUrl}
           busy={busyId === selectedLead.id || drawerLoading}
           busyLabel={
             busyId === selectedLead.id

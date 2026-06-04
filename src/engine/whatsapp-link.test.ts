@@ -1,9 +1,14 @@
-import { buildOutboundWaMeLink, normalizeWhatsAppDigits } from "./whatsapp-link.js";
+import {
+  buildOutboundWaMeLink,
+  isLikelyUkMobile,
+  normalizeWhatsAppDigits,
+} from "./whatsapp-link.js";
 
 const cases: Array<{ raw: string; want: string | null }> = [
   { raw: "07700 900123", want: "447700900123" },
   { raw: "https://wa.me/447700900123", want: "447700900123" },
   { raw: "+44 7700 900123", want: "447700900123" },
+  { raw: "01204 123456", want: null },
   { raw: "abc", want: null },
 ];
 
@@ -22,6 +27,14 @@ const link = buildOutboundWaMeLink({
 });
 if (!link?.startsWith("https://wa.me/447700900123?text=")) {
   console.error("buildOutboundWaMeLink FAIL", link);
+  failed++;
+}
+if (isLikelyUkMobile("01204 123456")) {
+  console.error("isLikelyUkMobile should reject Bolton landline");
+  failed++;
+}
+if (!isLikelyUkMobile("07700 900123")) {
+  console.error("isLikelyUkMobile should accept mobile");
   failed++;
 }
 

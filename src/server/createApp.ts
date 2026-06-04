@@ -37,6 +37,7 @@ import {
 } from "../engine/sync/sync-label.js";
 import { getLastSyncTimestamp } from "../engine/sync/fsa-sync-state.js";
 import { includeInDashboardList } from "../engine/lead-display-policy.js";
+import { getOutreachLandingUrl } from "../engine/outreach-landing-url.js";
 import { buildOutboundWaMeLink } from "../engine/whatsapp-link.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "../engine/enrich/lead-email.js";
 import {
@@ -148,6 +149,7 @@ export async function createApp(options?: {
   app.get("/api/config", (_req, res) => {
     res.json({
       requiresControlSecret: Boolean(process.env.CONTROL_PANEL_SECRET?.trim()),
+      outreachLandingUrl: getOutreachLandingUrl(),
     });
   });
 
@@ -292,6 +294,8 @@ export async function createApp(options?: {
           businessType: lead.businessType,
           fsaRating: lead.fsaRating,
           email: lead.email,
+          phone: lead.phone,
+          website: lead.website,
           status: lead.status,
         }),
       );

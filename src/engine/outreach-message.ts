@@ -1,4 +1,8 @@
 import { appendOptOutFooter } from "./outreach-halt.js";
+import {
+  firstTouchAllowsLandingLink,
+  getOutreachLandingUrl,
+} from "./outreach-landing-url.js";
 
 /** Remove http(s) URLs and bare wa.me links from outreach copy. */
 export function stripUrls(text: string): string {
@@ -9,8 +13,55 @@ export function stripUrls(text: string): string {
     .trim();
 }
 
+function normalizeUrlToken(url: string): string {
+  return url.replace(/[.,;:!?)]+$/g, "");
+}
+
+/** Keep only the configured SafeScore URL; strip other links. */
+export function stripUrlsExceptLanding(text: string, landingUrl: string): string {
+  const landing = landingUrl.trim();
+  const lines = text.split("\n");
+  const kept = lines.map((line) => {
+    if (!/https?:\/\//i.test(line) && !/\bwa\.me\//i.test(line)) {
+      return line;
+    }
+    const urls = [...line.matchAll(/https?:\/\/\S+/gi)].map((m) => normalizeUrlToken(m[0] ?? ""));
+    const wa = [...line.matchAll(/\bwa\.me\/\S+/gi)].map((m) => m[0] ?? "");
+    const allowed = urls.some((u) => u === landing || u.startsWith(`${landing}/`));
+    if (allowed && wa.length === 0) {
+      return line;
+    }
+    if (allowed) {
+      return line.replace(/\bwa\.me\/\S+/gi, "").trim();
+    }
+    return line
+      .replace(/https?:\/\/\S+/gi, "")
+      .replace(/\bwa\.me\/\S+/gi, "")
+      .trim();
+  });
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export function containsUrl(text: string): boolean {
   return /https?:\/\/\S+/i.test(text) || /\bwa\.me\/\S+/i.test(text);
+}
+
+export function isFirstTouchDraftValid(text: string): boolean {
+  if (!containsUrl(text)) {
+    return true;
+  }
+  if (!firstTouchAllowsLandingLink()) {
+    return false;
+  }
+  const landing = getOutreachLandingUrl();
+  const urls = [...text.matchAll(/https?:\/\/\S+/gi)].map((m) => normalizeUrlToken(m[0] ?? ""));
+  if (/\bwa\.me\/\S+/i.test(text)) {
+    return false;
+  }
+  if (urls.length === 0) {
+    return true;
+  }
+  return urls.every((u) => u === landing || u.startsWith(`${landing}/`));
 }
 
 export interface PrepareOutboundMessageOptions {
@@ -21,7 +72,7 @@ export interface PrepareOutboundMessageOptions {
 }
 
 /**
- * First touch: plain text, no links (spam filters). After reply: links allowed.
+ * First touch: plain text, or SafeScore link only when OUTREACH_FIRST_TOUCH_LINK is enabled.
  */
 export function prepareOutboundMessage(options: PrepareOutboundMessageOptions): {
   text: string;
@@ -31,20 +82,25 @@ export function prepareOutboundMessage(options: PrepareOutboundMessageOptions): 
   let text = options.body.trim();
 
   if (isFirstTouch) {
-    text = stripUrls(text);
+    if (firstTouchAllowsLandingLink()) {
+      text = stripUrlsExceptLanding(text, getOutreachLandingUrl());
+    } else {
+      text = stripUrls(text);
+    }
   }
 
   if (options.unsubscribeUrl?.trim()) {
     text = appendOptOutFooter(text, options.unsubscribeUrl.trim());
   }
 
-  if (isFirstTouch) {
-    return { text, html: null };
-  }
+  const landing = getOutreachLandingUrl();
+  const useHtml =
+    text.includes(landing) ||
+    (!isFirstTouch && containsUrl(text));
 
   return {
     text,
-    html: plainTextToHtml(text),
+    html: useHtml ? plainTextToHtml(text) : null,
   };
 }
 

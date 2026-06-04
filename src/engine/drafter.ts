@@ -8,6 +8,10 @@ import {
   buildDraftVariables,
   type DraftVariables,
 } from "./intelligence/draft-variables.js";
+import {
+  getOutreachLandingUrl,
+  shouldIncludeLandingInDraft,
+} from "./outreach-landing-url.js";
 import { stripUrls } from "./outreach-message.js";
 import {
   draftMessageSchema,
@@ -27,14 +31,6 @@ import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
 import { queueLeadToPostbox } from "./store/review-repository.js";
 import { setLeadNeedsEyesReason } from "./store/leads-repository.js";
-
-function getTrialUrl(): string {
-  const fromEnv = process.env[productConfig.outreach.trialUrlEnvKey]?.trim();
-  if (fromEnv) {
-    return fromEnv;
-  }
-  return "https://passready.uk";
-}
 
 export interface LeadForDraft {
   id: number;
@@ -139,9 +135,8 @@ function buildSystemPrompt(
   rating: number | null,
   hookLines: string[],
   includeLink: boolean,
-  waMeLink?: string,
+  landingUrl?: string,
 ): string {
-  const trialUrl = getTrialUrl();
   const lines = [
     "You write a short, conversational email to a UK takeaway owner—as one operator to another, not as a vendor.",
     "You are a kitchen manager based in Preston with 30 years of experience.",
@@ -156,15 +151,16 @@ function buildSystemPrompt(
     ...hookLines,
   ];
 
-  if (includeLink && waMeLink) {
+  if (includeLink && landingUrl) {
     lines.push(
-      `End with a simple next step and include this exact trial link on its own line: ${trialUrl}`,
-      "Do not add any other links.",
+      `End with a simple next step and include this exact SafeScore link on its own line: ${landingUrl}`,
+      "Frame it as a free instant FSA score check (no sign-up) — not a sales pitch.",
+      "Do not add any other links or wa.me.",
     );
   } else {
     lines.push(
       "Do NOT include any URLs, links, or wa.me in this message.",
-      "End with: 'If you want, reply YES and I’ll switch on a 7-day trial for you.'",
+      "End with a curious ask inviting a reply.",
     );
   }
 
@@ -175,7 +171,7 @@ function buildUserPrompt(
   lead: LeadForDraft,
   variables: DraftVariables,
   includeLink: boolean,
-  waMeLink?: string,
+  landingUrl?: string,
 ): string {
   const lines = [
     "Required variable injection — weave all three naturally into the message:",
@@ -191,10 +187,10 @@ function buildUserPrompt(
     );
   }
 
-  if (includeLink && waMeLink) {
-    lines.push(`Required closing link (use exactly): ${waMeLink}`);
+  if (includeLink && landingUrl) {
+    lines.push(`Required closing link (use exactly): ${landingUrl}`);
   } else {
-    lines.push("No links in this draft — reply-first outreach.");
+    lines.push("No links in this draft.");
   }
 
   return lines.join("\n");
@@ -408,8 +404,12 @@ export async function generateDraftForLead(
 
   const touchCount = options?.touchCount ?? 0;
   const hasReplied = options?.hasReplied ?? false;
-  const includeLink = options?.includeLink ?? hasReplied;
-  const waMeLink = includeLink ? buildWaMeLink(lead.business_name) : undefined;
+  const includeLink = shouldIncludeLandingInDraft({
+    includeLink: options?.includeLink,
+    hasReplied,
+    touchCount,
+  });
+  const landingUrl = includeLink ? getOutreachLandingUrl() : undefined;
 
   const llm = client ?? createLlmClient();
   const toneRating =
@@ -426,11 +426,11 @@ export async function generateDraftForLead(
         messages: [
           {
             role: "system",
-            content: buildSystemPrompt(toneRating, hookLines, includeLink, waMeLink),
+            content: buildSystemPrompt(toneRating, hookLines, includeLink, landingUrl),
           },
           {
             role: "user",
-            content: buildUserPrompt(lead, variables, includeLink, waMeLink),
+            content: buildUserPrompt(lead, variables, includeLink, landingUrl),
           },
         ],
       }),
@@ -461,8 +461,8 @@ export async function generateDraftForLead(
       return firstTouchDraftMessageSchema.parse(stripped);
     }
     const ok = draftMessageSchema.parse(text);
-    if (waMeLink && !ok.includes(waMeLink)) {
-      return `${ok.trim()}\n\n${waMeLink}`;
+    if (landingUrl && !ok.includes(landingUrl)) {
+      return `${ok.trim()}\n\n${landingUrl}`;
     }
     return ok;
   };
@@ -520,7 +520,6 @@ export async function runDrafter(options?: DraftJobParams): Promise<DraftRunResu
     const lead = leads[i];
     try {
       const draft = await generateDraftForLead(lead, llmClient, {
-        includeLink: false,
         touchCount: 0,
       });
       await saveDraftMessage(lead.id, draft);

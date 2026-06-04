@@ -72,14 +72,14 @@ export const productConfig = {
     monthlyPrice: "£29.99",
     /** WhatsApp Business number (digits only, no +) — set WHATSAPP_NUMBER in .env */
     whatsappNumberEnvKey: "WHATSAPP_NUMBER" as const,
-    /** PassReady free trial URL — set TRIAL_URL in .env */
+    /** SafeScore / outreach landing URL — set TRIAL_URL or SCORE_URL in .env (default score.passready.uk) */
     trialUrlEnvKey: "TRIAL_URL" as const,
     /** Pre-filled WhatsApp opener — [Business Name] replaced per lead */
     whatsappPrefillTemplate:
       "Curious if this might help [Business Name] like it did our kitchen — happy to show you",
     /** Outbound wa.me to the business (their number) — [Business Name] replaced per lead */
     whatsappOutboundTemplate:
-      "Hi — we built a simple food-safety log for our kitchen and it helped before inspection. Would it be useful for [Business Name]?",
+      "Hi — we built a free tool that shows your FSA food safety score in seconds. Worth a look for [Business Name]?",
     /** Leads to draft per `npm run draft` run */
     draftBatchSize: 5,
     /** Minimum ms between Gemini calls (serialized queue). */
@@ -128,8 +128,8 @@ export const productConfig = {
       "Shared struggle opener: start with one line acknowledging the grind (e.g. Friday night rush, staffing, stock).",
       "Tool as byproduct: do not present PassReady as a product or sales pitch—it is a side project you built for your own kitchens that happened to work well.",
       "Variable injection (required): naturally include all three — (1) Business Name, (2) a practical FSA-area issue hook (not their star rating), (3) a generic local reference (Preston). Never mention being on the same road/high street.",
-      "First message: NO links, NO URLs, NO wa.me — plain text only. Close with a curious ask inviting a reply (e.g. 'Would it help if I shared what we did?').",
-      "Follow-up after they reply: you may include the WhatsApp link as the only CTA.",
+      "First message: include the SafeScore link (score.passready.uk) on its own line as the only URL — free FSA check, no sign-up. No other links or wa.me.",
+      "Follow-up after they reply: same SafeScore link as the only CTA.",
       "Never pretend to be an EHO officer or any official body.",
       "Keep it short — under 125 words.",
     ],

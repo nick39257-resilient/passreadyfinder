@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { containsUrl } from "../engine/outreach-message.js";
+import { isFirstTouchDraftValid } from "../engine/outreach-message.js";
 
 const MAX_DRAFT_WORDS = 125;
 
@@ -18,10 +18,13 @@ export const draftMessageSchema = z
   .min(1, "Draft is empty")
   .refine(wordLimitRefine.refine, { message: wordLimitRefine.message });
 
-/** First-touch drafts must be link-free (spam filters). */
+/** First-touch: no links, or only the configured SafeScore URL when enabled. */
 export const firstTouchDraftMessageSchema = draftMessageSchema.refine(
-  (text) => !containsUrl(text),
-  { message: "First-touch draft must not contain URLs or links" },
+  (text) => isFirstTouchDraftValid(text),
+  {
+    message:
+      "First-touch draft must not contain URLs (or only the SafeScore landing URL when OUTREACH_FIRST_TOUCH_LINK is enabled)",
+  },
 );
 
 export { MAX_DRAFT_WORDS, wordCount };

@@ -63,6 +63,7 @@ export function LeadDetailDrawer({
   draftDisabledReason,
   outreachHalted,
   errorMessage,
+  outreachLandingUrl = "https://score.passready.uk",
 }: {
   lead: ApiLead;
   onClose: () => void;
@@ -87,6 +88,7 @@ export function LeadDetailDrawer({
   draftDisabledReason?: string;
   outreachHalted?: boolean;
   errorMessage?: string | null;
+  outreachLandingUrl?: string;
 }) {
   const band = lead.riskBand as RiskBand;
   const tier = priorityFromBand(band);
@@ -355,6 +357,14 @@ export function LeadDetailDrawer({
               className="flex min-h-[52px] items-center justify-center rounded-xl border border-sky-600/50 bg-sky-950/40 text-sm font-bold text-sky-200"
             >
               EHO report
+            </a>
+            <a
+              href={outreachLandingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="col-span-2 flex min-h-[52px] items-center justify-center rounded-xl border border-emerald-600/50 bg-emerald-950/40 text-sm font-bold text-emerald-200"
+            >
+              SafeScore link →
             </a>
             <button
               type="button"

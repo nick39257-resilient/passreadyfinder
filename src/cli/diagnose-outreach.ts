@@ -71,7 +71,10 @@ async function main(): Promise<void> {
     eventMap.set(String(row.event_type), Number(row.n));
   }
 
-  const trialUrl = process.env.TRIAL_URL?.trim() || "(not set — defaults to passready.uk in drafter)";
+  const trialUrl =
+    process.env.TRIAL_URL?.trim() ||
+    process.env.SCORE_URL?.trim() ||
+    "(not set — defaults to https://score.passready.uk)";
   const testFallback = process.env.ALLOW_TEST_EMAIL_FALLBACK?.trim().toLowerCase() === "true";
   const subject =
     process.env.OUTREACH_EMAIL_SUBJECT?.trim() || "Quick question about your kitchen records";
@@ -84,6 +87,15 @@ async function main(): Promise<void> {
   line("With phone (OSM)", withPhone, pct(withPhone, total));
   line("WhatsApp-ready (wa.me)", whatsappReady, pct(whatsappReady, total));
   line("With website", withWebsite, pct(withWebsite, total));
+  const websiteNoEmail = await db.execute(`
+    SELECT COUNT(*) AS n FROM leads
+    WHERE website IS NOT NULL AND TRIM(website) != ''
+      AND (email IS NULL OR TRIM(email) = '')
+  `);
+  line(
+    "Website but no email (run enrich-emails)",
+    Number(websiteNoEmail.rows[0]?.n ?? 0),
+  );
   line("With draft text", withDraft);
   line("Send-ready (approved+email)", sendReady);
 
@@ -118,7 +130,7 @@ async function main(): Promise<void> {
   line("Threshold", `${(deliverability.bounceThreshold * 100).toFixed(0)}%`);
 
   console.log("\nConfig (non-secret)");
-  line("TRIAL_URL", trialUrl);
+  line("Outreach landing (TRIAL_URL / SCORE_URL)", trialUrl);
   line("Test email fallback", testFallback ? "ON — risky in prod" : "off");
   line("Email subject", subject);
   line(
@@ -142,7 +154,7 @@ async function main(): Promise<void> {
   }
   if (total > 0 && withEmail < total * 0.25) {
     tips.push(
-      `Only ${pct(withEmail, total)} have email — run \`npm run enrich-emails\` then call/WhatsApp leads with phone.`,
+      `Only ${pct(withEmail, total)} have email — run \`npm run enrich-emails\`, Discover contacts on high leads, or Call tab. Changing town in Find only adds FSA rows with recent rating changes unless you tick Full rescan.`,
     );
   }
   if (sendReady === 0 && counts.approved > 0) {
@@ -164,7 +176,7 @@ async function main(): Promise<void> {
   }
   if (counts.replied > 0 && counts.trial_started === 0) {
     tips.push(
-      "You have replies — send trial/WhatsApp in follow-up and mark trial_started in dashboard when they sign up.",
+      "You have replies — regenerate follow-up (SafeScore link) and mark trial_started when they sign up on PassReady.",
     );
   }
   if (counts.trial_started === 0 && counts.replied === 0 && counts.contacted === 0) {

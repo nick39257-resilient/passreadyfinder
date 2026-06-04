@@ -1,11 +1,9 @@
-import { productConfig } from "../config/product.config.js";
-
 export interface DraftEnvStatus {
   ok: boolean;
   missing: string[];
 }
 
-/** Validates env vars required to call Gemini and build wa.me links. */
+/** Validates env vars required to call Gemini for drafts. */
 export function checkDraftEnv(): DraftEnvStatus {
   const missing: string[] = [];
 
@@ -14,9 +12,6 @@ export function checkDraftEnv(): DraftEnvStatus {
   }
   if (!process.env.OPENAI_BASE_URL?.trim()) {
     missing.push("OPENAI_BASE_URL");
-  }
-  if (!process.env.WHATSAPP_NUMBER?.trim()) {
-    missing.push(productConfig.outreach.whatsappNumberEnvKey);
   }
 
   return { ok: missing.length === 0, missing };

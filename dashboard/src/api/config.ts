@@ -1,5 +1,6 @@
 export interface AppConfig {
   requiresControlSecret: boolean;
+  outreachLandingUrl?: string;
 }
 
 export async function fetchAppConfig(): Promise<AppConfig> {

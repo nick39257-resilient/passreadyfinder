@@ -193,7 +193,6 @@ async function draftSingleLead(lead: LeadForQueueDraft, llmClient: OpenAI): Prom
         hookContext: { competitors, localPassReadyCount },
         consultantTip,
         variables,
-        includeLink: false,
         touchCount: 0,
       });
     },

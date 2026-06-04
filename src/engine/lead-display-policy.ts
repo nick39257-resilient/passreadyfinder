@@ -19,16 +19,30 @@ export function hasUsableEmail(email: string | null | undefined): boolean {
   return Boolean(trimmed && trimmed.includes("@"));
 }
 
-/** Leads shown on the Command Center list — mailable takeaways only. */
+export function hasReachableContact(input: {
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+}): boolean {
+  return (
+    hasUsableEmail(input.email) ||
+    Boolean(input.phone?.trim()) ||
+    Boolean(input.website?.trim())
+  );
+}
+
+/** Leads shown on the Command Center — takeaway ≤4★ with email, phone, or website. */
 export function isMailableDashboardLead(input: {
   businessType: string;
   fsaRating: number | null;
   email: string | null | undefined;
+  phone?: string | null;
+  website?: string | null;
 }): boolean {
   return (
     isTakeawayBusinessType(input.businessType) &&
     isWithinRatingBand(input.fsaRating) &&
-    hasUsableEmail(input.email)
+    hasReachableContact(input)
   );
 }
 
@@ -49,6 +63,8 @@ export function includeInDashboardList(input: {
   businessType: string;
   fsaRating: number | null;
   email: string | null | undefined;
+  phone?: string | null;
+  website?: string | null;
   status: string;
 }): boolean {
   if (isOutboundDashboardLead(input.status)) {

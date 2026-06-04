@@ -1,7 +1,35 @@
 import { productConfig } from "../config/product.config.js";
+import { getOutreachLandingUrl } from "./outreach-landing-url.js";
 
-/** Strip to digits suitable for https://wa.me/{digits} */
-export function normalizeWhatsAppDigits(raw: string | null | undefined): string | null {
+/** OSM often lists shop landlines (01/02/03…) — those are rarely on WhatsApp. */
+export function isLikelyUkMobile(raw: string | null | undefined): boolean {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (/wa\.me\//i.test(trimmed) || /whatsapp/i.test(trimmed)) {
+    return true;
+  }
+
+  let digits = trimmed.replace(/\D/g, "");
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.startsWith("44")) {
+    return digits.length === 12 && digits[2] === "7";
+  }
+  if (digits.startsWith("0")) {
+    return digits.startsWith("07") && digits.length >= 11;
+  }
+  return digits.length === 10 && digits.startsWith("7");
+}
+
+/** Strip to digits suitable for https://wa.me/{digits} (UK mobile or explicit wa.me only). */
+export function normalizeWhatsAppDigits(
+  raw: string | null | undefined,
+  options?: { allowLandline?: boolean },
+): string | null {
   const trimmed = raw?.trim();
   if (!trimmed) {
     return null;
@@ -10,6 +38,10 @@ export function normalizeWhatsAppDigits(raw: string | null | undefined): string 
   const waMe = trimmed.match(/wa\.me\/(\d+)/i);
   if (waMe?.[1]) {
     return waMe[1];
+  }
+
+  if (!options?.allowLandline && !isLikelyUkMobile(trimmed)) {
+    return null;
   }
 
   let digits = trimmed.replace(/\D/g, "");
@@ -27,6 +59,10 @@ export function normalizeWhatsAppDigits(raw: string | null | undefined): string 
     digits = `44${digits}`;
   }
 
+  if (!options?.allowLandline && digits.startsWith("44") && digits[2] !== "7") {
+    return null;
+  }
+
   return digits.length >= 10 ? digits : null;
 }
 
@@ -36,8 +72,9 @@ export function buildOutboundWaMeLink(input: {
   whatsapp?: string | null;
   prefillTemplate?: string;
 }): string | null {
-  const digits =
-    normalizeWhatsAppDigits(input.whatsapp) ?? normalizeWhatsAppDigits(input.phone);
+  const fromWhatsapp = normalizeWhatsAppDigits(input.whatsapp);
+  const fromPhone = normalizeWhatsAppDigits(input.phone);
+  const digits = fromWhatsapp ?? fromPhone;
   if (!digits) {
     return null;
   }
@@ -45,5 +82,7 @@ export function buildOutboundWaMeLink(input: {
   const template =
     input.prefillTemplate?.trim() || productConfig.outreach.whatsappOutboundTemplate;
   const prefill = template.replace("[Business Name]", input.businessName.trim());
-  return `https://wa.me/${digits}?text=${encodeURIComponent(prefill)}`;
+  const landing = getOutreachLandingUrl();
+  const body = prefill.includes(landing) ? prefill : `${prefill}\n\nFree score check: ${landing}`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(body)}`;
 }

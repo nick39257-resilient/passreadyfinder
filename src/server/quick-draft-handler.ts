@@ -116,7 +116,6 @@ export async function quickDraftLeadById(leadId: number): Promise<QuickDraftResu
       hookContext: { competitors, localPassReadyCount },
       consultantTip,
       variables,
-      includeLink: hasReplied,
       hasReplied,
       touchCount: row.touch_count ?? 0,
     },

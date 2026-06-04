@@ -1,7 +1,8 @@
 import "dotenv/config";
 import { productConfig } from "../config/product.config.js";
 import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
-import { tryEnrichLeadEmailFromWebsite } from "./enrich/lead-email.js";
+import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "./enrich/lead-email.js";
+import { getLeadById } from "./store/leads-repository.js";
 import { runMigrations, closeDb } from "./store/db.js";
 import { getOsmCache } from "./store/leads-repository.js";
 import {
@@ -68,6 +69,10 @@ export async function runOsmEnricher(): Promise<EnrichRunResult> {
         console.log("  — no phone or website in OSM\n");
       } else {
         await updateLeadContact(lead.id, phone, website);
+        const current = await getLeadById(lead.id);
+        if (osm.email && !current?.email?.trim()) {
+          await updateLeadEmail(lead.id, osm.email);
+        }
         const email = website ? await tryEnrichLeadEmailFromWebsite(lead.id, website) : null;
         result.enriched++;
         console.log(`  ✓ phone: ${phone ?? "—"}`);

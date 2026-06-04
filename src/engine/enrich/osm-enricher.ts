@@ -42,6 +42,14 @@ function detectDeliveryApp(tags: Record<string, string> | undefined): DeliveryAp
   return "unknown";
 }
 
+function normalizeEmail(raw: string | undefined): string | null {
+  const trimmed = raw?.trim().toLowerCase();
+  if (!trimmed || !trimmed.includes("@")) {
+    return null;
+  }
+  return trimmed;
+}
+
 function extractContact(element: OverpassElement): OsmEnrichmentResult {
   const tags = element.tags ?? {};
   const phone =
@@ -52,9 +60,11 @@ function extractContact(element: OverpassElement): OsmEnrichmentResult {
     normalizeWebsite(tags["contact:website"]) ??
     normalizeWebsite(tags.website) ??
     normalizeWebsite(tags.url);
+  const email =
+    normalizeEmail(tags["contact:email"]) ?? normalizeEmail(tags.email);
   const onDeliveryApp = detectDeliveryApp(tags);
 
-  return { phone, website, onDeliveryApp };
+  return { phone, website, onDeliveryApp, email };
 }
 
 function sanitizeNameForOverpass(name: string): string {
@@ -158,6 +168,7 @@ export async function enrichFromOsm(input: EnrichInput): Promise<OsmEnrichmentRe
     const empty: OsmEnrichmentResult = {
       phone: null,
       website: null,
+      email: null,
       onDeliveryApp: "unknown",
     };
     await setOsmCache(input.fsaId, { ...empty });
@@ -169,7 +180,7 @@ export async function enrichFromOsm(input: EnrichInput): Promise<OsmEnrichmentRe
   const match = pickBestMatch(response.elements, input.businessName);
   const result = match
     ? extractContact(match)
-    : { phone: null, website: null, onDeliveryApp: "unknown" as const };
+    : { phone: null, website: null, email: null, onDeliveryApp: "unknown" as const };
 
   await setOsmCache(input.fsaId, {
     ...result,

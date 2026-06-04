@@ -138,7 +138,7 @@ export function LeadRow({
                   className="mt-2 inline-block min-h-[48px] rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-bold text-white ring-1 ring-emerald-400/40"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  WhatsApp {lead.businessName}
+                  WhatsApp (mobile) {lead.businessName}
                 </a>
               ) : null}
 

@@ -22,5 +22,6 @@ export interface Lead {
 export interface OsmEnrichmentResult {
   phone: string | null;
   website: string | null;
+  email?: string | null;
   onDeliveryApp: DeliveryAppStatus;
 }

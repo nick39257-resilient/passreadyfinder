@@ -1,7 +1,5 @@
-import {
-  extractEmailsFromText,
-  pickBusinessEmail,
-} from "../enrich/email-from-website.js";
+import { pickBusinessEmail } from "../enrich/email-from-website.js";
+import { harvestEmailsFromHtml } from "../enrich/website-email-scraper.js";
 
 export interface ExtractedContacts {
   emails: string[];
@@ -36,7 +34,7 @@ function normalizePhone(raw: string): string | null {
 }
 
 export function extractContactsFromHtml(html: string, pageUrl: string): ExtractedContacts {
-  const emails = extractEmailsFromText(html);
+  const emails = harvestEmailsFromHtml(html, pageUrl);
   const phones = uniqueNonEmpty(
     [...html.matchAll(UK_PHONE_RE)].map((m) => normalizePhone(m[0] ?? "")).filter(Boolean) as string[],
   );

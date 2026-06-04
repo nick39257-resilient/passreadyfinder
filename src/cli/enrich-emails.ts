@@ -13,7 +13,7 @@ async function main(): Promise<void> {
       AND website IS NOT NULL
       AND TRIM(website) != ''
     ORDER BY lead_score DESC
-    LIMIT 200
+    LIMIT 500
   `);
 
   let found = 0;

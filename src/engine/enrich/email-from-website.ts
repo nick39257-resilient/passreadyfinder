@@ -121,34 +121,6 @@ export function pickBusinessEmail(
 
 /** Fetch a business site and extract the best contact email. */
 export async function fetchEmailFromWebsite(website: string): Promise<string | null> {
-  const url = normalizeWebsiteUrl(website);
-  if (!url) {
-    return null;
-  }
-
-  const pathsToTry = [
-    "/",
-    "/contact",
-    "/contact-us",
-    "/contactus",
-    "/about",
-    "/about-us",
-    "/impressum",
-    "/support",
-  ];
-
-  for (const path of pathsToTry) {
-    const pageUrl = joinUrl(url, path);
-    const html = await fetchHtml(pageUrl);
-    if (!html) {
-      continue;
-    }
-    const emails = extractEmailsFromText(html);
-    const picked = pickBusinessEmail(emails, pageUrl);
-    if (picked) {
-      return picked;
-    }
-  }
-
-  return null;
+  const { scrapeEmailFromWebsite } = await import("./website-email-scraper.js");
+  return scrapeEmailFromWebsite(website);
 }

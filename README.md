@@ -50,7 +50,7 @@ WHATSAPP_NUMBER=447000000000
 npm run draft
 ```
 
-Swap provider via `OPENAI_BASE_URL` (DeepSeek, Mistral, etc.). Each draft ends with a `wa.me` trapdoor link — the sole CTA.
+Swap provider via `OPENAI_BASE_URL` (DeepSeek, Mistral, etc.). First email is link-free; after they reply, follow-ups include **https://score.passready.uk** (SafeScore). Set `TRIAL_URL` in `.env` to override.
 
 ## Phase C — Review dashboard
 
