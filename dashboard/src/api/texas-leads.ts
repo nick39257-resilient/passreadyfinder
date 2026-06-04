@@ -42,11 +42,14 @@ export interface TexasSendOutreachResult {
   lead: ApiTexasLead | null;
 }
 
+export type TexasLeadSegment = "all" | "mobile" | "hasEmail";
+
 export interface TexasStats {
   region: string;
   total: number;
   mobile: number;
   critical: number;
+  readyToSend: number;
 }
 
 function texasAuthHeaders(secret?: string): Record<string, string> {
@@ -59,10 +62,16 @@ async function parseTexasError(res: Response, fallback: string): Promise<never> 
 }
 
 export async function fetchTexasLeads(
-  mobileOnly: boolean,
+  segment: TexasLeadSegment,
   secret?: string,
 ): Promise<ApiTexasLead[]> {
-  const q = mobileOnly ? "?mobileOnly=1" : "";
+  const params = new URLSearchParams();
+  if (segment === "mobile") {
+    params.set("segment", "mobile");
+  } else if (segment === "hasEmail") {
+    params.set("segment", "hasEmail");
+  }
+  const q = params.toString() ? `?${params.toString()}` : "";
   const res = await fetch(`/api/texas/leads${q}`, {
     headers: texasAuthHeaders(secret),
   });

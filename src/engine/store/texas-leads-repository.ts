@@ -114,13 +114,34 @@ export async function upsertTexasLead(input: TexasLeadInput): Promise<number> {
   return typeof id === "number" ? id : Number(id);
 }
 
+export type TexasLeadSegment = "all" | "mobile" | "hasEmail";
+
+const TEXAS_READY_FOR_OUTREACH_SQL = `
+  email IS NOT NULL AND TRIM(email) != ''
+  AND status NOT IN ('EMAIL_SENT', 'FORM_SUBMITTED')
+`;
+
+function whereClauseForTexasSegment(segment: TexasLeadSegment): string {
+  if (segment === "mobile") {
+    return "WHERE is_mobile_vendor = 1";
+  }
+  if (segment === "hasEmail") {
+    return `WHERE ${TEXAS_READY_FOR_OUTREACH_SQL}`;
+  }
+  return "";
+}
+
 export async function getAllTexasLeads(options?: {
+  /** @deprecated Prefer segment */
   mobileOnly?: boolean;
+  segment?: TexasLeadSegment;
 }): Promise<TexasLeadRow[]> {
   const db = getDb();
-  const mobileClause = options?.mobileOnly ? "WHERE is_mobile_vendor = 1" : "";
+  const segment =
+    options?.segment ?? (options?.mobileOnly ? "mobile" : "all");
+  const where = whereClauseForTexasSegment(segment);
   const result = await db.execute(
-    `SELECT * FROM texas_leads ${mobileClause} ORDER BY risk_score DESC, updated_at DESC`,
+    `SELECT * FROM texas_leads ${where} ORDER BY risk_score DESC, updated_at DESC`,
   );
   return result.rows.map((r) => rowToRecord(r as Record<string, unknown>));
 }
@@ -264,6 +285,7 @@ export async function countTexasLeads(): Promise<{
   total: number;
   mobile: number;
   critical: number;
+  readyToSend: number;
 }> {
   const db = getDb();
   const total = await db.execute(`SELECT COUNT(*) AS c FROM texas_leads`);
@@ -273,9 +295,13 @@ export async function countTexasLeads(): Promise<{
   const critical = await db.execute(
     `SELECT COUNT(*) AS c FROM texas_leads WHERE intervention_level = 'CRITICAL_INTERVENTION'`,
   );
+  const readyToSend = await db.execute(
+    `SELECT COUNT(*) AS c FROM texas_leads WHERE ${TEXAS_READY_FOR_OUTREACH_SQL}`,
+  );
   return {
     total: Number(total.rows[0]?.c ?? 0),
     mobile: Number(mobile.rows[0]?.c ?? 0),
     critical: Number(critical.rows[0]?.c ?? 0),
+    readyToSend: Number(readyToSend.rows[0]?.c ?? 0),
   };
 }

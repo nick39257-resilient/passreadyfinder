@@ -4,6 +4,7 @@ import {
   countTexasLeads,
   getAllTexasLeads,
   getTexasLeadById,
+  type TexasLeadSegment,
 } from "../engine/store/texas-leads-repository.js";
 import { runTexasApolloEnrichmentBatch } from "../engine/texas/texas-enrichment-service.js";
 import { executeTexasLeadOutreach } from "../engine/texas/texas-outreach-executor.js";
@@ -13,6 +14,20 @@ import { startJob } from "./job-runner.js";
 import type { TexasFindJobParams } from "../types/texas.js";
 
 type ControlAuth = (req: Request, res: Response, next: () => void) => void;
+
+function parseTexasLeadSegment(query: Request["query"]): TexasLeadSegment {
+  const raw = typeof query.segment === "string" ? query.segment.trim() : "";
+  if (raw === "hasEmail" || raw === "ready") {
+    return "hasEmail";
+  }
+  if (raw === "mobile") {
+    return "mobile";
+  }
+  if (query.mobileOnly === "1" || query.mobileOnly === "true") {
+    return "mobile";
+  }
+  return "all";
+}
 
 export function mountTexasRoutes(
   app: Express,
@@ -32,10 +47,9 @@ export function mountTexasRoutes(
   app.get("/api/texas/leads", requireControlAuth, async (req, res) => {
     try {
       await runMigrations();
-      const mobileOnly =
-        req.query.mobileOnly === "1" || req.query.mobileOnly === "true";
-      const rows = await getAllTexasLeads({ mobileOnly });
-      res.json({ leads: rows.map(mapTexasLeadRowToApi) });
+      const segment = parseTexasLeadSegment(req.query);
+      const rows = await getAllTexasLeads({ segment });
+      res.json({ leads: rows.map(mapTexasLeadRowToApi), segment });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to load Texas leads" });

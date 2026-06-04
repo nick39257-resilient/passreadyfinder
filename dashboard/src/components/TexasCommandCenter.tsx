@@ -5,6 +5,7 @@ import {
   sendTexasLeadOutreach,
   startTexasFindJob,
   type ApiTexasLead,
+  type TexasLeadSegment,
 } from "../api/texas-leads";
 import { fetchAppConfig } from "../api/config";
 import {
@@ -28,13 +29,17 @@ function jobProgressLabel(job: JobStatus): string {
   return formatTexasField(job.status, "Running…");
 }
 
-type RecordFilter = "all" | "mobile";
+type RecordFilter = TexasLeadSegment;
 
 const STORAGE_TEXAS_FILTER = "passready_texas_filter";
 
 function readFilter(): RecordFilter {
   try {
-    return sessionStorage.getItem(STORAGE_TEXAS_FILTER) === "mobile" ? "mobile" : "all";
+    const stored = sessionStorage.getItem(STORAGE_TEXAS_FILTER);
+    if (stored === "mobile" || stored === "hasEmail") {
+      return stored;
+    }
+    return "all";
   } catch {
     return "all";
   }
@@ -43,9 +48,12 @@ function readFilter(): RecordFilter {
 export function TexasCommandCenter() {
   const [filter, setFilter] = useState<RecordFilter>(readFilter);
   const [leads, setLeads] = useState<ApiTexasLead[]>([]);
-  const [stats, setStats] = useState<{ total: number; mobile: number; critical: number } | null>(
-    null,
-  );
+  const [stats, setStats] = useState<{
+    total: number;
+    mobile: number;
+    critical: number;
+    readyToSend: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -75,7 +83,7 @@ export function TexasCommandCenter() {
     try {
       const secret = ensureControlSecret(getControlSecret());
       const [leadRows, s] = await Promise.all([
-        fetchTexasLeads(filter === "mobile", secret),
+        fetchTexasLeads(filter, secret),
         fetchTexasStats(secret),
       ]);
       setLeads(leadRows);
@@ -124,7 +132,13 @@ export function TexasCommandCenter() {
       const secret = ensureControlSecret(getControlSecret());
       const { lead } = await sendTexasLeadOutreach(selected.id, secret);
       if (lead) {
-        patchLeadInList(lead);
+        if (filter === "hasEmail" && lead.outreachComplete) {
+          setLeads((prev) => prev.filter((l) => l.id !== lead.id));
+          setSelected(null);
+        } else {
+          patchLeadInList(lead);
+        }
+        void fetchTexasStats(ensureControlSecret(getControlSecret())).then(setStats);
         setSendFeedback({
           tone: "success",
           text:
@@ -219,11 +233,11 @@ export function TexasCommandCenter() {
           </p>
         ) : null}
 
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex gap-1.5">
           <button
             type="button"
             onClick={() => setRecordFilter("all")}
-            className={`min-h-12 flex-1 rounded-xl px-3 text-sm font-semibold ${
+            className={`min-h-12 flex-1 rounded-xl px-2 text-xs font-semibold sm:text-sm ${
               filter === "all"
                 ? "bg-amber-600 text-slate-950"
                 : "bg-slate-800 text-slate-300"
@@ -234,19 +248,31 @@ export function TexasCommandCenter() {
           <button
             type="button"
             onClick={() => setRecordFilter("mobile")}
-            className={`min-h-12 flex-1 rounded-xl px-3 text-sm font-semibold ${
+            className={`min-h-12 flex-1 rounded-xl px-2 text-xs font-semibold sm:text-sm ${
               filter === "mobile"
                 ? "bg-amber-600 text-slate-950"
                 : "bg-slate-800 text-slate-300"
             }`}
           >
-            Mobile Food Units
+            Mobile Units
+          </button>
+          <button
+            type="button"
+            onClick={() => setRecordFilter("hasEmail")}
+            className={`min-h-12 flex-1 rounded-xl px-2 text-xs font-semibold sm:text-sm ${
+              filter === "hasEmail"
+                ? "bg-amber-600 text-slate-950"
+                : "bg-slate-800 text-slate-300"
+            }`}
+          >
+            Ready for Outreach
           </button>
         </div>
 
         {stats ? (
           <p className="mt-2 text-xs text-slate-500">
             {formatTexasScore(stats.total)} total · {formatTexasScore(stats.mobile)} mobile ·{" "}
+            {formatTexasScore(stats.readyToSend ?? 0)} ready to send ·{" "}
             {formatTexasScore(stats.critical)} critical (≥79)
           </p>
         ) : null}
@@ -266,8 +292,11 @@ export function TexasCommandCenter() {
           <p className="text-sm text-slate-400">Loading Texas leads…</p>
         ) : leads.length === 0 ? (
           <p className="text-sm text-slate-400">
-            No Texas records yet. Run ingest to pull open-data inspections (HB 2844 mobile
-            outreach ready).
+            {filter === "hasEmail"
+              ? "No leads ready for outreach yet — run Apollo enrichment (npm run texas-enrich-apollo) to populate owner emails."
+              : filter === "mobile"
+                ? "No mobile food units in this dataset. Run ingest or switch to All Records."
+                : "No Texas records yet. Run ingest to pull open-data inspections (HB 2844 mobile outreach ready)."}
           </p>
         ) : (
           <div className="space-y-6">

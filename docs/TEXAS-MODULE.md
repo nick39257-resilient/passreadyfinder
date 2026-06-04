@@ -24,6 +24,8 @@ PassReady Finder uses **Turso (SQLite)** + Express + React, not Prisma/PostgreSQ
 
 Job type: `find_texas` → `runTexasFindPipeline()`.
 
+**Lead segments (dashboard + API):** `GET /api/texas/leads?segment=all|mobile|hasEmail` — `hasEmail` returns leads with owner email populated, not yet sent (`ready to send`).
+
 ## Ingestion
 
 `src/engine/texas/texasIngestionService.ts` fetches municipal open data (default: Austin Socrata). Maps:
