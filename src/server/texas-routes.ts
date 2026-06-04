@@ -5,6 +5,7 @@ import {
   getAllTexasLeads,
   getTexasLeadById,
 } from "../engine/store/texas-leads-repository.js";
+import { runTexasApolloEnrichmentBatch } from "../engine/texas/texas-enrichment-service.js";
 import { executeTexasLeadOutreach } from "../engine/texas/texas-outreach-executor.js";
 import { mapTexasLeadRowToApi } from "./texas-api-mapper.js";
 import { createJob } from "../engine/store/jobs-repository.js";
@@ -84,6 +85,21 @@ export function mountTexasRoutes(
           ? 400
           : 500;
       res.status(status).json({ error: message });
+    }
+  });
+
+  app.post("/api/texas/jobs/enrich-apollo", requireControlAuth, async (req, res) => {
+    try {
+      await runMigrations();
+      const limit =
+        typeof req.body?.limit === "number" ? req.body.limit : undefined;
+      const summary = await runTexasApolloEnrichmentBatch({ limit });
+      res.json({ ok: true, summary });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Texas Apollo enrichment failed",
+      });
     }
   });
 

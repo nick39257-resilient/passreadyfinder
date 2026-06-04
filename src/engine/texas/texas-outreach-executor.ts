@@ -5,6 +5,7 @@ import {
   TEXAS_STATUS_FORM_SUBMITTED,
 } from "../../types/texas.js";
 import { buildHb2844MobileOutreachMessage } from "./hb2844.js";
+import { texasLeadToApolloInput } from "./texas-enrichment-service.js";
 import { findOwnerEmailViaApollo } from "../services/apollo-service.js";
 import { tryWebsiteContactForm } from "../services/contact-form-service.js";
 import { normalizeOutreachEmail } from "../outreach-halt.js";
@@ -71,12 +72,7 @@ async function resolveEmailForTexasLead(row: TexasLeadRow): Promise<string | nul
     return null;
   }
 
-  const apollo = await findOwnerEmailViaApollo({
-    businessName: row.business_name,
-    address: [row.address, row.city, row.county].filter(Boolean).join(", ") || row.business_name,
-    postcode: row.zip?.trim() || "TX",
-    website: row.website,
-  });
+  const apollo = await findOwnerEmailViaApollo(texasLeadToApolloInput(row));
 
   if (!apollo?.email) {
     return null;

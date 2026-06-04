@@ -174,11 +174,50 @@ export async function updateTexasLeadEmailFromApollo(input: {
         email = ?,
         owner_name = COALESCE(?, owner_name),
         apollo_enriched_at = datetime('now'),
+        status = CASE WHEN status = 'new' THEN 'ready_to_review' ELSE status END,
         updated_at = datetime('now')
       WHERE id = ?
     `,
     args: [input.email.trim().toLowerCase(), input.ownerName?.trim() ?? null, input.leadId],
   });
+}
+
+export async function markTexasApolloEnrichmentAttempted(leadId: number): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE texas_leads SET
+        apollo_enriched_at = datetime('now'),
+        updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [leadId],
+  });
+}
+
+/**
+ * Texas leads missing email, not yet Apollo-attempted.
+ * Critical intervention (≥79) first, then highest risk_score.
+ */
+export async function getTexasLeadsNeedingApolloEnrichment(
+  limit: number,
+): Promise<TexasLeadRow[]> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `
+      SELECT * FROM texas_leads
+      WHERE (email IS NULL OR TRIM(email) = '')
+        AND status NOT IN ('EMAIL_SENT', 'FORM_SUBMITTED')
+        AND apollo_enriched_at IS NULL
+      ORDER BY
+        CASE WHEN intervention_level = 'CRITICAL_INTERVENTION' THEN 0 ELSE 1 END,
+        risk_score DESC,
+        id ASC
+      LIMIT ?
+    `,
+    args: [limit],
+  });
+  return result.rows.map((r) => rowToRecord(r as Record<string, unknown>));
 }
 
 export async function markTexasLeadEmailSent(input: {

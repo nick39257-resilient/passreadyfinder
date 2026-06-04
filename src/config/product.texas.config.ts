@@ -22,6 +22,12 @@ export const texasProductConfig = {
       },
     },
   },
+  enrichment: {
+    /** Pause between Apollo lookups (rate limit). */
+    apolloDelayMs: Number(process.env.TEXAS_APOLLO_DELAY_MS) || 1200,
+    /** Default batch size for `npm run texas-enrich-apollo`. */
+    defaultBatchLimit: Number(process.env.TEXAS_APOLLO_BATCH_LIMIT) || 500,
+  },
   outreach: {
     productName: "PassReady",
     emailSubject:
