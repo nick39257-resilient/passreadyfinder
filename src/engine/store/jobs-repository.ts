@@ -4,6 +4,7 @@ import { getDb } from "./db.js";
 export type JobType =
   | "find"
   | "find_texas"
+  | "texas_reclassify"
   | "draft"
   | "draft_all"
   | "send"

@@ -35,9 +35,11 @@ Job type: `find_texas` → `runTexasFindPipeline()`.
 
 Override feed URL: `TEXAS_AUSTIN_INSPECTIONS_URL`.
 
-## HB 2844 outreach
+## HB 2844 mobile truck add-on (Phase 3)
 
-Template id `hb2844_mobile_july_2026` in `texas_outreach_templates`. Builder: `buildHb2844MobileOutreachMessage()`.
+- **Vendor tiers** (`TYPE_I` / `TYPE_II` / `TYPE_III`) — classified from business name, vehicle type, menu, and activity text when `isMobileVendor` is true.
+- **Outreach template** — `texas_outreach_templates.hb2844_mobile_july_2026` + `draft_message` on each mobile lead.
+- **Re-sync existing rows:** `npm run texas-reclassify` or `POST /api/texas/jobs/reclassify` (control auth). Runs automatically after each Texas ingest.
 
 ## Env
 

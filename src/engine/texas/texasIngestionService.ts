@@ -91,10 +91,39 @@ export function mapOpenDataRowToTexasLead(
     "program",
     "establishment_type",
   ]);
+  const menuDescription = pickString(raw, [
+    "menu",
+    "menu_description",
+    "menu_type",
+    "food_menu",
+    "products_sold",
+  ]);
+  const primaryActivity = pickString(raw, [
+    "primary_activity",
+    "activity",
+    "business_activity",
+    "operation_type",
+    "permit_type",
+  ]);
+  const facilityDescription = pickString(raw, [
+    "facility_description",
+    "description",
+    "comments",
+    "notes",
+    "inspection_comments",
+  ]);
 
-  const isMobileVendor = isLikelyMobileVendor({ businessName, vehicleType });
+  const classificationInput = {
+    businessName,
+    vehicleType,
+    menuDescription,
+    primaryActivity,
+    facilityDescription,
+  };
+
+  const isMobileVendor = isLikelyMobileVendor(classificationInput);
   const vendorTier = isMobileVendor
-    ? classifyMobileVendorTier({ businessName, vehicleType })
+    ? classifyMobileVendorTier(classificationInput, { assumeMobile: true })
     : null;
 
   const riskScore = computeTexasRiskScore({ inspectionScore, demerits });

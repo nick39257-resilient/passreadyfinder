@@ -1,5 +1,7 @@
 import { getDb } from "./db.js";
 import type { TexasLeadInput } from "../../types/texas.js";
+import type { MobileVendorTier } from "../../types/texas.js";
+import { renderHb2844DraftForLead } from "./texas-outreach-repository.js";
 
 export interface TexasLeadRow {
   id: number;
@@ -35,13 +37,20 @@ function rowToRecord(row: Record<string, unknown>): TexasLeadRow {
 
 export async function upsertTexasLead(input: TexasLeadInput): Promise<number> {
   const db = getDb();
+  const draftMessage = input.isMobileVendor
+    ? renderHb2844DraftForLead({
+        ownerName: input.ownerName,
+        businessName: input.businessName,
+      })
+    : null;
+
   await db.execute({
     sql: `INSERT INTO texas_leads (
       external_id, source, region, business_name, address, city, county, zip,
       phone, email, owner_name, inspection_score, demerits, vehicle_type,
       is_mobile_vendor, vendor_tier, dshs_license_status, risk_score,
-      intervention_level, last_inspection_date, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      intervention_level, last_inspection_date, draft_message, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(external_id, source) DO UPDATE SET
       business_name = excluded.business_name,
       address = excluded.address,
@@ -60,6 +69,10 @@ export async function upsertTexasLead(input: TexasLeadInput): Promise<number> {
       risk_score = excluded.risk_score,
       intervention_level = excluded.intervention_level,
       last_inspection_date = excluded.last_inspection_date,
+      draft_message = CASE
+        WHEN excluded.is_mobile_vendor = 1 THEN excluded.draft_message
+        ELSE draft_message
+      END,
       updated_at = datetime('now')`,
     args: [
       input.externalId,
@@ -82,6 +95,7 @@ export async function upsertTexasLead(input: TexasLeadInput): Promise<number> {
       input.riskScore,
       input.interventionLevel,
       input.lastInspectionDate,
+      draftMessage,
     ],
   });
 
@@ -112,6 +126,33 @@ export async function getTexasLeadById(id: number): Promise<TexasLeadRow | null>
   });
   const row = result.rows[0];
   return row ? rowToRecord(row as Record<string, unknown>) : null;
+}
+
+export async function updateTexasMobileLeadMetadata(input: {
+  leadId: number;
+  isMobileVendor: boolean;
+  vendorTier: MobileVendorTier;
+  ownerName: string | null;
+  businessName: string;
+}): Promise<void> {
+  const db = getDb();
+  const draftMessage = renderHb2844DraftForLead({
+    ownerName: input.ownerName,
+    businessName: input.businessName,
+  });
+
+  await db.execute({
+    sql: `
+      UPDATE texas_leads SET
+        is_mobile_vendor = 1,
+        vendor_tier = ?,
+        draft_message = ?,
+        status = CASE WHEN status = 'new' THEN 'ready_to_review' ELSE status END,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [input.vendorTier, draftMessage, input.leadId],
+  });
 }
 
 export async function countTexasLeads(): Promise<{

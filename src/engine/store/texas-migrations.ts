@@ -1,4 +1,5 @@
 import { getDb } from "./db.js";
+import { upsertHb2844MobileTemplate } from "./texas-outreach-repository.js";
 
 export async function runTexasMigrations(): Promise<void> {
   const db = getDb();
@@ -47,13 +48,5 @@ export async function runTexasMigrations(): Promise<void> {
     "write",
   );
 
-  await db.execute({
-    sql: `INSERT OR IGNORE INTO texas_outreach_templates (id, region, audience, subject, body_template)
-          VALUES (?, 'TEXAS', 'mobile_vendor_hb2844', ?, ?)`,
-    args: [
-      "hb2844_mobile_july_2026",
-      "HB 2844 — mobile unit compliance (July 2026)",
-      "Hey [OwnerName], with the new state compliance rules kicking in this July under HB 2844, DSHS is centralizing all mobile truck inspections into a permanent statewide record. If you're still tracking logs on paper during transport, an inspector can halt your operations. We built PassReady to automate this exact digital chain of custody for [BusinessName]. Free score check: [ScoreUrl]",
-    ],
-  });
+  await upsertHb2844MobileTemplate();
 }

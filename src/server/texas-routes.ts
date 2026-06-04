@@ -60,6 +60,19 @@ export function mountTexasRoutes(
     }
   });
 
+  app.post("/api/texas/jobs/reclassify", requireControlAuth, async (_req, res) => {
+    try {
+      const jobId = await createJob("texas_reclassify", {});
+      startJob(jobId, "texas_reclassify");
+      res.status(202).json({ jobId });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Texas reclassify job failed",
+      });
+    }
+  });
+
   app.post("/api/texas/jobs/find", requireControlAuth, async (req, res) => {
     try {
       const params: TexasFindJobParams = {

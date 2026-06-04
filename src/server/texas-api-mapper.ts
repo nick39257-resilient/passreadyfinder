@@ -30,7 +30,8 @@ export function mapTexasLeadRowToApi(row: TexasLeadRow): ApiTexasLead {
   const isMobile = row.is_mobile_vendor === 1;
   const owner = row.owner_name ?? "";
   const hb2844DraftPreview = isMobile
-    ? buildHb2844MobileOutreachMessage({
+    ? row.draft_message?.trim() ||
+      buildHb2844MobileOutreachMessage({
         ownerName: owner || "there",
         businessName: row.business_name,
       })

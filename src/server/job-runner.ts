@@ -1,5 +1,6 @@
 import { runFindLeadsJob } from "../engine/find-leads-job.js";
 import { runFindTexasLeadsJob } from "../engine/find-texas-leads-job.js";
+import { runTexasTierResyncJob } from "../engine/find-texas-tier-resync-job.js";
 import type { TexasFindJobParams } from "../types/texas.js";
 import { runQueueDrafter } from "../engine/queue-drafter.js";
 import { runSender } from "../engine/sender.js";
@@ -18,6 +19,7 @@ import { OperationTimeoutError, withTimeout } from "../engine/services/service-t
 const JOB_TIMEOUT_MS: Partial<Record<JobType, number>> = {
   find: 2 * 60 * 60 * 1000,
   find_texas: 45 * 60 * 1000,
+  texas_reclassify: 15 * 60 * 1000,
   draft_all: 60 * 60 * 1000,
   contact_discovery: 20 * 60 * 1000,
 };
@@ -72,6 +74,13 @@ async function runJobBody(
           : "Ingesting Texas health inspection open data…",
       });
       return runFindTexasLeadsJob({ segmentation: texasParams });
+    }
+    case "texas_reclassify": {
+      await updateJob(jobId, {
+        status: "running",
+        progress: "HB 2844: classifying mobile vendor tiers…",
+      });
+      return runTexasTierResyncJob();
     }
     case "draft": {
       await updateJob(jobId, {
