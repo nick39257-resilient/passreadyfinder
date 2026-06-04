@@ -27,7 +27,7 @@ const COUNTY_BUNDLES: Record<string, string[]> = {
     "Rossendale",
     "West Lancashire",
     "Blackpool",
-    "Blackburn with Darwen",
+    "Blackburn",
   ],
 };
 

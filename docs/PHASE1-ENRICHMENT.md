@@ -5,7 +5,7 @@ PassFinder uses **Turso (SQLite)** + TypeScript — not Prisma/PostgreSQL. Schem
 ## Step 1 — Guardrails
 
 - Skips leads whose **business name** matches: Cafe, Coffee, Roasters, Bakery, Tea Room, Sandwich Bar.
-- FSA types fetched: Takeaway/sandwich shop, Restaurant/Cafe/Caterer, Mobile caterer (cafes dropped by name).
+- FSA types fetched: Takeaway/sandwich shop, Restaurant/Cafe/Canteen, Mobile caterer (cafes dropped by venue name only).
 
 ## Step 2 — Apollo.io
 

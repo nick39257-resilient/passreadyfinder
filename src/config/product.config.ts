@@ -16,7 +16,7 @@ export const productConfig = {
   /** FSA BusinessType names — resolved to IDs at runtime via /BusinessTypes */
   businessTypeNames: [
     "Takeaway/sandwich shop",
-    "Restaurant/Cafe/Caterer",
+    "Restaurant/Cafe/Canteen",
     "Mobile caterer",
   ],
 

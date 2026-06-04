@@ -12,17 +12,32 @@ function parseFsaResponse<T>(schema: { parse: (data: unknown) => T }, data: unkn
   return schema.parse(data);
 }
 
+/** Deprecated FSA labels still present in old config — map to current /BusinessTypes names only. */
+const FSA_BUSINESS_TYPE_LOOKUP_ALIASES: Readonly<Record<string, string>> = {
+  "restaurant/cafe/caterer": "Restaurant/Cafe/Canteen",
+};
+
+function businessTypeNameForFsaLookup(configName: string): string {
+  const alias = FSA_BUSINESS_TYPE_LOOKUP_ALIASES[configName.trim().toLowerCase()];
+  return alias ?? configName.trim();
+}
+
 export async function resolveBusinessTypeIds(names: readonly string[]): Promise<Map<string, number>> {
   const raw = await fsaFetch<unknown>("/BusinessTypes");
   const data = parseFsaResponse(fsaBusinessTypesResponseSchema, raw);
   const map = new Map<string, number>();
   for (const name of names) {
+    const lookupName = businessTypeNameForFsaLookup(name);
     const match = data.businessTypes.find(
-      (bt) => bt.BusinessTypeName.toLowerCase() === name.toLowerCase(),
+      (bt) => bt.BusinessTypeName.toLowerCase() === lookupName.toLowerCase(),
     );
     if (!match) {
+      const hint =
+        lookupName !== name.trim()
+          ? ` (looked up as "${lookupName}")`
+          : "";
       throw new Error(
-        `Business type "${name}" not found in FSA /BusinessTypes. Available types include: ${data.businessTypes
+        `Business type "${name}"${hint} not found in FSA /BusinessTypes. Available types include: ${data.businessTypes
           .slice(0, 5)
           .map((b) => b.BusinessTypeName)
           .join(", ")}…`,

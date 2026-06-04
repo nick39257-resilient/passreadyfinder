@@ -16,13 +16,34 @@ export async function fetchAuthorities(): Promise<FsaAuthority[]> {
 }
 
 function normalizeName(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * UI / county-bundle labels that differ from FSA /Authorities/basic `Name`.
+ * Keys are normalized via {@link normalizeName}; values are resolved with the same loose matcher.
+ */
+export const LOCAL_AUTHORITY_INPUT_ALIASES: Readonly<Record<string, string>> = {
+  "blackburn with darwen": "Blackburn",
+};
+
+export function canonicalLocalAuthorityInput(input: string): string {
+  const normalized = normalizeName(input);
+  return LOCAL_AUTHORITY_INPUT_ALIASES[normalized] ?? input.trim();
 }
 
 export async function resolveLocalAuthorityIdLoose(
   input: string,
 ): Promise<{ id: number; name: string }> {
-  const wanted = normalizeName(input);
+  const lookup = canonicalLocalAuthorityInput(input);
+  const wanted = normalizeName(lookup);
   const authorities = await fetchAuthorities();
 
   const exact = authorities.find((a) => normalizeName(a.Name) === wanted);

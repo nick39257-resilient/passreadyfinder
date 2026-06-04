@@ -17,7 +17,12 @@ import { isRateLimited } from "./rate-limit-queue.js";
 import { enrichFromOsm, sleep } from "./enrich/osm-enricher.js";
 import { runPhase1EnrichmentForLead } from "./enrich/lead-enrichment-phase1.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "./enrich/lead-email.js";
-import { exclusionReason, isExcludedLead } from "./lead-guardrails.js";
+import { isExcludedLead } from "./lead-guardrails.js";
+
+/** Venue-name filter only — runs after FSA pages are fetched; never on businessTypeNames or API params. */
+function passesVenueNameGuardrail(lead: RawLead): boolean {
+  return !isExcludedLead({ businessName: lead.businessName });
+}
 import { calculateLeadScore } from "./score/scorer.js";
 import { getDb, runMigrations } from "./store/db.js";
 import {
@@ -121,7 +126,8 @@ async function fetchLeadsWithDeltaSync(options: {
         deltaRows++;
 
         const lead = establishmentToRawLead(est);
-        if (isExcludedLead(lead)) {
+        // Venue-name guardrails (cafe/coffee etc.) — only after FSA JSON is read; not on businessType strings.
+        if (!passesVenueNameGuardrail(lead)) {
           excludedByGuardrail++;
           continue;
         }
@@ -164,6 +170,15 @@ export async function runFindPipeline(options?: {
       ? productConfig.area.localAuthorityName
       : "UK");
   const authorityNames = await resolveAuthoritiesForFind(areaName);
+  if (authorityNames.length === 0) {
+    throw new Error(`No local authorities resolved for area "${areaName}".`);
+  }
+  console.log(
+    `Resolved ${authorityNames.length} FSA local authority/authorities: ${authorityNames
+      .map((a) => `${a.name} (id ${a.id})`)
+      .join("; ")}`,
+  );
+
   const worstFirst = options?.segmentation?.worstFirst ?? true;
   const maxRating = productConfig.maxRating;
   const targetRating = options?.segmentation?.targetRating ?? maxRating;
