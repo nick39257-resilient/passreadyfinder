@@ -1,7 +1,6 @@
 import { scrapeEmailFromWebsite } from "../enrich/website-email-scraper.js";
 import { tryTexasAutopilotContactForm } from "./texas-contact-form-autopilot.js";
 import { discoverWebsiteViaDuckDuckGo } from "./texas-duckduckgo-discovery.js";
-import { buildTexasPitchScript } from "./texas-multi-channel.js";
 import { runMigrations } from "../store/db.js";
 import {
   getTexasLeadsForAutopilot,
@@ -55,19 +54,19 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function pitchForLead(row: TexasLeadRow): string {
-  return buildTexasPitchScript({
-    businessName: row.business_name,
-    zip: row.zip,
-    city: row.city,
-    address: row.address,
-    county: row.county,
-    demerits: row.demerits,
-    texasRiskScore: row.risk_score,
-    hb2844DraftPreview: row.draft_message,
-    isMobileVendor: row.is_mobile_vendor === 1,
-    status: row.status,
-  });
+const TEXAS_AUTOPILOT_FORM_MESSAGE = `Hey team,
+
+I noticed your recent health inspection score. With the new Texas HB 2844 compliance regulations taking full effect this July, DSHS is completely changing how food units have to log their chain of custody.
+
+State inspectors will soon have the authority to pause operations on-site if logs are still being managed on manual paper tracking systems. We built passready.us specifically for Texas hospitality operators to automate these compliance logs, digitize your records, and protect your license before the July 1st deadline.
+
+Who is the best person to pass a free temporary access link to so you can see your pre-filled logs?
+
+Thanks,
+PassReady Compliance Desk`;
+
+function pitchForLead(_row: TexasLeadRow): string {
+  return TEXAS_AUTOPILOT_FORM_MESSAGE;
 }
 
 async function resolveWebsite(row: TexasLeadRow): Promise<string | null> {
