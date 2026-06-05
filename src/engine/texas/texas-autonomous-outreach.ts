@@ -86,6 +86,7 @@ async function resolveWebsite(row: TexasLeadRow): Promise<string | null> {
     businessName: row.business_name,
     zip: row.zip,
     city: row.city,
+    isMobileVendor: row.is_mobile_vendor === 1,
   });
   if (discovered) {
     await updateTexasLeadWebsite({ leadId: row.id, website: discovered });
