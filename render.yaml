@@ -140,3 +140,51 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: TEST_EMAIL_ADDRESS
+
+  # Texas autopilot — DuckDuckGo discovery, email scrape, contact forms (every 12h)
+  - type: cron
+    name: texas-autopilot-cron
+    runtime: node
+    plan: starter
+    repo: https://github.com/nick39257-resilient/passreadyfinder
+    branch: main
+    schedule: "0 */12 * * *"
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm install && npx playwright install --with-deps chromium
+    startCommand: npm run texas-autopilot
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: TURSO_DATABASE_URL
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_DATABASE_URL
+      - key: TURSO_AUTH_TOKEN
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_AUTH_TOKEN
+      - key: FROM_EMAIL
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: FROM_EMAIL
+      - key: CONTACT_FORM_FROM_EMAIL
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: FROM_EMAIL
+      - key: RESEND_API_KEY
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: RESEND_API_KEY
+      - key: CONTROL_PANEL_SECRET
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: CONTROL_PANEL_SECRET
+      - key: TEXAS_AUTOPILOT_LIMIT
+        value: "50"
+      - key: TEXAS_AUTOPILOT_DELAY_MS
+        value: "1500"
