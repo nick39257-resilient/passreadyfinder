@@ -72,9 +72,23 @@ function hostFromUrl(url: string): string | null {
   }
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
 function unwrapDuckDuckGoRedirect(href: string): string | null {
   try {
-    const absolute = href.startsWith("//") ? `https:${href}` : href;
+    const decoded = decodeHtmlEntities(href.trim());
+    const absolute = decoded.startsWith("//")
+      ? `https:${decoded}`
+      : decoded.startsWith("/")
+        ? `https://duckduckgo.com${decoded}`
+        : decoded;
     const parsed = new URL(absolute, "https://duckduckgo.com");
     const uddg = parsed.searchParams.get("uddg");
     if (uddg) {
@@ -89,10 +103,48 @@ function unwrapDuckDuckGoRedirect(href: string): string | null {
   }
 }
 
+/** DuckDuckGo Lite/HTML outbound routing links — /l/?kh=…&uddg=… */
+function isDdgLiteRedirectHref(href: string): boolean {
+  const decoded = decodeHtmlEntities(href.trim());
+  return (
+    /^\/l\/\?kh=/i.test(decoded) ||
+    /^\/l\?kh=/i.test(decoded) ||
+    /duckduckgo\.com\/l\/\?/i.test(decoded) ||
+    /duckduckgo\.com\/l\?/i.test(decoded)
+  );
+}
+
+function extractUddgTargetFromRedirect(href: string): string | null {
+  const decoded = decodeHtmlEntities(href.trim());
+  const unwrapped = unwrapDuckDuckGoRedirect(decoded);
+  if (unwrapped) {
+    const normalized = normalizeWebsiteUrl(unwrapped);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  const uddgMatch = decoded.match(/[?&]uddg=([^&"'<>]+)/i);
+  if (uddgMatch?.[1]) {
+    try {
+      return normalizeWebsiteUrl(decodeURIComponent(uddgMatch[1]));
+    } catch {
+      return normalizeWebsiteUrl(uddgMatch[1]);
+    }
+  }
+
+  return null;
+}
+
 function resolveAnchorHref(href: string): string | null {
   if (!href?.trim() || href.startsWith("#") || href.startsWith("javascript:")) {
     return null;
   }
+
+  if (isDdgLiteRedirectHref(href)) {
+    return extractUddgTargetFromRedirect(href);
+  }
+
   const resolved = unwrapDuckDuckGoRedirect(href) ?? href;
   return normalizeWebsiteUrl(resolved);
 }
@@ -103,7 +155,23 @@ function pushUniqueUrl(urls: string[], url: string | null): void {
   }
 }
 
-/** Primary DDG markup — result__a / result-link title anchors. */
+/** DuckDuckGo Lite interface — scan all anchors for /l/?kh= routing redirects. */
+function extractLiteResultUrls(html: string): string[] {
+  const urls: string[] = [];
+  const anchorPattern = /<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/gi;
+
+  for (const match of html.matchAll(anchorPattern)) {
+    const href = match[1]?.trim();
+    if (!href || !isDdgLiteRedirectHref(href)) {
+      continue;
+    }
+    pushUniqueUrl(urls, extractUddgTargetFromRedirect(href));
+  }
+
+  return urls;
+}
+
+/** Standard DDG HTML markup — result__a / result-link title anchors. */
 function extractPrimaryResultUrls(html: string): string[] {
   const urls: string[] = [];
   const patterns = [
@@ -122,10 +190,10 @@ function extractPrimaryResultUrls(html: string): string[] {
   return urls;
 }
 
-/** Loose fallback — any anchor that looks like a DDG outbound redirect or external http(s) link. */
+/** Last resort — any anchor with uddg= or external http(s) link. */
 function extractFallbackResultUrls(html: string): string[] {
   const urls: string[] = [];
-  const anchorPattern = /<a\b[^>]*\shref=["']([^"']+)["'][^>]*>/gi;
+  const anchorPattern = /<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/gi;
 
   for (const match of html.matchAll(anchorPattern)) {
     const href = match[1]?.trim();
@@ -133,11 +201,12 @@ function extractFallbackResultUrls(html: string): string[] {
       continue;
     }
 
-    const looksLikeDdgRedirect =
-      /uddg=/i.test(href) ||
-      /duckduckgo\.com\/l\/?\?/i.test(href) ||
-      href.startsWith("/l/?") ||
-      href.startsWith("/l?");
+    if (isDdgLiteRedirectHref(href)) {
+      pushUniqueUrl(urls, extractUddgTargetFromRedirect(href));
+      continue;
+    }
+
+    const looksLikeDdgRedirect = /uddg=/i.test(decodeHtmlEntities(href));
 
     let looksLikeExternal = false;
     if (/^https?:\/\//i.test(href)) {
@@ -159,13 +228,23 @@ function extractFallbackResultUrls(html: string): string[] {
   return urls;
 }
 
-function extractResultUrls(html: string): { urls: string[]; primaryCount: number } {
+function extractResultUrls(html: string): {
+  urls: string[];
+  liteCount: number;
+  primaryCount: number;
+} {
+  const lite = extractLiteResultUrls(html);
+  if (lite.length > 0) {
+    return { urls: lite, liteCount: lite.length, primaryCount: 0 };
+  }
+
   const primary = extractPrimaryResultUrls(html);
   if (primary.length > 0) {
-    return { urls: primary, primaryCount: primary.length };
+    return { urls: primary, liteCount: 0, primaryCount: primary.length };
   }
+
   const fallback = extractFallbackResultUrls(html);
-  return { urls: fallback, primaryCount: 0 };
+  return { urls: fallback, liteCount: 0, primaryCount: 0 };
 }
 
 export function buildTexasDiscoverySearchQuery(input: {
@@ -231,9 +310,9 @@ async function searchDuckDuckGoOnce(query: string): Promise<string | null> {
 
     console.log("[texas-ddg] Sample HTML body snippet:", html.substring(0, 1000));
 
-    const { urls: candidates, primaryCount } = extractResultUrls(html);
+    const { urls: candidates, liteCount, primaryCount } = extractResultUrls(html);
     console.log(
-      `[texas-ddg] query="${query}" parsedCandidates=${candidates.length} primaryMatches=${primaryCount}`,
+      `[texas-ddg] query="${query}" parsedCandidates=${candidates.length} liteMatches=${liteCount} primaryMatches=${primaryCount}`,
     );
 
     if (!res.ok && candidates.length === 0) {
