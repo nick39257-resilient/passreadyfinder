@@ -1,4 +1,3 @@
-import { Resend } from "resend";
 import { texasProductConfig } from "../../config/product.texas.config.js";
 import {
   TEXAS_STATUS_EMAIL_SENT,
@@ -7,6 +6,7 @@ import {
 import { buildHb2844MobileOutreachMessage } from "./hb2844.js";
 import { texasLeadToApolloInput } from "./texas-enrichment-service.js";
 import { findOwnerEmailViaApollo } from "../services/apollo-service.js";
+import { sendSmtpMail } from "../services/smtp-mail-service.js";
 import { tryWebsiteContactForm } from "../services/contact-form-service.js";
 import { normalizeOutreachEmail } from "../outreach-halt.js";
 import { runMigrations } from "../store/db.js";
@@ -87,28 +87,21 @@ async function resolveEmailForTexasLead(row: TexasLeadRow): Promise<string | nul
   return apollo.email.trim().toLowerCase();
 }
 
-async function sendTexasEmail(row: TexasLeadRow, to: string, text: string): Promise<string> {
-  const resend = new Resend(requireEnv("RESEND_API_KEY"));
-  const fromEmail = requireEnv("FROM_EMAIL");
+async function sendTexasEmail(_row: TexasLeadRow, to: string, text: string): Promise<string> {
+  requireEnv("MAIL_USERNAME");
+  requireEnv("MAIL_PASSWORD");
 
-  const { data, error } = await resend.emails.send({
-    from: fromEmail,
+  const { messageId } = await sendSmtpMail({
     to,
     subject: texasEmailSubject(),
     text,
   });
 
-  if (error) {
-    throw new Error(error.message);
-  }
-  if (!data?.id) {
-    throw new Error("Resend did not return a message id");
-  }
-  return data.id;
+  return messageId;
 }
 
 /**
- * Execute HB 2844 outreach for one Texas lead: Resend email or Playwright contact form.
+ * Execute HB 2844 outreach for one Texas lead: SMTP email or Playwright contact form.
  */
 export async function executeTexasLeadOutreach(leadId: number): Promise<TexasOutreachResult> {
   await runMigrations();

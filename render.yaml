@@ -25,9 +25,9 @@ services:
         value: gemini-3.1-flash-lite
       - key: WHATSAPP_NUMBER
         sync: false
-      - key: RESEND_API_KEY
+      - key: MAIL_USERNAME
         sync: false
-      - key: FROM_EMAIL
+      - key: MAIL_PASSWORD
         sync: false
       - key: TEST_EMAIL_ADDRESS
         sync: false
@@ -125,16 +125,16 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: TURSO_AUTH_TOKEN
-      - key: RESEND_API_KEY
+      - key: MAIL_USERNAME
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: RESEND_API_KEY
-      - key: FROM_EMAIL
+          envVarKey: MAIL_USERNAME
+      - key: MAIL_PASSWORD
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: FROM_EMAIL
+          envVarKey: MAIL_PASSWORD
       - key: TEST_EMAIL_ADDRESS
         fromService:
           type: web
@@ -164,21 +164,16 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: TURSO_AUTH_TOKEN
-      - key: FROM_EMAIL
+      - key: MAIL_USERNAME
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: FROM_EMAIL
-      - key: CONTACT_FORM_FROM_EMAIL
+          envVarKey: MAIL_USERNAME
+      - key: MAIL_PASSWORD
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: FROM_EMAIL
-      - key: RESEND_API_KEY
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: RESEND_API_KEY
+          envVarKey: MAIL_PASSWORD
       - key: CONTROL_PANEL_SECRET
         fromService:
           type: web

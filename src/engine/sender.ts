@@ -1,4 +1,3 @@
-import { Resend } from "resend";
 import { getDailySendQuota } from "./daily-send-cap.js";
 import {
   getDeliverabilityStatus,
@@ -20,20 +19,17 @@ import {
   type ApprovedLead,
 } from "./store/sender-repository.js";
 import { isEmailSuppressed, normalizeOutreachEmail } from "./outreach-halt.js";
+import {
+  isSmtpMailConfigured,
+  PASSREADY_MAIL_FROM,
+  sendSmtpMail,
+} from "./services/smtp-mail-service.js";
 
 /** Override in .env — avoid scare-word subjects that hurt opens/spam scores. */
 function outreachEmailSubject(): string {
   const custom = process.env.OUTREACH_EMAIL_SUBJECT?.trim();
   if (custom) return custom;
   return "Quick question about your kitchen records";
-}
-
-function requireEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} is required in .env`);
-  }
-  return value;
 }
 
 function isTestEmailFallbackEnabled(): boolean {
@@ -70,7 +66,7 @@ export interface SendRunResult {
 
 export type SendProgressCallback = (message: string) => void | Promise<void>;
 
-/** Sweep approved leads and send via Resend. Marks each as contacted or nurture on success. */
+/** Sweep approved leads and send via Namecheap Private Email SMTP. Marks each as contacted or nurture on success. */
 export async function runSender(onProgress?: SendProgressCallback): Promise<SendRunResult> {
   await runMigrations();
 
@@ -85,12 +81,12 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
     };
   }
 
-  const apiKey = requireEnv("RESEND_API_KEY");
-  const fromEmail = requireEnv("FROM_EMAIL");
+  if (!isSmtpMailConfigured()) {
+    throw new Error("MAIL_USERNAME and MAIL_PASSWORD are required in .env");
+  }
+
   const testFallbackEnabled = isTestEmailFallbackEnabled();
   const testEmail = process.env.TEST_EMAIL_ADDRESS?.trim();
-
-  const resend = new Resend(apiKey);
   const quota = await getDailySendQuota();
   const result: SendRunResult = {
     sent: 0,
@@ -124,9 +120,9 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
   }
 
   await report(
-    `Sending ${leads.length} approved lead(s) via Resend (${quota.sentToday}/${quota.cap} sent today, cap ${quota.cap})…`,
+    `Sending ${leads.length} approved lead(s) via Private Email SMTP (${quota.sentToday}/${quota.cap} sent today, cap ${quota.cap})…`,
   );
-  await report(`From: ${fromEmail}`);
+  await report(`From: ${PASSREADY_MAIL_FROM}`);
   if (testFallbackEnabled && testEmail) {
     await report(`Test fallback enabled: ${testEmail} (only when lead has no business email)\n`);
   }
@@ -178,24 +174,16 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
         unsubscribeUrl,
       });
 
-      const { data, error } = await resend.emails.send({
-        from: fromEmail,
+      const { messageId } = await sendSmtpMail({
         to,
         subject: outreachEmailSubject(),
         text,
         ...(html ? { html } : {}),
       });
 
-      if (error) {
-        throw new Error(error.message);
-      }
-      if (!data?.id) {
-        throw new Error("Resend did not return a message id");
-      }
-
-      await markLeadContacted(lead.id, data.id);
+      await markLeadContacted(lead.id, messageId);
       result.sent++;
-      await report(`  ✓ sent (Resend id: ${data.id})\n`);
+      await report(`  ✓ sent (message id: ${messageId})\n`);
 
       if (i < leads.length - 1) {
         const delayMs = randomSendDelayMs();

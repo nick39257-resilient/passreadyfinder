@@ -1,4 +1,5 @@
 import { productConfig } from "../../config/product.config.js";
+import { PASSREADY_MAIL_FROM } from "./smtp-mail-service.js";
 import { normalizeWebsiteUrl } from "../contact-discovery/fetch-page.js";
 import {
   closeBrowserSafe,
@@ -125,7 +126,7 @@ async function runContactFormAttempt(input: {
       }
       if (await emailField.isVisible({ timeout: actionTimeout() }).catch(() => false)) {
         await emailField.fill(
-          process.env.CONTACT_FORM_FROM_EMAIL?.trim() || "nick@passready.uk",
+          PASSREADY_MAIL_FROM,
           { timeout: actionTimeout() },
         );
       }

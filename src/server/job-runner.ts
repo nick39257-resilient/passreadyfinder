@@ -113,7 +113,7 @@ async function runJobBody(
     case "send": {
       await updateJob(jobId, {
         status: "running",
-        progress: "Sending approved emails via Resend…",
+        progress: "Sending approved emails via Private Email SMTP…",
       });
       return runSender(onProgress);
     }

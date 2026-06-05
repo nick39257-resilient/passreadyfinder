@@ -39,11 +39,7 @@ export type TexasAutopilotSummary = {
 };
 
 function autopilotFromEmail(): string {
-  return (
-    process.env.CONTACT_FORM_FROM_EMAIL?.trim() ||
-    process.env.FROM_EMAIL?.trim() ||
-    "compliance@passready.us"
-  );
+  return "nick@passready.us";
 }
 
 function delayMs(): number {
