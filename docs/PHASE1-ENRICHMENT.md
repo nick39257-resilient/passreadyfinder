@@ -18,7 +18,7 @@ PassFinder uses **Turso (SQLite)** + TypeScript — not Prisma/PostgreSQL. Schem
 
 - Set `APOLLO_API_KEY` in Render.
 - API lookup cap: `apolloDailyCap` — `0` = unlimited (default). Successful-email cap: `apolloSuccessfulFindCap` (default 80).
-- Flow: website scrape → Apollo `mixed_people/search` (+ optional `people/match`) → owner titles.
+- Flow: website scrape → Apollo `people/match` (first/last name + organization + domain when available).
 - On email found: `enrichment_status=EMAIL_FOUND`, `status=ready_to_review`.
 
 ## Step 3 — Contact forms (Playwright)

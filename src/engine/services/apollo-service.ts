@@ -7,44 +7,38 @@ const APOLLO_BASE = "https://api.apollo.io/api/v1";
 /** Per HTTP request to Apollo. */
 export const APOLLO_HTTP_TIMEOUT_MS = 15_000;
 
-/** Whole owner lookup (search + optional match) — abort so find jobs cannot hang. */
+/** Whole owner lookup (people/match only on free plan) — abort so find jobs cannot hang. */
 export const APOLLO_LEAD_LOOKUP_TIMEOUT_MS = 30_000;
-
-const OWNER_TITLE_KEYWORDS = [
-  "owner",
-  "proprietor",
-  "director",
-  "partner",
-  "operations",
-  "managing",
-  "founder",
-  "ceo",
-  "general manager",
-] as const;
 
 export type ApolloOwnerMatch = {
   email: string;
   ownerName: string | null;
   title: string | null;
-  source: "mixed_people/search" | "people/match";
+  source: "people/match";
 };
 
-function apolloApiKey(): string | null {
-  return process.env.APOLLO_API_KEY?.trim() || null;
-}
+export type ApolloPersonNameParts = {
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string | null;
+};
 
-function extractCity(address: string, postcode: string): string {
-  const parts = address
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (parts.length >= 2) {
-    const last = parts[parts.length - 1];
-    if (!/^\d/.test(last) && last.length > 2) {
-      return last;
-    }
+export function parsePersonName(
+  fullName: string | null | undefined,
+): ApolloPersonNameParts {
+  const trimmed = fullName?.trim();
+  if (!trimmed) {
+    return { firstName: null, lastName: null, fullName: null };
   }
-  return postcode.trim().split(/\s+/)[0] ?? "";
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: null, fullName: trimmed };
+  }
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+    fullName: trimmed,
+  };
 }
 
 function domainFromWebsite(website: string | null | undefined): string | null {
@@ -59,14 +53,6 @@ function domainFromWebsite(website: string | null | undefined): string | null {
   } catch {
     return null;
   }
-}
-
-function titleMatchesOwner(title: string | null | undefined): boolean {
-  const lower = title?.trim().toLowerCase() ?? "";
-  if (!lower) {
-    return false;
-  }
-  return OWNER_TITLE_KEYWORDS.some((k) => lower.includes(k));
 }
 
 function pickEmail(person: Record<string, unknown>): string | null {
@@ -94,6 +80,10 @@ function personDisplayName(person: Record<string, unknown>): string | null {
   const last = typeof person.last_name === "string" ? person.last_name.trim() : "";
   const full = `${first} ${last}`.trim();
   return full || (typeof person.name === "string" ? person.name.trim() : null);
+}
+
+function apolloApiKey(): string | null {
+  return process.env.APOLLO_API_KEY?.trim() || null;
 }
 
 async function apolloFetch<T>(path: string, body: Record<string, unknown>): Promise<T | null> {
@@ -157,102 +147,125 @@ export async function canCallApolloToday(): Promise<boolean> {
   return used < cap;
 }
 
+function buildPeopleMatchAttempts(input: {
+  businessName: string;
+  website?: string | null;
+  ownerName?: string | null;
+}): Record<string, unknown>[] {
+  const domain = domainFromWebsite(input.website);
+  const org = input.businessName.trim();
+  const { firstName, lastName, fullName } = parsePersonName(input.ownerName);
+  const attempts: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+
+  const push = (body: Record<string, unknown>) => {
+    const key = JSON.stringify(body);
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    attempts.push(body);
+  };
+
+  const orgFields = {
+    organization_name: org,
+    reveal_personal_emails: false,
+  };
+
+  if (firstName && lastName) {
+    push({
+      first_name: firstName,
+      last_name: lastName,
+      ...orgFields,
+      ...(domain ? { domain } : {}),
+    });
+  } else if (firstName) {
+    push({
+      first_name: firstName,
+      ...orgFields,
+      ...(domain ? { domain } : {}),
+    });
+    push({
+      name: firstName,
+      ...orgFields,
+      ...(domain ? { domain } : {}),
+    });
+  } else if (fullName) {
+    push({
+      name: fullName,
+      ...orgFields,
+      ...(domain ? { domain } : {}),
+    });
+  }
+
+  if (domain) {
+    push({
+      ...orgFields,
+      domain,
+    });
+  }
+
+  push({ ...orgFields });
+
+  return attempts;
+}
+
+async function apolloPeopleMatch(
+  body: Record<string, unknown>,
+): Promise<ApolloOwnerMatch | null> {
+  if (!(await canCallApolloToday())) {
+    return null;
+  }
+
+  await incrementApolloCredits();
+  const match = await apolloFetch<{ person?: Record<string, unknown> }>(
+    "/people/match",
+    body,
+  );
+  const person = match?.person;
+  if (!person) {
+    return null;
+  }
+
+  const email = pickEmail(person);
+  if (!email) {
+    return null;
+  }
+
+  return {
+    email,
+    ownerName: personDisplayName(person),
+    title: typeof person.title === "string" ? person.title : null,
+    source: "people/match",
+  };
+}
+
 async function findOwnerEmailViaApolloInner(input: {
   businessName: string;
   address: string;
   postcode: string;
   website?: string | null;
+  ownerName?: string | null;
 }): Promise<ApolloOwnerMatch | null> {
-  const city = extractCity(input.address, input.postcode);
-  const domain = domainFromWebsite(input.website);
+  const attempts = buildPeopleMatchAttempts(input);
 
-  const searchBody: Record<string, unknown> = {
-    page: 1,
-    per_page: 8,
-    q_organization_name: input.businessName,
-    person_titles: [
-      "Owner",
-      "Proprietor",
-      "Director",
-      "Managing Director",
-      "Partner",
-      "Operations Manager",
-    ],
-  };
-  if (domain) {
-    searchBody.q_organization_domains_list = [domain];
-  }
-  if (city) {
-    searchBody.organization_locations = [city];
-  }
-
-  await incrementApolloCredits();
-  const search = await apolloFetch<{ people?: Record<string, unknown>[] }>(
-    "/mixed_people/search",
-    searchBody,
-  );
-  const people = search?.people ?? [];
-
-  for (const person of people) {
-    const title = typeof person.title === "string" ? person.title : null;
-    if (!titleMatchesOwner(title)) {
-      continue;
-    }
-    const email = pickEmail(person);
-    if (!email) {
-      continue;
-    }
-    return {
-      email,
-      ownerName: personDisplayName(person),
-      title,
-      source: "mixed_people/search",
-    };
-  }
-
-  const fallback = people.find((p) => pickEmail(p));
-  if (fallback) {
-    const email = pickEmail(fallback);
-    if (email) {
-      return {
-        email,
-        ownerName: personDisplayName(fallback),
-        title: typeof fallback.title === "string" ? fallback.title : null,
-        source: "mixed_people/search",
-      };
-    }
-  }
-
-  if (domain && (await canCallApolloToday())) {
-    await incrementApolloCredits();
-    const match = await apolloFetch<{ person?: Record<string, unknown> }>("/people/match", {
-      organization_name: input.businessName,
-      domain,
-      reveal_personal_emails: false,
-    });
-    const person = match?.person;
-    if (person) {
-      const email = pickEmail(person);
-      if (email) {
-        return {
-          email,
-          ownerName: personDisplayName(person),
-          title: typeof person.title === "string" ? person.title : null,
-          source: "people/match",
-        };
-      }
+  for (const body of attempts) {
+    const result = await apolloPeopleMatch(body);
+    if (result) {
+      return result;
     }
   }
 
   return null;
 }
 
-/** Find owner/decision-maker email via Apollo (mixed search + optional people/match). Never hangs indefinitely. */
+/** Find owner email via Apollo people/match (free-plan compatible; no mixed_people/search). */
 export async function findOwnerEmailViaApollo(input: {
   businessName: string;
   address: string;
   postcode: string;
   website?: string | null;
+  ownerName?: string | null;
 }): Promise<ApolloOwnerMatch | null> {
   try {
     return await withTimeout(

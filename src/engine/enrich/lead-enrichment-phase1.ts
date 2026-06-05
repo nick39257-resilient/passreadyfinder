@@ -78,6 +78,7 @@ async function runPhase1EnrichmentForLeadInner(
         address: row.address,
         postcode: row.postcode,
         website: row.website,
+        ownerName: row.owner_name,
       });
       if (apollo?.email) {
         await markLeadEmailFromApollo({

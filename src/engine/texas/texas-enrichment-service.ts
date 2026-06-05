@@ -28,6 +28,7 @@ export function texasLeadToApolloInput(row: TexasLeadRow): {
   address: string;
   postcode: string;
   website: string | null;
+  ownerName: string | null;
 } {
   const locationParts = [row.address, row.city, row.county, row.zip].filter(
     (part) => part?.trim(),
@@ -42,6 +43,7 @@ export function texasLeadToApolloInput(row: TexasLeadRow): {
     address,
     postcode: row.zip?.trim() || row.city?.trim() || "TX",
     website: row.website,
+    ownerName: row.owner_name,
   };
 }
 
