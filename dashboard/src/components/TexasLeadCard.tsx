@@ -5,6 +5,7 @@ import {
   formatTexasScore,
   formatVendorTier,
 } from "../lib/texas-lead-display";
+import { TexasContactOptions } from "./TexasContactOptions";
 
 export function TexasLeadCard({
   lead,
@@ -21,15 +22,17 @@ export function TexasLeadCard({
     typeof lead.hb2844DraftPreview === "string" ? lead.hb2844DraftPreview : null;
 
   return (
-    <li>
+    <li
+      className={`flex flex-col gap-3 rounded-2xl border p-4 ${
+        critical
+          ? "border-red-500/70 bg-red-950/40 ring-2 ring-red-500/50"
+          : "border-amber-900/50 bg-slate-900/80 ring-1 ring-slate-700"
+      }`}
+    >
       <button
         type="button"
         onClick={onTap}
-        className={`flex min-h-12 w-full flex-col gap-2 rounded-2xl border p-4 text-left transition ${
-          critical
-            ? "border-red-500/70 bg-red-950/40 ring-2 ring-red-500/50"
-            : "border-amber-900/50 bg-slate-900/80 ring-1 ring-slate-700"
-        }`}
+        className="flex min-h-12 w-full flex-col gap-2 text-left"
       >
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h3 className="text-base font-semibold text-slate-100">{businessName}</h3>
@@ -81,6 +84,8 @@ export function TexasLeadCard({
           <p className="line-clamp-2 text-xs text-slate-400">{draftPreview}</p>
         ) : null}
       </button>
+
+      <TexasContactOptions lead={lead} />
     </li>
   );
 }

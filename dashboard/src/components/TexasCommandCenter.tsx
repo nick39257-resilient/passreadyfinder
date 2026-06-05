@@ -20,6 +20,7 @@ import {
   formatTexasLocation,
   formatVendorTier,
 } from "../lib/texas-lead-display";
+import { TexasContactOptions } from "./TexasContactOptions";
 import { TexasLeadCard } from "./TexasLeadCard";
 
 function jobProgressLabel(job: JobStatus): string {
@@ -53,6 +54,7 @@ export function TexasCommandCenter() {
     mobile: number;
     critical: number;
     readyToSend: number;
+    multiChannelReady: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -273,6 +275,7 @@ export function TexasCommandCenter() {
           <p className="mt-2 text-xs text-slate-500">
             {formatTexasScore(stats.total)} total · {formatTexasScore(stats.mobile)} mobile ·{" "}
             {formatTexasScore(stats.readyToSend ?? 0)} ready to send ·{" "}
+            {formatTexasScore(stats.multiChannelReady ?? 0)} multi-channel ready ·{" "}
             {formatTexasScore(stats.critical)} critical (≥79)
           </p>
         ) : null}
@@ -407,6 +410,12 @@ export function TexasCommandCenter() {
                 {selected.hb2844DraftPreview}
               </p>
             ) : null}
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Multi-channel outreach
+              </p>
+              <TexasContactOptions lead={selected} />
+            </div>
             {sendFeedback ? (
               <p
                 className={`mt-4 rounded-lg p-3 text-sm ${

@@ -1,6 +1,7 @@
 import { getDb } from "./db.js";
 import type { TexasLeadInput } from "../../types/texas.js";
 import type { MobileVendorTier } from "../../types/texas.js";
+import { TEXAS_MULTI_CHANNEL_READY_SQL } from "../texas/texas-multi-channel.js";
 import { renderHb2844DraftForLead } from "./texas-outreach-repository.js";
 
 export interface TexasLeadRow {
@@ -286,6 +287,7 @@ export async function countTexasLeads(): Promise<{
   mobile: number;
   critical: number;
   readyToSend: number;
+  multiChannelReady: number;
 }> {
   const db = getDb();
   const total = await db.execute(`SELECT COUNT(*) AS c FROM texas_leads`);
@@ -298,10 +300,14 @@ export async function countTexasLeads(): Promise<{
   const readyToSend = await db.execute(
     `SELECT COUNT(*) AS c FROM texas_leads WHERE ${TEXAS_READY_FOR_OUTREACH_SQL}`,
   );
+  const multiChannelReady = await db.execute(
+    `SELECT COUNT(*) AS c FROM texas_leads WHERE ${TEXAS_MULTI_CHANNEL_READY_SQL}`,
+  );
   return {
     total: Number(total.rows[0]?.c ?? 0),
     mobile: Number(mobile.rows[0]?.c ?? 0),
     critical: Number(critical.rows[0]?.c ?? 0),
     readyToSend: Number(readyToSend.rows[0]?.c ?? 0),
+    multiChannelReady: Number(multiChannelReady.rows[0]?.c ?? 0),
   };
 }

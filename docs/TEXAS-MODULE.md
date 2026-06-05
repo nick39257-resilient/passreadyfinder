@@ -51,6 +51,10 @@ Override feed URL: `TEXAS_AUSTIN_INSPECTIONS_URL`.
 - **One-off run:** `npm run texas-enrich-apollo` — add `--retry-attempted` to re-scan prior no-matches after a capped run
 - Scans the full queued batch (no per-row API cap). Stops after `apolloSuccessfulFindCap` successful emails (default 80; `APOLLO_SUCCESSFUL_FIND_CAP`). No-matches log and continue. Skips leads already attempted (`apollo_enriched_at` set).
 
+## Multi-channel reach (Maps / social / DM)
+
+Each lead card exposes **Call/Find** (Google Maps), **Search Social** (Google), and **Copy Script** (HB 2844 pitch to clipboard). Stats bar includes `multiChannelReady` — leads with business name, location, and risk data not yet sent.
+
 ## Mobile outreach send
 
 - **API:** `POST /api/texas/leads/:id/send-outreach` (control auth)

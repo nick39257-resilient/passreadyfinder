@@ -50,6 +50,7 @@ export interface TexasStats {
   mobile: number;
   critical: number;
   readyToSend: number;
+  multiChannelReady: number;
 }
 
 function texasAuthHeaders(secret?: string): Record<string, string> {
