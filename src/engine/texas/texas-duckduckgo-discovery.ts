@@ -1,6 +1,11 @@
 import { normalizeWebsiteUrl } from "../contact-discovery/fetch-page.js";
 
 const DDG_HTML = "https://html.duckduckgo.com/html/";
+/** Mimic a standard Windows desktop Chrome session (not a cloud bot string). */
+const DDG_CHROME_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const DDG_SEARCH_DELAY_MS_MIN = 2000;
+const DDG_SEARCH_DELAY_MS_MAX = 5000;
 const CORP_SUFFIX_PATTERN =
   /\s*,?\s*(LLC|L\.L\.C\.|Inc\.?|Corp\.?|Corporation)\.?\s*$/i;
 const OUT_OF_BUSINESS_PREFIX =
@@ -120,7 +125,22 @@ function discoveryCategories(isMobileVendor?: boolean): DiscoveryCategory[] {
   return ["catering", "food truck"];
 }
 
+function randomSearchDelayMs(): number {
+  return (
+    DDG_SEARCH_DELAY_MS_MIN +
+    Math.floor(Math.random() * (DDG_SEARCH_DELAY_MS_MAX - DDG_SEARCH_DELAY_MS_MIN + 1))
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function searchDuckDuckGoOnce(query: string): Promise<string | null> {
+  const delayMs = randomSearchDelayMs();
+  console.log(`[texas-ddg] waiting ${delayMs}ms before search…`);
+  await sleep(delayMs);
+
   const body = new URLSearchParams({ q: query });
 
   try {
@@ -128,17 +148,29 @@ async function searchDuckDuckGoOnce(query: string): Promise<string | null> {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "text/html",
-        "User-Agent": "PassReadyFinder/1.0 (Texas autonomous outreach)",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": DDG_CHROME_USER_AGENT,
+        Origin: "https://html.duckduckgo.com",
+        Referer: "https://html.duckduckgo.com/",
       },
       body: body.toString(),
       signal: AbortSignal.timeout(15_000),
     });
+
+    const html = await res.text();
+    console.log(
+      `[texas-ddg] query="${query}" status=${res.status} bodyLength=${html.length}`,
+    );
+
     if (!res.ok) {
       return null;
     }
-    const html = await res.text();
+
     const candidates = extractResultUrls(html);
+    console.log(`[texas-ddg] query="${query}" parsedCandidates=${candidates.length}`);
+
     for (const url of candidates) {
       const host = hostFromUrl(url);
       if (!host || BLOCKED_HOSTS.has(host)) {
@@ -147,7 +179,9 @@ async function searchDuckDuckGoOnce(query: string): Promise<string | null> {
       return url;
     }
     return null;
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.log(`[texas-ddg] query="${query}" fetchError=${message}`);
     return null;
   }
 }
