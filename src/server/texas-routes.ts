@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { runMigrations } from "../engine/store/db.js";
 import {
   countTexasLeads,
+  countTexasFormsSubmitted,
   getAllTexasLeads,
   getTexasLeadById,
   type TexasLeadSegment,
@@ -10,7 +11,7 @@ import { runTexasAutonomousOutreachBatch } from "../engine/texas/texas-autonomou
 import { runTexasApolloEnrichmentBatch } from "../engine/texas/texas-enrichment-service.js";
 import { executeTexasLeadOutreach } from "../engine/texas/texas-outreach-executor.js";
 import { mapTexasLeadRowToApi } from "./texas-api-mapper.js";
-import { createJob } from "../engine/store/jobs-repository.js";
+import { createJob, getLatestJob } from "../engine/store/jobs-repository.js";
 import { startJob } from "./job-runner.js";
 import type { TexasFindJobParams } from "../types/texas.js";
 
@@ -34,6 +35,28 @@ export function mountTexasRoutes(
   app: Express,
   requireControlAuth: ControlAuth,
 ): void {
+  app.get("/api/texas/status", requireControlAuth, async (_req, res) => {
+    try {
+      await runMigrations();
+      const latest = await getLatestJob("texas_autopilot");
+      const totalFormsSubmitted = await countTexasFormsSubmitted();
+      const engineStatus =
+        latest && (latest.status === "pending" || latest.status === "running")
+          ? "Processing"
+          : "Idle";
+      res.json({
+        metadata: {
+          lastRunTimestamp: latest?.updated_at ?? null,
+          engineStatus,
+          totalFormsSubmitted,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to load Texas autopilot status" });
+    }
+  });
+
   app.get("/api/texas/stats", requireControlAuth, async (_req, res) => {
     try {
       await runMigrations();

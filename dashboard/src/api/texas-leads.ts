@@ -53,6 +53,14 @@ export interface TexasStats {
   multiChannelReady: number;
 }
 
+export interface TexasAutopilotStatus {
+  metadata: {
+    lastRunTimestamp: string | null;
+    engineStatus: "Idle" | "Processing";
+    totalFormsSubmitted: number;
+  };
+}
+
 function texasAuthHeaders(secret?: string): Record<string, string> {
   return authHeaders(secret ?? getControlSecret());
 }
@@ -92,6 +100,18 @@ export async function fetchTexasStats(secret?: string): Promise<TexasStats> {
     await parseTexasError(res, "Texas stats failed");
   }
   return res.json() as Promise<TexasStats>;
+}
+
+export async function fetchTexasAutopilotStatus(
+  secret?: string,
+): Promise<TexasAutopilotStatus> {
+  const res = await fetch("/api/texas/status", {
+    headers: texasAuthHeaders(secret),
+  });
+  if (!res.ok) {
+    await parseTexasError(res, "Texas autopilot status failed");
+  }
+  return res.json() as Promise<TexasAutopilotStatus>;
 }
 
 export async function startTexasFindJob(

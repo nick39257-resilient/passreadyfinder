@@ -369,3 +369,11 @@ export async function countTexasLeads(): Promise<{
     multiChannelReady: Number(multiChannelReady.rows[0]?.c ?? 0),
   };
 }
+
+export async function countTexasFormsSubmitted(): Promise<number> {
+  const db = getDb();
+  const result = await db.execute(
+    `SELECT COUNT(*) AS c FROM texas_leads WHERE status = 'FORM_SUBMITTED'`,
+  );
+  return Number(result.rows[0]?.c ?? 0);
+}

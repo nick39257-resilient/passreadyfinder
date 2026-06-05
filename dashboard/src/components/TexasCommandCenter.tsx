@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchTexasLeads,
+  fetchTexasAutopilotStatus,
   fetchTexasStats,
   sendTexasLeadOutreach,
   startTexasFindJob,
   type ApiTexasLead,
+  type TexasAutopilotStatus,
   type TexasLeadSegment,
 } from "../api/texas-leads";
 import { fetchAppConfig } from "../api/config";
@@ -46,6 +48,29 @@ function readFilter(): RecordFilter {
   }
 }
 
+function parseSqliteUtcTimestamp(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) return NaN;
+  if (trimmed.includes("T")) {
+    return new Date(trimmed.endsWith("Z") ? trimmed : `${trimmed}Z`).getTime();
+  }
+  return new Date(`${trimmed.replace(" ", "T")}Z`).getTime();
+}
+
+function formatRelativeTime(value: string | null): string {
+  if (!value?.trim()) return "—";
+  const at = parseSqliteUtcTimestamp(value);
+  if (!Number.isFinite(at)) return "—";
+  const deltaMs = Date.now() - at;
+  if (deltaMs < 60_000) return "just now";
+  const mins = Math.round(deltaMs / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
 export function TexasCommandCenter() {
   const [filter, setFilter] = useState<RecordFilter>(readFilter);
   const [leads, setLeads] = useState<ApiTexasLead[]>([]);
@@ -56,6 +81,7 @@ export function TexasCommandCenter() {
     readyToSend: number;
     multiChannelReady: number;
   } | null>(null);
+  const [autopilot, setAutopilot] = useState<TexasAutopilotStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -84,12 +110,14 @@ export function TexasCommandCenter() {
     setError(null);
     try {
       const secret = ensureControlSecret(getControlSecret());
-      const [leadRows, s] = await Promise.all([
+      const [leadRows, s, a] = await Promise.all([
         fetchTexasLeads(filter, secret),
         fetchTexasStats(secret),
+        fetchTexasAutopilotStatus(secret),
       ]);
       setLeads(leadRows);
       setStats(s);
+      setAutopilot(a);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
@@ -100,6 +128,31 @@ export function TexasCommandCenter() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      const secret = getControlSecret();
+      if (!secret?.trim()) {
+        return;
+      }
+      try {
+        const next = await fetchTexasAutopilotStatus(ensureControlSecret(secret));
+        if (!cancelled) {
+          setAutopilot(next);
+        }
+      } catch {
+        // ignore transient polling failures
+      }
+    };
+
+    void tick();
+    const id = window.setInterval(tick, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   const criticalLeads = useMemo(
     () => leads.filter((l) => l.isCritical),
@@ -234,6 +287,38 @@ export function TexasCommandCenter() {
             Paste CONTROL_PANEL_SECRET via Key before loading or ingesting.
           </p>
         ) : null}
+
+        <div className="mt-3">
+          <div className="flex min-h-11 items-center justify-between gap-2 rounded-2xl border border-slate-700/60 bg-slate-900/70 px-3 py-2 text-xs text-slate-200">
+            <div className="flex items-center gap-2">
+              <span
+                className={[
+                  "h-2.5 w-2.5 rounded-full",
+                  autopilot?.metadata.engineStatus === "Processing"
+                    ? "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)] animate-pulse"
+                    : "bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.7)]",
+                ].join(" ")}
+                aria-hidden
+              />
+              <span className="font-semibold">
+                Autopilot:{" "}
+                {autopilot?.metadata.engineStatus === "Processing" ? "Active" : "Idle"}
+              </span>
+            </div>
+            <div className="text-slate-300">
+              Forms Sent:{" "}
+              <span className="font-semibold text-slate-100">
+                {autopilot?.metadata.totalFormsSubmitted ?? 0}
+              </span>
+            </div>
+            <div className="text-slate-400">
+              Synced:{" "}
+              <span className="font-semibold text-slate-200">
+                {formatRelativeTime(autopilot?.metadata.lastRunTimestamp ?? null)}
+              </span>
+            </div>
+          </div>
+        </div>
 
         <div className="mt-3 flex gap-1.5">
           <button

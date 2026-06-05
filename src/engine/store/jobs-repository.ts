@@ -5,6 +5,7 @@ export type JobType =
   | "find"
   | "find_texas"
   | "texas_reclassify"
+  | "texas_autopilot"
   | "draft"
   | "draft_all"
   | "send"
