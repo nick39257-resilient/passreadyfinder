@@ -163,7 +163,7 @@ services:
     repo: https://github.com/nick39257-resilient/passreadyfinder
     branch: main
     schedule: "0 */12 * * *"
-    buildCommand: NPM_CONFIG_PRODUCTION=false npm install && npx playwright install chromium
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm install && npx playwright install --with-deps && npm run build
     startCommand: npm run texas-autopilot
     envVars:
       - key: NODE_VERSION
