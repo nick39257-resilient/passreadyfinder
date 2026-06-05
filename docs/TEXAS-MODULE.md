@@ -53,6 +53,8 @@ No Apollo required. For each `new` / `ready_to_review` lead missing email:
 
 `npm run texas-autopilot` or `POST /api/texas/jobs/autopilot`
 
+**Render:** `texas-autopilot-cron` in `render.yaml` — schedule `0 */12 * * *`, inherits Turso/mail env from `passreadyfinder` web service. Sync via Dashboard → Blueprints → Apply.
+
 ## Apollo enrichment (Texas leads)
 
 - **Service:** `src/engine/texas/texas-enrichment-service.ts` — uses shared `findOwnerEmailViaApollo()` + `APOLLO_API_KEY`
