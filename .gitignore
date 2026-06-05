@@ -1,4 +1,7 @@
 node_modules/
+!node_modules/playwright-core/
+!node_modules/playwright-core/.local-browsers/
+!node_modules/playwright-core/.local-browsers/**
 dist/
 dashboard/node_modules/
 dashboard/dist/
