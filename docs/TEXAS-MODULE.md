@@ -43,6 +43,16 @@ Override feed URL: `TEXAS_AUSTIN_INSPECTIONS_URL`.
 - **Outreach template** — `texas_outreach_templates.hb2844_mobile_july_2026` + `draft_message` on each mobile lead.
 - **Re-sync existing rows:** `npm run texas-reclassify` or `POST /api/texas/jobs/reclassify` (control auth). Runs automatically after each Texas ingest.
 
+## Autonomous outreach (`texas-autopilot`)
+
+No Apollo required. For each `new` / `ready_to_review` lead missing email:
+
+1. DuckDuckGo HTML search → save `website`
+2. Scrape homepage/contact pages for public email → `EMAIL_DISCOVERED`
+3. Else Playwright contact form with HB 2844 pitch → `FORM_SUBMITTED` (skips CAPTCHA walls)
+
+`npm run texas-autopilot` or `POST /api/texas/jobs/autopilot`
+
 ## Apollo enrichment (Texas leads)
 
 - **Service:** `src/engine/texas/texas-enrichment-service.ts` — uses shared `findOwnerEmailViaApollo()` + `APOLLO_API_KEY`

@@ -8,6 +8,7 @@ export type TexasInterventionLevel = "CRITICAL_INTERVENTION" | null;
 
 export const TEXAS_CRITICAL_RISK_THRESHOLD = 79;
 
+export const TEXAS_STATUS_EMAIL_DISCOVERED = "EMAIL_DISCOVERED" as const;
 export const TEXAS_STATUS_EMAIL_SENT = "EMAIL_SENT" as const;
 export const TEXAS_STATUS_FORM_SUBMITTED = "FORM_SUBMITTED" as const;
 

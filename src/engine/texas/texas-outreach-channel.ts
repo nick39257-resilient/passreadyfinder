@@ -35,6 +35,9 @@ export function texasOutreachButtonLabel(channel: TexasOutreachChannel): string 
 }
 
 export function texasStatusDisplayLabel(status: string): string {
+  if (status === "EMAIL_DISCOVERED") {
+    return "Email Discovered";
+  }
   if (status === TEXAS_STATUS_EMAIL_SENT) {
     return "Email Sent";
   }

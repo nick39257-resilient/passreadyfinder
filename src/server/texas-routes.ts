@@ -6,6 +6,7 @@ import {
   getTexasLeadById,
   type TexasLeadSegment,
 } from "../engine/store/texas-leads-repository.js";
+import { runTexasAutonomousOutreachBatch } from "../engine/texas/texas-autonomous-outreach.js";
 import { runTexasApolloEnrichmentBatch } from "../engine/texas/texas-enrichment-service.js";
 import { executeTexasLeadOutreach } from "../engine/texas/texas-outreach-executor.js";
 import { mapTexasLeadRowToApi } from "./texas-api-mapper.js";
@@ -99,6 +100,21 @@ export function mountTexasRoutes(
           ? 400
           : 500;
       res.status(status).json({ error: message });
+    }
+  });
+
+  app.post("/api/texas/jobs/autopilot", requireControlAuth, async (req, res) => {
+    try {
+      await runMigrations();
+      const limit =
+        typeof req.body?.limit === "number" ? req.body.limit : undefined;
+      const summary = await runTexasAutonomousOutreachBatch({ limit });
+      res.json({ ok: true, summary });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Texas autopilot failed",
+      });
     }
   });
 

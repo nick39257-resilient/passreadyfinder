@@ -27,6 +27,8 @@ export const texasProductConfig = {
     apolloDelayMs: Number(process.env.TEXAS_APOLLO_DELAY_MS) || 1200,
     /** Default batch size for `npm run texas-enrich-apollo`. */
     defaultBatchLimit: Number(process.env.TEXAS_APOLLO_BATCH_LIMIT) || 500,
+    autopilotBatchLimit: Number(process.env.TEXAS_AUTOPILOT_LIMIT) || 500,
+    autopilotDelayMs: Number(process.env.TEXAS_AUTOPILOT_DELAY_MS) || 1500,
   },
   outreach: {
     productName: "PassReady",

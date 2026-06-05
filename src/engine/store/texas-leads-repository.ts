@@ -122,6 +122,12 @@ const TEXAS_READY_FOR_OUTREACH_SQL = `
   AND status NOT IN ('EMAIL_SENT', 'FORM_SUBMITTED')
 `;
 
+const TEXAS_AUTOPILOT_QUEUE_SQL = `
+  (email IS NULL OR TRIM(email) = '')
+  AND status NOT IN ('EMAIL_SENT', 'FORM_SUBMITTED')
+  AND status IN ('new', 'ready_to_review')
+`;
+
 function whereClauseForTexasSegment(segment: TexasLeadSegment): string {
   if (segment === "mobile") {
     return "WHERE is_mobile_vendor = 1";
@@ -244,6 +250,58 @@ export async function getTexasLeadsNeedingApolloEnrichment(
     args: [limit],
   });
   return result.rows.map((r) => rowToRecord(r as Record<string, unknown>));
+}
+
+export async function getTexasLeadsForAutopilot(limit: number): Promise<TexasLeadRow[]> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `
+      SELECT * FROM texas_leads
+      WHERE ${TEXAS_AUTOPILOT_QUEUE_SQL}
+      ORDER BY
+        CASE WHEN intervention_level = 'CRITICAL_INTERVENTION' THEN 0 ELSE 1 END,
+        risk_score DESC,
+        id ASC
+      LIMIT ?
+    `,
+    args: [limit],
+  });
+  return result.rows.map((r) => rowToRecord(r as Record<string, unknown>));
+}
+
+export async function updateTexasLeadWebsite(input: {
+  leadId: number;
+  website: string;
+}): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE texas_leads SET
+        website = ?,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [input.website.trim(), input.leadId],
+  });
+}
+
+export async function markTexasLeadEmailDiscovered(input: {
+  leadId: number;
+  email: string;
+  website?: string | null;
+}): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE texas_leads SET
+        email = ?,
+        website = COALESCE(?, website),
+        status = 'EMAIL_DISCOVERED',
+        updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [input.email.trim().toLowerCase(), input.website?.trim() ?? null, input.leadId],
+  });
 }
 
 export async function markTexasLeadEmailSent(input: {
