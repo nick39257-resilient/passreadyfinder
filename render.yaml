@@ -25,10 +25,14 @@ services:
         value: gemini-3.1-flash-lite
       - key: WHATSAPP_NUMBER
         sync: false
-      - key: MAIL_USERNAME
+      - key: EMAIL_USER
         sync: false
-      - key: MAIL_PASSWORD
+      - key: EMAIL_PASS
         sync: false
+      - key: EMAIL_HOST
+        value: mail.privateemail.com
+      - key: EMAIL_PORT
+        value: "465"
       - key: TEST_EMAIL_ADDRESS
         sync: false
       - key: CONTROL_PANEL_SECRET
@@ -125,16 +129,26 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: TURSO_AUTH_TOKEN
-      - key: MAIL_USERNAME
+      - key: EMAIL_USER
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: MAIL_USERNAME
-      - key: MAIL_PASSWORD
+          envVarKey: EMAIL_USER
+      - key: EMAIL_PASS
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: MAIL_PASSWORD
+          envVarKey: EMAIL_PASS
+      - key: EMAIL_HOST
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_HOST
+      - key: EMAIL_PORT
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_PORT
       - key: TEST_EMAIL_ADDRESS
         fromService:
           type: web
@@ -164,16 +178,26 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: TURSO_AUTH_TOKEN
-      - key: MAIL_USERNAME
+      - key: EMAIL_USER
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: MAIL_USERNAME
-      - key: MAIL_PASSWORD
+          envVarKey: EMAIL_USER
+      - key: EMAIL_PASS
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: MAIL_PASSWORD
+          envVarKey: EMAIL_PASS
+      - key: EMAIL_HOST
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_HOST
+      - key: EMAIL_PORT
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_PORT
       - key: CONTROL_PANEL_SECRET
         fromService:
           type: web

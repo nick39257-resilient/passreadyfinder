@@ -20,8 +20,8 @@ import {
 } from "./store/sender-repository.js";
 import { isEmailSuppressed, normalizeOutreachEmail } from "./outreach-halt.js";
 import {
+  getPassreadyMailFrom,
   isSmtpMailConfigured,
-  PASSREADY_MAIL_FROM,
   sendSmtpMail,
 } from "./services/smtp-mail-service.js";
 
@@ -82,7 +82,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
   }
 
   if (!isSmtpMailConfigured()) {
-    throw new Error("MAIL_USERNAME and MAIL_PASSWORD are required in .env");
+    throw new Error("EMAIL_PASS (or MAIL_PASSWORD) is required in .env");
   }
 
   const testFallbackEnabled = isTestEmailFallbackEnabled();
@@ -122,7 +122,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
   await report(
     `Sending ${leads.length} approved lead(s) via Private Email SMTP (${quota.sentToday}/${quota.cap} sent today, cap ${quota.cap})…`,
   );
-  await report(`From: ${PASSREADY_MAIL_FROM}`);
+  await report(`From: ${getPassreadyMailFrom()}`);
   if (testFallbackEnabled && testEmail) {
     await report(`Test fallback enabled: ${testEmail} (only when lead has no business email)\n`);
   }

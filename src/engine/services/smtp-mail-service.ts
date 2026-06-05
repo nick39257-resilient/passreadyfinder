@@ -1,30 +1,62 @@
 import nodemailer from "nodemailer";
 
-/** Fixed sender profile for Namecheap Private Email. */
-export const PASSREADY_MAIL_FROM = "nick@passready.us";
+const DEFAULT_EMAIL_HOST = "mail.privateemail.com";
+const DEFAULT_EMAIL_PORT = 465;
+const DEFAULT_EMAIL_USER = "nick@passready.us";
 
-const SMTP_HOST = "mail.privateemail.com";
-const SMTP_PORT = 465;
+function readEnv(name: string): string {
+  return process.env[name]?.trim() ?? "";
+}
+
+/** Reply-to / From address — prefers Render EMAIL_USER, then legacy MAIL_USERNAME. */
+export function getEmailUser(): string {
+  return readEnv("EMAIL_USER") || readEnv("MAIL_USERNAME") || DEFAULT_EMAIL_USER;
+}
+
+export function getEmailPass(): string {
+  return readEnv("EMAIL_PASS") || readEnv("MAIL_PASSWORD");
+}
+
+export function getEmailHost(): string {
+  return readEnv("EMAIL_HOST") || DEFAULT_EMAIL_HOST;
+}
+
+export function getEmailPort(): number {
+  const raw = readEnv("EMAIL_PORT");
+  if (!raw) {
+    return DEFAULT_EMAIL_PORT;
+  }
+  const port = Number(raw);
+  return Number.isFinite(port) && port > 0 ? port : DEFAULT_EMAIL_PORT;
+}
+
+/** @deprecated Use getEmailUser() — kept for existing imports. */
+export function getPassreadyMailFrom(): string {
+  return getEmailUser();
+}
+
+/** @deprecated Use getEmailUser() — kept for existing imports. */
+export const PASSREADY_MAIL_FROM = DEFAULT_EMAIL_USER;
 
 let transport: nodemailer.Transporter | null = null;
 
-function requireMailEnv(name: "MAIL_USERNAME" | "MAIL_PASSWORD"): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} is required in .env`);
-  }
-  return value;
-}
-
 function getTransport(): nodemailer.Transporter {
   if (!transport) {
+    const port = getEmailPort();
+    const pass = getEmailPass();
+    if (!pass) {
+      throw new Error(
+        "EMAIL_PASS (or legacy MAIL_PASSWORD) is required for SMTP — set it in Render env",
+      );
+    }
+
     transport = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: true,
+      host: getEmailHost(),
+      port,
+      secure: port === 465,
       auth: {
-        user: requireMailEnv("MAIL_USERNAME"),
-        pass: requireMailEnv("MAIL_PASSWORD"),
+        user: getEmailUser(),
+        pass,
       },
     });
   }
@@ -32,9 +64,7 @@ function getTransport(): nodemailer.Transporter {
 }
 
 export function isSmtpMailConfigured(): boolean {
-  return Boolean(
-    process.env.MAIL_USERNAME?.trim() && process.env.MAIL_PASSWORD?.trim(),
-  );
+  return Boolean(getEmailPass());
 }
 
 export async function sendSmtpMail(input: {
@@ -45,7 +75,7 @@ export async function sendSmtpMail(input: {
 }): Promise<{ messageId: string }> {
   const transporter = getTransport();
   const info = await transporter.sendMail({
-    from: PASSREADY_MAIL_FROM,
+    from: getEmailUser(),
     to: input.to.trim(),
     subject: input.subject.trim(),
     text: input.text,

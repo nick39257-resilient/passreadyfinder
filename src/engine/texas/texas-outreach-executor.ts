@@ -6,7 +6,7 @@ import {
 import { buildHb2844MobileOutreachMessage } from "./hb2844.js";
 import { texasLeadToApolloInput } from "./texas-enrichment-service.js";
 import { findOwnerEmailViaApollo } from "../services/apollo-service.js";
-import { sendSmtpMail } from "../services/smtp-mail-service.js";
+import { isSmtpMailConfigured, sendSmtpMail } from "../services/smtp-mail-service.js";
 import { tryWebsiteContactForm } from "../services/contact-form-service.js";
 import { normalizeOutreachEmail } from "../outreach-halt.js";
 import { runMigrations } from "../store/db.js";
@@ -25,14 +25,6 @@ export type TexasOutreachResult = {
   resendId?: string;
   contactPageUrl?: string | null;
 };
-
-function requireEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`${name} is required in .env`);
-  }
-  return value;
-}
 
 function texasEmailSubject(): string {
   return (
@@ -88,8 +80,9 @@ async function resolveEmailForTexasLead(row: TexasLeadRow): Promise<string | nul
 }
 
 async function sendTexasEmail(_row: TexasLeadRow, to: string, text: string): Promise<string> {
-  requireEnv("MAIL_USERNAME");
-  requireEnv("MAIL_PASSWORD");
+  if (!isSmtpMailConfigured()) {
+    throw new Error("EMAIL_PASS (or MAIL_PASSWORD) is required for SMTP outreach");
+  }
 
   const { messageId } = await sendSmtpMail({
     to,

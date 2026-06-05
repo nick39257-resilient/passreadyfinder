@@ -10,6 +10,7 @@ import {
   type TexasLeadRow,
 } from "../store/texas-leads-repository.js";
 import { texasProductConfig } from "../../config/product.texas.config.js";
+import { getEmailUser } from "../services/smtp-mail-service.js";
 
 export type TexasAutopilotOutcome =
   | "email_discovered"
@@ -38,8 +39,31 @@ export type TexasAutopilotSummary = {
   errors: number;
 };
 
-function autopilotFromEmail(): string {
-  return "nick@passready.us";
+const AUTOPILOT_SENDER_TITLE = "PassReady US Compliance Compliance Desk";
+
+function autopilotReplyEmail(): string {
+  return getEmailUser();
+}
+
+function autopilotSenderName(): string {
+  return `Nick Clark, ${AUTOPILOT_SENDER_TITLE}`;
+}
+
+function autopilotSignatureLine(): string {
+  return `${autopilotSenderName()} (${autopilotReplyEmail()})`;
+}
+
+function buildAutopilotFormMessage(): string {
+  return `Hey team,
+
+I noticed your recent health inspection score. With the new Texas HB 2844 compliance regulations taking full effect this July, DSHS is completely changing how food units have to log their chain of custody.
+
+State inspectors will soon have the authority to pause operations on-site if logs are still being managed on manual paper tracking systems. We built passready.us specifically for Texas hospitality operators to automate these compliance logs, digitize your records, and protect your license before the July 1st deadline.
+
+Who is the best person to pass a free temporary access link to so you can see your pre-filled logs?
+
+Thanks,
+${autopilotSignatureLine()}`;
 }
 
 function delayMs(): number {
@@ -50,19 +74,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const TEXAS_AUTOPILOT_FORM_MESSAGE = `Hey team,
-
-I noticed your recent health inspection score. With the new Texas HB 2844 compliance regulations taking full effect this July, DSHS is completely changing how food units have to log their chain of custody.
-
-State inspectors will soon have the authority to pause operations on-site if logs are still being managed on manual paper tracking systems. We built passready.us specifically for Texas hospitality operators to automate these compliance logs, digitize your records, and protect your license before the July 1st deadline.
-
-Who is the best person to pass a free temporary access link to so you can see your pre-filled logs?
-
-Thanks,
-PassReady Compliance Desk`;
-
 function pitchForLead(_row: TexasLeadRow): string {
-  return TEXAS_AUTOPILOT_FORM_MESSAGE;
+  return buildAutopilotFormMessage();
 }
 
 async function resolveWebsite(row: TexasLeadRow): Promise<string | null> {
@@ -150,8 +163,8 @@ export async function runTexasAutopilotForLead(
       website,
       businessName: row.business_name,
       message: pitchForLead(row),
-      senderName: "PassReady Compliance Desk",
-      senderEmail: autopilotFromEmail(),
+      senderName: autopilotSenderName(),
+      senderEmail: autopilotReplyEmail(),
     });
 
     if (form.submitted) {
