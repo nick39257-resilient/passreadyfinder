@@ -217,7 +217,7 @@ services:
     plan: starter
     repo: https://github.com/nick39257-resilient/passreadyfinder
     branch: main
-    schedule: "30 */12 * * *"
+    schedule: "0 */12 * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install && node scripts/ensure-playwright-chromium.mjs
     startCommand: node scripts/ensure-playwright-chromium.mjs && npm run uk-autopilot
     envVars:

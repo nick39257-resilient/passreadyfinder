@@ -67,6 +67,7 @@ import {
   reclaimOrphanedJobsOnStartup,
 } from "../engine/store/job-stale-reclaim.js";
 import { mountTexasRoutes } from "./texas-routes.js";
+import { mountUkRoutes } from "./uk-routes.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, "../..");
 const publicDir = path.join(projectRoot, "public");
@@ -153,6 +154,7 @@ export async function createApp(options?: {
   app.use(express.json());
 
   mountTexasRoutes(app, requireControlAuth);
+  mountUkRoutes(app, requireControlAuth);
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true });

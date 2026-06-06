@@ -47,6 +47,9 @@ import { isOutreachHaltedStatus } from "./lib/outreach-halt";
 import { readLocal, removeLocal, writeLocal } from "./lib/safe-storage";
 import { getLeadNextAction } from "./lib/lead-next-action";
 import { TexasCommandCenter } from "./components/TexasCommandCenter";
+import { AutopilotHeartbeat } from "./components/AutopilotHeartbeat";
+import { fetchUkAutopilotStatus } from "./api/uk-autopilot";
+import type { AutopilotStatusMetadata } from "./lib/autopilot-heartbeat";
 
 function isTexasCommandCenterRoute(): boolean {
   if (typeof window === "undefined") {
@@ -129,6 +132,9 @@ export function App() {
   const [outreachLandingUrl, setOutreachLandingUrl] = useState(
     "https://score.passready.uk",
   );
+  const [ukAutopilot, setUkAutopilot] = useState<AutopilotStatusMetadata | null>(
+    null,
+  );
 
   const applySystemStatus = useCallback((status: SystemStatusResponse) => {
     if (status.pulse !== "error") {
@@ -171,6 +177,16 @@ export function App() {
       setLeads(leadList);
       setSyncLabel(sync?.label ?? null);
       applySystemStatus(status);
+
+      const secret = getControlSecret();
+      if (secret?.trim()) {
+        try {
+          const autopilot = await fetchUkAutopilotStatus(ensureControlSecret(secret));
+          setUkAutopilot(autopilot.metadata);
+        } catch {
+          /* optional — secret may be missing on first load */
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
@@ -209,6 +225,31 @@ export function App() {
     }, 12_000);
     return () => window.clearInterval(interval);
   }, [applySystemStatus]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      const secret = getControlSecret();
+      if (!secret?.trim()) {
+        return;
+      }
+      try {
+        const next = await fetchUkAutopilotStatus(ensureControlSecret(secret));
+        if (!cancelled) {
+          setUkAutopilot(next.metadata);
+        }
+      } catch {
+        /* ignore transient polling failures */
+      }
+    };
+
+    void tick();
+    const id = window.setInterval(tick, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   const visibleLeads = useMemo(() => {
     void hiddenVersion;
@@ -706,6 +747,10 @@ export function App() {
           </div>
         </div>
       </header>
+
+      <div className="mb-4">
+        <AutopilotHeartbeat metadata={ukAutopilot} />
+      </div>
 
       {banner ? (
         <ActionBanner
