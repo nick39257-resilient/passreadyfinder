@@ -39,6 +39,9 @@ export const productConfig = {
     apolloDailyCap: Number(process.env.APOLLO_DAILY_CAP) || 0,
     /** Stop batch enrichment after this many successful owner emails saved. */
     apolloSuccessfulFindCap: Number(process.env.APOLLO_SUCCESSFUL_FIND_CAP) || 80,
+    /** UK autopilot cron — mirror Texas Playwright batch settings. */
+    ukAutopilotBatchLimit: Number(process.env.UK_AUTOPILOT_LIMIT) || 50,
+    ukAutopilotDelayMs: Number(process.env.UK_AUTOPILOT_DELAY_MS) || 1500,
     contactFormMessage:
       "Hi — I'm a kitchen manager in Preston. I built PassReady for [Business Name] and our own takeaway team (EHO checklists, allergens, multilingual). Free FSA score check: https://score.passready.uk — happy to share a 7-day trial if useful.",
     contactFormAutoSubmit: false,

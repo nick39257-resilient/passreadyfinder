@@ -275,7 +275,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function searchDuckDuckGoOnce(query: string): Promise<string | null> {
+/** Shared HTML DuckDuckGo search — used by Texas and UK autopilot discovery. */
+export async function searchDuckDuckGoOnce(query: string): Promise<string | null> {
   const delayMs = randomSearchDelayMs();
   console.log(`[texas-ddg] waiting ${delayMs}ms before search…`);
   await sleep(delayMs);

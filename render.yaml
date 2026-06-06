@@ -209,3 +209,58 @@ services:
         value: "50"
       - key: TEXAS_AUTOPILOT_DELAY_MS
         value: "1500"
+
+  # UK autopilot — OSM/DDG discovery, email scrape, contact forms (every 12h)
+  - type: cron
+    name: uk-autopilot-cron
+    runtime: node
+    plan: starter
+    repo: https://github.com/nick39257-resilient/passreadyfinder
+    branch: main
+    schedule: "30 */12 * * *"
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm install && node scripts/ensure-playwright-chromium.mjs
+    startCommand: node scripts/ensure-playwright-chromium.mjs && npm run uk-autopilot
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
+      - key: TURSO_DATABASE_URL
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_DATABASE_URL
+      - key: TURSO_AUTH_TOKEN
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_AUTH_TOKEN
+      - key: EMAIL_USER
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_USER
+      - key: EMAIL_PASS
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_PASS
+      - key: EMAIL_HOST
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_HOST
+      - key: EMAIL_PORT
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_PORT
+      - key: CONTROL_PANEL_SECRET
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: CONTROL_PANEL_SECRET
+      - key: UK_AUTOPILOT_LIMIT
+        value: "50"
+      - key: UK_AUTOPILOT_DELAY_MS
+        value: "1500"

@@ -6,6 +6,7 @@ export type JobType =
   | "find_texas"
   | "texas_reclassify"
   | "texas_autopilot"
+  | "uk_autopilot"
   | "draft"
   | "draft_all"
   | "send"

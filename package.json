@@ -26,6 +26,7 @@
     "texas-reclassify": "tsx src/cli/texas-reclassify.ts",
     "texas-enrich-apollo": "tsx src/cli/texas-enrich-apollo.ts",
     "texas-autopilot": "tsx src/cli/texas-autopilot.ts",
+    "uk-autopilot": "tsx src/cli/uk-autopilot.ts",
     "ensure-playwright-chromium": "node scripts/ensure-playwright-chromium.mjs",
     "diagnose": "tsx src/cli/diagnose-outreach.ts",
     "call-list": "tsx src/cli/call-list.ts",

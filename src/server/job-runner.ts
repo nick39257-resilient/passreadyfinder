@@ -2,6 +2,7 @@ import { runFindLeadsJob } from "../engine/find-leads-job.js";
 import { runFindTexasLeadsJob } from "../engine/find-texas-leads-job.js";
 import { runTexasTierResyncJob } from "../engine/find-texas-tier-resync-job.js";
 import { runTexasAutonomousOutreachBatch } from "../engine/texas/texas-autonomous-outreach.js";
+import { runUkAutonomousOutreachBatch } from "../engine/uk/uk-autonomous-outreach.js";
 import type { TexasFindJobParams } from "../types/texas.js";
 import { runQueueDrafter } from "../engine/queue-drafter.js";
 import { runSender } from "../engine/sender.js";
@@ -22,6 +23,7 @@ const JOB_TIMEOUT_MS: Partial<Record<JobType, number>> = {
   find_texas: 45 * 60 * 1000,
   texas_reclassify: 15 * 60 * 1000,
   texas_autopilot: 55 * 60 * 1000,
+  uk_autopilot: 55 * 60 * 1000,
   draft_all: 60 * 60 * 1000,
   contact_discovery: 20 * 60 * 1000,
 };
@@ -91,6 +93,16 @@ async function runJobBody(
         progress: "Texas autopilot: website discovery + forms…",
       });
       return runTexasAutonomousOutreachBatch({
+        limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
+      });
+    }
+    case "uk_autopilot": {
+      const limit = Number((params as { limit?: number | null } | null)?.limit);
+      await updateJob(jobId, {
+        status: "running",
+        progress: "UK autopilot: OSM/DDG discovery + forms…",
+      });
+      return runUkAutonomousOutreachBatch({
         limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
       });
     }

@@ -7,6 +7,7 @@ const STALE_WITHOUT_HEARTBEAT_MS: Partial<Record<JobType, number>> = {
   find_texas: 20 * 60 * 1000,
   texas_reclassify: 10 * 60 * 1000,
   texas_autopilot: 25 * 60 * 1000,
+  uk_autopilot: 25 * 60 * 1000,
   draft_all: 45 * 60 * 1000,
   contact_discovery: 25 * 60 * 1000,
 };
