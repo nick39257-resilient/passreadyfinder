@@ -49,7 +49,10 @@ import { getLeadNextAction } from "./lib/lead-next-action";
 import { TexasCommandCenter } from "./components/TexasCommandCenter";
 import { AutopilotHeartbeat } from "./components/AutopilotHeartbeat";
 import { fetchUkAutopilotStatus } from "./api/uk-autopilot";
+import { fetchScoreTrafficStats, type ScoreTrafficStats } from "./api/score-traffic";
 import type { AutopilotStatusMetadata } from "./lib/autopilot-heartbeat";
+import { MobileAutopilotTrigger } from "./components/MobileAutopilotTrigger";
+import { ScoreTrafficCounter } from "./components/ScoreTrafficCounter";
 
 function isTexasCommandCenterRoute(): boolean {
   if (typeof window === "undefined") {
@@ -135,6 +138,36 @@ export function App() {
   const [ukAutopilot, setUkAutopilot] = useState<AutopilotStatusMetadata | null>(
     null,
   );
+  const [scoreTraffic, setScoreTraffic] = useState<ScoreTrafficStats | null>(null);
+  const [controlSecretReady, setControlSecretReady] = useState(() =>
+    Boolean(getControlSecret()?.trim()),
+  );
+
+  const refreshUkAutopilotStatus = useCallback(async () => {
+    const secret = getControlSecret();
+    if (!secret?.trim()) {
+      return;
+    }
+    try {
+      const next = await fetchUkAutopilotStatus(ensureControlSecret(secret));
+      setUkAutopilot(next.metadata);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const refreshScoreTraffic = useCallback(async () => {
+    const secret = getControlSecret();
+    if (!secret?.trim()) {
+      return;
+    }
+    try {
+      const stats = await fetchScoreTrafficStats(ensureControlSecret(secret));
+      setScoreTraffic(stats);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const applySystemStatus = useCallback((status: SystemStatusResponse) => {
     if (status.pulse !== "error") {
@@ -183,6 +216,8 @@ export function App() {
         try {
           const autopilot = await fetchUkAutopilotStatus(ensureControlSecret(secret));
           setUkAutopilot(autopilot.metadata);
+          const traffic = await fetchScoreTrafficStats(ensureControlSecret(secret));
+          setScoreTraffic(traffic);
         } catch {
           /* optional — secret may be missing on first load */
         }
@@ -250,6 +285,31 @@ export function App() {
       window.clearInterval(id);
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      if (!getControlSecret()?.trim()) {
+        return;
+      }
+      try {
+        const stats = await fetchScoreTrafficStats(
+          ensureControlSecret(getControlSecret()),
+        );
+        if (!cancelled) {
+          setScoreTraffic(stats);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    void tick();
+    const id = window.setInterval(tick, 45_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [controlSecretReady]);
 
   const visibleLeads = useMemo(() => {
     void hiddenVersion;
@@ -693,6 +753,20 @@ export function App() {
 
   return (
     <div className="mx-auto min-h-screen max-w-lg px-3 pb-[6.5rem] pt-5 sm:px-4">
+      <MobileAutopilotTrigger
+        onRunStarted={() => {
+          setUkAutopilot((prev) =>
+            prev
+              ? { ...prev, engineStatus: "Processing" }
+              : { engineStatus: "Processing", lastRunTimestamp: null, totalFormsSubmitted: 0 },
+          );
+        }}
+        onRunComplete={() => {
+          void refreshUkAutopilotStatus();
+          void refreshScoreTraffic();
+        }}
+      />
+
       <header className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-500/90">
@@ -728,7 +802,10 @@ export function App() {
                 const s = window.prompt("CONTROL_PANEL_SECRET (saved in this browser):");
                 if (s?.trim()) {
                   setControlSecret(s);
+                  setControlSecretReady(true);
                   setBanner({ tone: "success", message: "Control secret saved for this browser." });
+                  void refreshUkAutopilotStatus();
+                  void refreshScoreTraffic();
                 }
               }}
               className="min-h-[36px] rounded-lg border border-slate-700/80 bg-slate-900/60 px-2 text-[10px] font-semibold text-slate-500"
@@ -751,6 +828,8 @@ export function App() {
       <div className="mb-4">
         <AutopilotHeartbeat metadata={ukAutopilot} />
       </div>
+
+      <ScoreTrafficCounter stats={scoreTraffic} />
 
       {banner ? (
         <ActionBanner

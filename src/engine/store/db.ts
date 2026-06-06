@@ -81,6 +81,9 @@ export async function runMigrations(): Promise<void> {
 
   const { runTexasMigrations } = await import("./texas-migrations.js");
   await runTexasMigrations();
+
+  const { runScoreTrafficMigrations } = await import("./score-traffic-repository.js");
+  await runScoreTrafficMigrations();
 }
 
 export async function closeDb(): Promise<void> {

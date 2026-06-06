@@ -1,7 +1,7 @@
 import { productConfig } from "../../config/product.config.js";
+import { getUkAutopilotScoreUrl } from "../../config/score-urls.js";
 import { scrapeEmailFromWebsite } from "../enrich/website-email-scraper.js";
 import { enrichFromOsm } from "../enrich/osm-enricher.js";
-import { getOutreachLandingUrl } from "../outreach-landing-url.js";
 import { getEmailUser } from "../services/smtp-mail-service.js";
 import { tryTexasAutopilotContactForm } from "../texas/texas-contact-form-autopilot.js";
 import { runMigrations } from "../store/db.js";
@@ -56,7 +56,7 @@ function autopilotSignatureLine(): string {
 }
 
 function buildAutopilotFormMessage(businessName: string): string {
-  const scoreUrl = getOutreachLandingUrl();
+  const scoreUrl = getUkAutopilotScoreUrl();
   return `Hey team,
 
 I'm a kitchen manager in Preston and built PassReady for our takeaway team (EHO checklists, allergens, multilingual staff).

@@ -1,8 +1,8 @@
 import type { Express, Request, Response } from "express";
-import { runUkAutonomousOutreachBatch } from "../engine/uk/uk-autonomous-outreach.js";
 import { runMigrations } from "../engine/store/db.js";
 import { countUkFormsSubmitted } from "../engine/store/leads-autopilot-repository.js";
-import { getLatestJob } from "../engine/store/jobs-repository.js";
+import { createJob, getLatestJob } from "../engine/store/jobs-repository.js";
+import { startJob } from "./job-runner.js";
 
 type ControlAuth = (req: Request, res: Response, next: () => void) => void;
 
@@ -34,12 +34,13 @@ export function mountUkRoutes(app: Express, requireControlAuth: ControlAuth): vo
       await runMigrations();
       const limit =
         typeof req.body?.limit === "number" ? req.body.limit : undefined;
-      const summary = await runUkAutonomousOutreachBatch({ limit });
-      res.json({ ok: true, summary });
+      const jobId = await createJob("uk_autopilot", { limit: limit ?? null });
+      startJob(jobId, "uk_autopilot");
+      res.status(202).json({ jobId, status: "started" });
     } catch (err) {
       console.error(err);
       res.status(500).json({
-        error: err instanceof Error ? err.message : "UK autopilot failed",
+        error: err instanceof Error ? err.message : "UK autopilot failed to start",
       });
     }
   });

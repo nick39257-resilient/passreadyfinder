@@ -10,6 +10,7 @@ import {
   type TexasLeadRow,
 } from "../store/texas-leads-repository.js";
 import { texasProductConfig } from "../../config/product.texas.config.js";
+import { getTexasAutopilotScoreUrl } from "../../config/score-urls.js";
 import { getEmailUser } from "../services/smtp-mail-service.js";
 
 export type TexasAutopilotOutcome =
@@ -54,11 +55,15 @@ function autopilotSignatureLine(): string {
 }
 
 function buildAutopilotFormMessage(): string {
+  const scoreUrl = getTexasAutopilotScoreUrl();
   return `Hey team,
 
 I noticed your recent health inspection score. With the new Texas HB 2844 compliance regulations taking full effect this July, DSHS is completely changing how food units have to log their chain of custody.
 
-State inspectors will soon have the authority to pause operations on-site if logs are still being managed on manual paper tracking systems. We built passready.us specifically for Texas hospitality operators to automate these compliance logs, digitize your records, and protect your license before the July 1st deadline.
+State inspectors will soon have the authority to pause operations on-site if logs are still being managed on manual paper tracking systems. We built PassReady specifically for Texas hospitality operators to automate these compliance logs, digitize your records, and protect your license before the July 1st deadline.
+
+Free score check for your operation — no sign-up:
+${scoreUrl}
 
 Who is the best person to pass a free temporary access link to so you can see your pre-filled logs?
 
