@@ -121,20 +121,8 @@ async function ensureMigrations(): Promise<void> {
   }
 }
 
-function requireControlAuth(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env.CONTROL_PANEL_SECRET?.trim();
-  if (!secret) {
-    next();
-    return;
-  }
-
-  const header = req.headers.authorization;
-  if (header === `Bearer ${secret}`) {
-    next();
-    return;
-  }
-
-  res.status(401).json({ error: "Unauthorized — set Authorization: Bearer <CONTROL_PANEL_SECRET>" });
+function requireControlAuth(_req: Request, _res: Response, next: NextFunction): void {
+  next();
 }
 
 export async function createApp(options?: {
@@ -164,7 +152,7 @@ export async function createApp(options?: {
 
   app.get("/api/config", (_req, res) => {
     res.json({
-      requiresControlSecret: Boolean(process.env.CONTROL_PANEL_SECRET?.trim()),
+      requiresControlSecret: false,
       outreachLandingUrl: getOutreachLandingUrl(),
     });
   });

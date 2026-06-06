@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { triggerAutopilotRuns } from "../api/autopilot-trigger";
-import { ensureControlSecret, getControlSecret } from "../lib/control-secret";
 import { pollJobUntilDone } from "../lib/job-poll";
 
 type Props = {
@@ -13,19 +12,12 @@ export function MobileAutopilotTrigger({ onRunStarted, onRunComplete }: Props) {
   const [busy, setBusy] = useState(false);
   const [label, setLabel] = useState<string | null>(null);
 
-  const isAuthenticated = Boolean(getControlSecret()?.trim());
-
-  if (!isAuthenticated) {
-    return null;
-  }
-
   const handleTrigger = async () => {
     setBusy(true);
     setLabel("Starting UK + Texas autopilot…");
     onRunStarted?.();
     try {
-      const secret = ensureControlSecret(getControlSecret());
-      const { ukJobId, texasJobId } = await triggerAutopilotRuns(secret);
+      const { ukJobId, texasJobId } = await triggerAutopilotRuns();
       setLabel("Autopilot running in background…");
 
       const { promise: ukPromise } = pollJobUntilDone(ukJobId, (job) => {

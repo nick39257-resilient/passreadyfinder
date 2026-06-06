@@ -9,12 +9,6 @@ import {
   type TexasAutopilotStatus,
   type TexasLeadSegment,
 } from "../api/texas-leads";
-import { fetchAppConfig } from "../api/config";
-import {
-  ensureControlSecret,
-  getControlSecret,
-  setControlSecret,
-} from "../lib/control-secret";
 import { pollJobUntilDone, type JobStatus } from "../lib/job-poll";
 import {
   formatTexasField,
@@ -70,28 +64,15 @@ export function TexasCommandCenter() {
     tone: "success" | "error" | "info";
     text: string;
   } | null>(null);
-  const [needsSecret, setNeedsSecret] = useState(false);
-
-  useEffect(() => {
-    void fetchAppConfig().then((config) => {
-      setNeedsSecret(config.requiresControlSecret);
-      if (config.requiresControlSecret && !getControlSecret()) {
-        setError(
-          "Control secret required — tap Key (top right) and paste CONTROL_PANEL_SECRET from Render.",
-        );
-      }
-    });
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const secret = ensureControlSecret(getControlSecret());
       const [leadRows, s, a] = await Promise.all([
-        fetchTexasLeads(filter, secret),
-        fetchTexasStats(secret),
-        fetchTexasAutopilotStatus(secret),
+        fetchTexasLeads(filter),
+        fetchTexasStats(),
+        fetchTexasAutopilotStatus(),
       ]);
       setLeads(leadRows);
       setStats(s);
@@ -110,12 +91,8 @@ export function TexasCommandCenter() {
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
-      const secret = getControlSecret();
-      if (!secret?.trim()) {
-        return;
-      }
       try {
-        const next = await fetchTexasAutopilotStatus(ensureControlSecret(secret));
+        const next = await fetchTexasAutopilotStatus();
         if (!cancelled) {
           setAutopilot(next);
         }
@@ -162,8 +139,7 @@ export function TexasCommandCenter() {
     setSendBusy(true);
     setSendFeedback({ tone: "info", text: "Running outreach…" });
     try {
-      const secret = ensureControlSecret(getControlSecret());
-      const { lead } = await sendTexasLeadOutreach(selected.id, secret);
+      const { lead } = await sendTexasLeadOutreach(selected.id);
       if (lead) {
         if (filter === "hasEmail" && lead.outreachComplete) {
           setLeads((prev) => prev.filter((l) => l.id !== lead.id));
@@ -171,7 +147,7 @@ export function TexasCommandCenter() {
         } else {
           patchLeadInList(lead);
         }
-        void fetchTexasStats(ensureControlSecret(getControlSecret())).then(setStats);
+        void fetchTexasStats().then(setStats);
         setSendFeedback({
           tone: "success",
           text:
@@ -201,13 +177,11 @@ export function TexasCommandCenter() {
     setBusy(true);
     setMessage(null);
     try {
-      const secret = ensureControlSecret(getControlSecret());
       const { jobId } = await startTexasFindJob(
         {
           mobileOnly: filter === "mobile",
           limit: 500,
         },
-        secret,
       );
       setMessage("Texas ingest running…");
       const { promise } = pollJobUntilDone(jobId, (job) => {
@@ -234,24 +208,6 @@ export function TexasCommandCenter() {
             <p className="mt-1 text-xs text-slate-400">US expansion · isolated from UK FSA</p>
           </div>
           <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                const s = window.prompt(
-                  "CONTROL_PANEL_SECRET (saved in this browser):",
-                  getControlSecret(),
-                );
-                if (s?.trim()) {
-                  setControlSecret(s);
-                  setError(null);
-                  void load();
-                }
-              }}
-              className="flex min-h-12 min-w-12 items-center justify-center rounded-xl border border-slate-600 px-2 text-[10px] font-semibold text-slate-400"
-              title="Set control secret (same as UK Command Center)"
-            >
-              Key
-            </button>
             <a
               href="/dashboard/"
               className="flex min-h-12 min-w-12 items-center justify-center rounded-xl border border-slate-600 px-3 text-xs font-semibold text-slate-200"
@@ -260,11 +216,6 @@ export function TexasCommandCenter() {
             </a>
           </div>
         </div>
-        {needsSecret && !getControlSecret() ? (
-          <p className="mt-2 text-xs text-amber-300">
-            Paste CONTROL_PANEL_SECRET via Key before loading or ingesting.
-          </p>
-        ) : null}
 
         <div className="mt-3">
           <AutopilotHeartbeat metadata={autopilot?.metadata} />

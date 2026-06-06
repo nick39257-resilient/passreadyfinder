@@ -33,7 +33,6 @@ import { SystemPulse } from "./components/SystemPulse";
 import {
   ensureControlSecret,
   getControlSecret,
-  setControlSecret,
 } from "./lib/control-secret";
 import { pollJobUntilDone } from "./lib/job-poll";
 import {
@@ -139,17 +138,10 @@ export function App() {
     null,
   );
   const [scoreTraffic, setScoreTraffic] = useState<ScoreTrafficStats | null>(null);
-  const [controlSecretReady, setControlSecretReady] = useState(() =>
-    Boolean(getControlSecret()?.trim()),
-  );
 
   const refreshUkAutopilotStatus = useCallback(async () => {
-    const secret = getControlSecret();
-    if (!secret?.trim()) {
-      return;
-    }
     try {
-      const next = await fetchUkAutopilotStatus(ensureControlSecret(secret));
+      const next = await fetchUkAutopilotStatus();
       setUkAutopilot(next.metadata);
     } catch {
       /* ignore */
@@ -157,12 +149,8 @@ export function App() {
   }, []);
 
   const refreshScoreTraffic = useCallback(async () => {
-    const secret = getControlSecret();
-    if (!secret?.trim()) {
-      return;
-    }
     try {
-      const stats = await fetchScoreTrafficStats(ensureControlSecret(secret));
+      const stats = await fetchScoreTrafficStats();
       setScoreTraffic(stats);
     } catch {
       /* ignore */
@@ -210,24 +198,14 @@ export function App() {
       setLeads(leadList);
       setSyncLabel(sync?.label ?? null);
       applySystemStatus(status);
-
-      const secret = getControlSecret();
-      if (secret?.trim()) {
-        try {
-          const autopilot = await fetchUkAutopilotStatus(ensureControlSecret(secret));
-          setUkAutopilot(autopilot.metadata);
-          const traffic = await fetchScoreTrafficStats(ensureControlSecret(secret));
-          setScoreTraffic(traffic);
-        } catch {
-          /* optional — secret may be missing on first load */
-        }
-      }
+      void refreshUkAutopilotStatus();
+      void refreshScoreTraffic();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
     } finally {
       setLoading(false);
     }
-  }, [applySystemStatus]);
+  }, [applySystemStatus, refreshUkAutopilotStatus, refreshScoreTraffic]);
 
   useEffect(() => {
     void loadAll();
@@ -237,13 +215,6 @@ export function App() {
     void fetchAppConfig().then((config) => {
       if (config.outreachLandingUrl?.trim()) {
         setOutreachLandingUrl(config.outreachLandingUrl.trim());
-      }
-      if (config.requiresControlSecret && !getControlSecret()) {
-        setBanner({
-          tone: "info",
-          message:
-            "This server requires a control secret — tap Key (top right) and paste CONTROL_PANEL_SECRET from Render before Draft / Postbox / Find.",
-        });
       }
     });
   }, []);
@@ -264,12 +235,8 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
-      const secret = getControlSecret();
-      if (!secret?.trim()) {
-        return;
-      }
       try {
-        const next = await fetchUkAutopilotStatus(ensureControlSecret(secret));
+        const next = await fetchUkAutopilotStatus();
         if (!cancelled) {
           setUkAutopilot(next.metadata);
         }
@@ -289,13 +256,8 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
-      if (!getControlSecret()?.trim()) {
-        return;
-      }
       try {
-        const stats = await fetchScoreTrafficStats(
-          ensureControlSecret(getControlSecret()),
-        );
+        const stats = await fetchScoreTrafficStats();
         if (!cancelled) {
           setScoreTraffic(stats);
         }
@@ -309,7 +271,7 @@ export function App() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [controlSecretReady]);
+  }, []);
 
   const visibleLeads = useMemo(() => {
     void hiddenVersion;
@@ -796,23 +758,6 @@ export function App() {
             }}
           />
           <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                const s = window.prompt("CONTROL_PANEL_SECRET (saved in this browser):");
-                if (s?.trim()) {
-                  setControlSecret(s);
-                  setControlSecretReady(true);
-                  setBanner({ tone: "success", message: "Control secret saved for this browser." });
-                  void refreshUkAutopilotStatus();
-                  void refreshScoreTraffic();
-                }
-              }}
-              className="min-h-[36px] rounded-lg border border-slate-700/80 bg-slate-900/60 px-2 text-[10px] font-semibold text-slate-500"
-              title="Set API secret"
-            >
-              Key
-            </button>
             <button
               type="button"
               onClick={() => void loadAll()}
