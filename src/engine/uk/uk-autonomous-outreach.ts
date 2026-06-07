@@ -13,6 +13,15 @@ import {
 } from "../store/leads-autopilot-repository.js";
 import { markLeadFormSubmitted } from "../store/leads-enrichment-repository.js";
 import { discoverUkWebsiteViaDuckDuckGo } from "./uk-duckduckgo-discovery.js";
+import { closeSharedChromiumBrowser } from "../services/playwright-browser.js";
+
+function ukAutopilotContactFormsEnabled(): boolean {
+  const raw = process.env.UK_AUTOPILOT_CONTACT_FORMS?.trim().toLowerCase();
+  if (raw === "1" || raw === "true" || raw === "yes") {
+    return true;
+  }
+  return false;
+}
 
 export type UkAutopilotOutcome =
   | "email_discovered"
@@ -184,6 +193,16 @@ export async function runUkAutopilotForLead(row: LeadRow): Promise<UkAutopilotLe
       };
     }
 
+    if (!ukAutopilotContactFormsEnabled()) {
+      return {
+        leadId: row.id,
+        businessName: row.business_name,
+        outcome: "no_contact_path",
+        detail: "contact_forms_disabled_on_cron",
+        website,
+      };
+    }
+
     const form = await tryTexasAutopilotContactForm({
       website,
       businessName: row.business_name,
@@ -252,33 +271,37 @@ export async function runUkAutonomousOutreachBatch(options?: {
 
   console.log(`UK autopilot: ${leads.length} lead(s) (lead score order, limit ${limit})\n`);
 
-  for (let i = 0; i < leads.length; i++) {
-    const row = leads[i];
-    const result = await runUkAutopilotForLead(row);
-    summary.scanned++;
+  try {
+    for (let i = 0; i < leads.length; i++) {
+      const row = leads[i];
+      const result = await runUkAutopilotForLead(row);
+      summary.scanned++;
 
-    if (result.outcome === "email_discovered") {
-      summary.emailDiscovered++;
-      console.log(`✓ [${row.lead_score}] ${result.businessName}: ${result.email} (${result.detail})`);
-    } else if (result.outcome === "form_submitted") {
-      summary.formSubmitted++;
-      console.log(`⊕ [${row.lead_score}] ${result.businessName}: contact form submitted`);
-    } else if (result.outcome === "captcha_skipped") {
-      summary.captchaSkipped++;
-      console.log(`⊘ [${row.lead_score}] ${result.businessName}: CAPTCHA_SKIPPED`);
-    } else if (result.outcome === "no_website" || result.outcome === "no_contact_path") {
-      summary.noContact++;
-      console.log(`— [${row.lead_score}] ${result.businessName}: ${result.detail}`);
-    } else if (result.outcome === "error") {
-      summary.errors++;
-      console.log(`✗ [${row.lead_score}] ${result.businessName}: ${result.detail}`);
-    } else {
-      console.log(`· [${row.lead_score}] ${result.businessName}: ${result.detail}`);
-    }
+      if (result.outcome === "email_discovered") {
+        summary.emailDiscovered++;
+        console.log(`✓ [${row.lead_score}] ${result.businessName}: ${result.email} (${result.detail})`);
+      } else if (result.outcome === "form_submitted") {
+        summary.formSubmitted++;
+        console.log(`⊕ [${row.lead_score}] ${result.businessName}: contact form submitted`);
+      } else if (result.outcome === "captcha_skipped") {
+        summary.captchaSkipped++;
+        console.log(`⊘ [${row.lead_score}] ${result.businessName}: CAPTCHA_SKIPPED`);
+      } else if (result.outcome === "no_website" || result.outcome === "no_contact_path") {
+        summary.noContact++;
+        console.log(`— [${row.lead_score}] ${result.businessName}: ${result.detail}`);
+      } else if (result.outcome === "error") {
+        summary.errors++;
+        console.log(`✗ [${row.lead_score}] ${result.businessName}: ${result.detail}`);
+      } else {
+        console.log(`· [${row.lead_score}] ${result.businessName}: ${result.detail}`);
+      }
 
-    if (i < leads.length - 1) {
-      await sleep(delayMs());
+      if (i < leads.length - 1) {
+        await sleep(delayMs());
+      }
     }
+  } finally {
+    await closeSharedChromiumBrowser();
   }
 
   return summary;

@@ -1,7 +1,9 @@
 export function SendConfirmModal({
   open,
   approvedCount,
+  sendReadyCount,
   sendableCount,
+  blockedCount = 0,
   dailyCap,
   onConfirm,
   onCancel,
@@ -9,7 +11,9 @@ export function SendConfirmModal({
 }: {
   open: boolean;
   approvedCount: number;
+  sendReadyCount?: number;
   sendableCount: number;
+  blockedCount?: number;
   dailyCap?: { sentToday: number; cap: number; remaining: number };
   onConfirm: () => void;
   onCancel: () => void;
@@ -32,9 +36,21 @@ export function SendConfirmModal({
       >
         <h2 className="text-lg font-bold text-slate-50">Send postbox now</h2>
         <p className="mt-2 text-sm text-slate-300">
-          Send <strong className="text-amber-200">{sendableCount}</strong> of{" "}
-          <strong>{approvedCount}</strong> queued emails right now via Resend.
+          Send <strong className="text-amber-200">{sendableCount}</strong>
+          {sendReadyCount !== undefined && sendReadyCount !== approvedCount ? (
+            <>
+              {" "}
+              of <strong>{sendReadyCount}</strong> send-ready
+            </>
+          ) : null}{" "}
+          queued email{sendableCount === 1 ? "" : "s"} now via Private Email.
         </p>
+        {blockedCount > 0 ? (
+          <p className="mt-2 text-xs text-amber-200/90">
+            {blockedCount} other queued lead{blockedCount === 1 ? "" : "s"} have missing or invalid
+            emails and will be skipped.
+          </p>
+        ) : null}
         {dailyCap ? (
           <p className="mt-2 text-xs text-slate-500">
             Daily cap: {dailyCap.sentToday}/{dailyCap.cap} sent today ({dailyCap.remaining}{" "}

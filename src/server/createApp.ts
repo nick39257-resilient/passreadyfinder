@@ -16,7 +16,9 @@ import {
   getJob,
 } from "../engine/store/jobs-repository.js";
 import {
+  auditPostboxLeads,
   countApprovedLeads,
+  countSendReadyLeads,
   getFunnelStats,
   getLeadStatusCounts,
 } from "../engine/store/stats-repository.js";
@@ -37,6 +39,7 @@ import {
 } from "../engine/sync/sync-label.js";
 import { getLastSyncTimestamp } from "../engine/sync/fsa-sync-state.js";
 import { includeInDashboardList } from "../engine/lead-display-policy.js";
+import { isValidOutreachEmail } from "../engine/outreach-email.js";
 import { getOutreachLandingUrl } from "../engine/outreach-landing-url.js";
 import { buildOutboundWaMeLink } from "../engine/whatsapp-link.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "../engine/enrich/lead-email.js";
@@ -188,7 +191,17 @@ export async function createApp(options?: {
       const counts = await getLeadStatusCounts();
       const deliverability = await getDeliverabilityStatus();
       const funnel = await getFunnelStats();
-      res.json({ ...counts, deliverability, funnel });
+      const postbox = await auditPostboxLeads();
+      res.json({
+        ...counts,
+        deliverability,
+        funnel,
+        postbox: {
+          queued: postbox.queued,
+          sendReady: postbox.sendReady,
+          blocked: postbox.blocked,
+        },
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch stats" });
@@ -741,17 +754,20 @@ export async function createApp(options?: {
       }
 
       const approvedCount = await countApprovedLeads();
+      const sendReadyCount = await countSendReadyLeads();
       const dailyQuota = await getDailySendQuota();
-      const sendableCount = Math.min(approvedCount, dailyQuota.remaining);
+      const sendableCount = Math.min(sendReadyCount, dailyQuota.remaining);
 
-      if (approvedCount === 0 || sendableCount === 0) {
+      if (approvedCount === 0 || sendReadyCount === 0 || sendableCount === 0) {
         res.json({
           approvedCount,
+          sendReadyCount,
           sendableCount: 0,
           confirmToken: null,
           sendLocked: false,
           dailyQuota,
           dailyCapReached: dailyQuota.remaining <= 0,
+          blockedCount: Math.max(0, approvedCount - sendReadyCount),
         });
         return;
       }
@@ -759,10 +775,12 @@ export async function createApp(options?: {
       const confirmToken = await createSendConfirmToken(sendableCount);
       res.json({
         approvedCount,
+        sendReadyCount,
         sendableCount,
         confirmToken,
         sendLocked: false,
         dailyQuota,
+        blockedCount: Math.max(0, approvedCount - sendReadyCount),
       });
     } catch (err) {
       console.error(err);
@@ -792,17 +810,27 @@ export async function createApp(options?: {
       }
 
       const approvedCount = await countApprovedLeads();
+      const sendReadyCount = await countSendReadyLeads();
       const dailyQuota = await getDailySendQuota();
-      const sendableCount = Math.min(approvedCount, dailyQuota.remaining);
+      const sendableCount = Math.min(sendReadyCount, dailyQuota.remaining);
 
-      if (approvedCount === 0 || sendableCount === 0) {
-        res.status(400).json({ error: "No approved leads to send" });
+      if (approvedCount === 0 || sendReadyCount === 0 || sendableCount === 0) {
+        res.status(400).json({
+          error:
+            sendReadyCount === 0
+              ? "No send-ready emails in postbox — fix invalid addresses first"
+              : "No approved leads to send",
+          approvedCount,
+          sendReadyCount,
+          sendableCount: 0,
+        });
         return;
       }
       if (sendableCount !== expectedCount) {
         res.status(409).json({
           error: `Send batch size changed (${expectedCount} → ${sendableCount}). Preview again.`,
           approvedCount,
+          sendReadyCount,
           sendableCount,
         });
         return;
@@ -847,6 +875,19 @@ export async function createApp(options?: {
     }
 
     try {
+      const row = await getLeadById(id);
+      if (!row) {
+        res.status(404).json({ error: "Draft not found or already reviewed" });
+        return;
+      }
+      if (!isValidOutreachEmail(row.email)) {
+        res.status(409).json({
+          error:
+            "Lead needs a valid business email before postbox send — fix the address in the dashboard first.",
+        });
+        return;
+      }
+
       const updated = await approveDraft(id, draftMessage);
       if (!updated) {
         res.status(404).json({ error: "Draft not found or already reviewed" });
@@ -900,6 +941,13 @@ export async function createApp(options?: {
         res.status(409).json({
           error:
             "No business email yet — open the lead, add an email, then tap Send to postbox.",
+        });
+        return;
+      }
+      if (!isValidOutreachEmail(row.email)) {
+        res.status(409).json({
+          error:
+            "Email looks invalid or blocked (privacy/noreply/scraped junk). Fix it before postbox send.",
         });
         return;
       }

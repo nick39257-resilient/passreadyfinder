@@ -38,7 +38,7 @@ services:
       - key: CONTROL_PANEL_SECRET
         sync: false
 
-  # FindLeads — scrape & score once per day at 03:00 UTC
+  # FindLeads — scrape & score once per day at 03:00 UTC (UK batched to stay under 512MB)
   - type: cron
     name: passreadyfinder-find
     runtime: node
@@ -51,6 +51,12 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=448"
+      - key: FIND_CRON_AUTHORITY_BATCH
+        value: "20"
+      - key: FIND_CRON_ENRICH_TOP_N
+        value: "15"
       - key: TURSO_DATABASE_URL
         fromService:
           type: web
@@ -75,6 +81,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=448"
       - key: TURSO_DATABASE_URL
         fromService:
           type: web
@@ -119,6 +127,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=448"
       - key: TURSO_DATABASE_URL
         fromService:
           type: web
@@ -168,6 +178,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=448"
       - key: PLAYWRIGHT_BROWSERS_PATH
         value: "0"
       - key: TURSO_DATABASE_URL
@@ -206,23 +218,25 @@ services:
           name: passreadyfinder
           envVarKey: CONTROL_PANEL_SECRET
       - key: TEXAS_AUTOPILOT_LIMIT
-        value: "50"
+        value: "8"
       - key: TEXAS_AUTOPILOT_DELAY_MS
         value: "1500"
 
-  # UK autopilot — OSM/DDG discovery, email scrape, contact forms (every 12h)
+  # UK autopilot — OSM/DDG discovery, email scrape (forms off on cron — saves RAM)
   - type: cron
     name: uk-autopilot-cron
     runtime: node
     plan: starter
     repo: https://github.com/nick39257-resilient/passreadyfinder
     branch: main
-    schedule: "0 */12 * * *"
+    schedule: "30 */12 * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install && node scripts/ensure-playwright-chromium.mjs
     startCommand: node scripts/ensure-playwright-chromium.mjs && npm run uk-autopilot
     envVars:
       - key: NODE_VERSION
         value: "20"
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=448"
       - key: PLAYWRIGHT_BROWSERS_PATH
         value: "0"
       - key: TURSO_DATABASE_URL
@@ -261,6 +275,8 @@ services:
           name: passreadyfinder
           envVarKey: CONTROL_PANEL_SECRET
       - key: UK_AUTOPILOT_LIMIT
-        value: "50"
+        value: "8"
       - key: UK_AUTOPILOT_DELAY_MS
         value: "1500"
+      - key: UK_AUTOPILOT_CONTACT_FORMS
+        value: "false"

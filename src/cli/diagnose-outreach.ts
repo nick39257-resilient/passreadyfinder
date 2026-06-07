@@ -6,7 +6,7 @@
 import "dotenv/config";
 import { getDeliverabilityStatus } from "../engine/deliverability.js";
 import { buildOutboundWaMeLink } from "../engine/whatsapp-link.js";
-import { getLeadStatusCounts, getFunnelStats } from "../engine/store/stats-repository.js";
+import { getLeadStatusCounts, getFunnelStats, auditPostboxLeads } from "../engine/store/stats-repository.js";
 import { closeDb, getDb, runMigrations } from "../engine/store/db.js";
 
 function pct(n: number, total: number): string {
@@ -25,6 +25,7 @@ async function main(): Promise<void> {
 
   const counts = await getLeadStatusCounts();
   const funnel = await getFunnelStats();
+  const postbox = await auditPostboxLeads();
   const deliverability = await getDeliverabilityStatus();
 
   const rowsForWa = await db.execute(`
@@ -110,6 +111,11 @@ async function main(): Promise<void> {
   line("With draft text", withDraft);
   line("Send-ready (approved+email)", sendReady);
 
+  console.log("\nPostbox (approved queue)");
+  line("Queued (approved + draft)", postbox.queued);
+  line("Send-ready (valid email)", postbox.sendReady);
+  line("Blocked (invalid/missing email)", postbox.blocked);
+
   console.log("\nStatus breakdown");
   line("new", counts.new);
   line("drafted", counts.drafted);
@@ -169,9 +175,16 @@ async function main(): Promise<void> {
     );
   }
   if (sendReady === 0 && counts.approved > 0) {
-    tips.push("Approved leads lack email — add emails in dashboard before postbox send.");
+    tips.push(
+      `Postbox has ${counts.approved} queued but only ${postbox.sendReady} send-ready — run npm run diagnose-postbox and fix invalid emails.`,
+    );
   }
-  if (counts.approved > 0 && counts.contacted === 0 && !deliverability.sendLocked) {
+  if (postbox.blocked > 0) {
+    tips.push(
+      `${postbox.blocked} postbox lead(s) blocked by email validation — remove from postbox or fix addresses.`,
+    );
+  }
+  if (counts.approved > 0 && counts.contacted === 0 && !deliverability.sendLocked && postbox.sendReady > 0) {
     tips.push("Postbox has approvals but nothing sent — run `npm run send` or check 2pm cron.");
   }
   if (deliverability.sendLocked) {

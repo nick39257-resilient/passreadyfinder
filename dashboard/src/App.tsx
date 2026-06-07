@@ -131,6 +131,7 @@ export function App() {
     () => readLocal(STORAGE_POSTCODE) ?? "",
   );
   const [syncLabel, setSyncLabel] = useState<string | null>(null);
+  const [postbox, setPostbox] = useState({ queued: 0, sendReady: 0, blocked: 0 });
   const [outreachLandingUrl, setOutreachLandingUrl] = useState(
     "https://score.passready.uk",
   );
@@ -171,6 +172,7 @@ export function App() {
       setErrorMessage(status.errorMessage);
     }
     setNeedsReviewCount(status.needsReviewCount);
+    setPostbox(status.postbox ?? { queued: 0, sendReady: 0, blocked: 0 });
   }, [pulseDismissed]);
 
   const clearPulseError = useCallback(() => {
@@ -804,7 +806,11 @@ export function App() {
         </div>
       ) : null}
 
-      <PostboxStatus queuedCount={filterCounts.approved ?? 0} />
+      <PostboxStatus
+        queuedCount={postbox.queued}
+        sendReadyCount={postbox.sendReady}
+        blockedCount={postbox.blocked}
+      />
       {syncLabel ? (
         <p className="mb-3 text-[11px] leading-snug text-slate-500">{syncLabel}</p>
       ) : null}
@@ -881,7 +887,9 @@ export function App() {
       <SendConfirmModal
         open={sendModalOpen}
         approvedCount={sendPreview?.approvedCount ?? 0}
+        sendReadyCount={sendPreview?.sendReadyCount ?? sendPreview?.sendableCount ?? 0}
         sendableCount={sendPreview?.sendableCount ?? 0}
+        blockedCount={sendPreview?.blockedCount ?? 0}
         dailyCap={sendPreview?.dailyQuota}
         onConfirm={() => void handleSendConfirm()}
         onCancel={() => {

@@ -40,7 +40,7 @@ function resolveRecipient(lead: ApprovedLead): {
   to: string;
   usingTestFallback: boolean;
 } {
-  const businessEmail = lead.email?.trim();
+  const businessEmail = normalizeOutreachEmail(lead.email);
   if (businessEmail) {
     return { to: businessEmail, usingTestFallback: false };
   }

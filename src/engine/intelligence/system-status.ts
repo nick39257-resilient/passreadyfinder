@@ -14,7 +14,7 @@ import {
   getDailySendQuota,
   type DailySendQuota,
 } from "../daily-send-cap.js";
-import { countNeedsEyesDrafts, getLeadStatusCounts } from "../store/stats-repository.js";
+import { countNeedsEyesDrafts, auditPostboxLeads, getLeadStatusCounts } from "../store/stats-repository.js";
 import { runMigrations } from "../store/db.js";
 import {
   findJobStillRunning,
@@ -36,6 +36,12 @@ export interface SystemStatusFeedItem {
   createdAt: string;
 }
 
+export interface PostboxStatusSummary {
+  queued: number;
+  sendReady: number;
+  blocked: number;
+}
+
 export interface SystemStatus {
   pulse: SystemPulseState;
   pulseLabel: string;
@@ -45,6 +51,7 @@ export interface SystemStatus {
   complianceTip: string;
   dailyQuota: DailySendQuota;
   dailyCapResetDescription: string;
+  postbox: PostboxStatusSummary;
 }
 
 const PULSE_LABELS: Record<SystemPulseState, string> = {
@@ -68,7 +75,7 @@ function mapFeedEntry(row: EngineLogEntry): SystemStatusFeedItem {
 export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
   await runMigrations();
 
-  const [logs, latestError, statusCounts, needsReviewCount, recentJobs, dailyQuota] =
+  const [logs, latestError, statusCounts, needsReviewCount, recentJobs, dailyQuota, postboxAudit] =
     await Promise.all([
     getRecentEngineLogs(feedLimit),
     getLatestEngineError(),
@@ -76,6 +83,7 @@ export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
     countNeedsEyesDrafts(),
     getRecentJobs(20),
     getDailySendQuota(),
+    auditPostboxLeads(),
   ]);
   const feed = logs.map(mapFeedEntry);
 
@@ -115,6 +123,11 @@ export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
     complianceTip: getComplianceTipOfDay(),
     dailyQuota,
     dailyCapResetDescription: getDailyCapResetDescription(),
+    postbox: {
+      queued: postboxAudit.queued,
+      sendReady: postboxAudit.sendReady,
+      blocked: postboxAudit.blocked,
+    },
   };
 }
 

@@ -11,7 +11,11 @@ import {
   iterateEstablishmentPages,
   resolveBusinessTypeIds,
 } from "./finder/fsa-finder.js";
-import { resolveAuthoritiesForFind, isUkWideArea } from "./finder/find-area.js";
+import { isUkWideArea } from "./finder/find-area.js";
+import {
+  advanceFsaFindAuthorityCursor,
+  planFsaFindAuthorityBatch,
+} from "./sync/fsa-find-cursor.js";
 import { fetchEstablishmentScores } from "./finder/fsa-detail.js";
 import { isRateLimited } from "./rate-limit-queue.js";
 import {
@@ -19,7 +23,6 @@ import {
   OSM_REQUEST_INTERVAL_MS,
   sleep,
 } from "./enrich/osm-enricher.js";
-import { runPhase1EnrichmentForLead } from "./enrich/lead-enrichment-phase1.js";
 import { tryEnrichLeadEmailFromWebsite, updateLeadEmail } from "./enrich/lead-email.js";
 import { isExcludedLead } from "./lead-guardrails.js";
 
@@ -161,6 +164,12 @@ export async function runFindPipeline(options?: {
   skipEnrichment?: boolean;
   segmentation?: FindJobParams;
   onProgress?: (message: string) => void | Promise<void>;
+  /** Cron: slice UK authorities across runs (dashboard jobs process all). */
+  authorityBatch?: boolean;
+  /** Override enrichTopN cap for this run (cron uses a lower default). */
+  enrichTopNOverride?: number;
+  /** When false, skip updating last_sync_timestamp (partial UK batch). */
+  updateSyncTimestamp?: boolean;
 }): Promise<PipelineResult> {
   await runMigrations();
 
@@ -174,14 +183,17 @@ export async function runFindPipeline(options?: {
     (productConfig.area.mode === "localAuthority"
       ? productConfig.area.localAuthorityName
       : "UK");
-  const authorityNames = await resolveAuthoritiesForFind(areaName);
+  const authorityPlan = await planFsaFindAuthorityBatch(areaName, {
+    batchAll: !options?.authorityBatch,
+  });
+  const authorityNames = authorityPlan.authorities;
   if (authorityNames.length === 0) {
     throw new Error(`No local authorities resolved for area "${areaName}".`);
   }
   console.log(
-    `Resolved ${authorityNames.length} FSA local authority/authorities: ${authorityNames
-      .map((a) => `${a.name} (id ${a.id})`)
-      .join("; ")}`,
+    authorityPlan.ukWide && !authorityPlan.cycleComplete && authorityPlan.totalAuthorities > authorityNames.length
+      ? `FSA batch: authorities ${authorityPlan.cursorStart + 1}-${authorityPlan.cursorEnd} of ${authorityPlan.totalAuthorities}`
+      : `Resolved ${authorityNames.length} FSA local authority/authorities`,
   );
 
   const worstFirst = options?.segmentation?.worstFirst ?? true;
@@ -202,7 +214,9 @@ export async function runFindPipeline(options?: {
   const postcodeLabel = postcodePrefix ? `, postcode starts ${postcodePrefix}` : "";
 
   const scopeLabel = isUkWideArea(areaName)
-    ? `UK (${authorityNames.length} councils)`
+    ? authorityPlan.ukWide && authorityPlan.totalAuthorities > authorityNames.length
+      ? `UK batch ${authorityPlan.cursorStart + 1}-${authorityPlan.cursorEnd}/${authorityPlan.totalAuthorities}`
+      : `UK (${authorityPlan.totalAuthorities} councils)`
     : areaName;
 
   if (fullResync) {
@@ -219,11 +233,21 @@ export async function runFindPipeline(options?: {
     );
   }
 
-  const merged = new Map<number, RawLead>();
+  let stored = 0;
   let apiRows = 0;
   let deltaRows = 0;
   let pagesFetched = 0;
   let excludedByGuardrail = 0;
+  let enriched = 0;
+  let withPhone = 0;
+  let withWebsite = 0;
+
+  const enrichCap =
+    options?.enrichTopNOverride ??
+    (lastSyncTimestamp && !fullResync
+      ? Number(process.env.FIND_DELTA_ENRICH_TOP_N) || 200
+      : productConfig.enrichTopN);
+  let enrichBudget = options?.skipEnrichment ? 0 : enrichCap;
 
   const reportProgress = async (message: string) => {
     await options?.onProgress?.(message);
@@ -234,127 +258,70 @@ export async function runFindPipeline(options?: {
     options?.onProgress &&
     setInterval(() => {
       void reportProgress(
-        `FSA find running… ${merged.size} lead(s), ${pagesFetched} page(s) fetched`,
+        `FSA find running… ${stored} stored, ${pagesFetched} page(s) fetched`,
       );
     }, heartbeatMs);
 
-  try {
-    await reportProgress(`Resolving ${authorityNames.length} local authority/authorities…`);
+  async function storeAndEnrichAuthorityLeads(rawLeads: RawLead[]): Promise<void> {
+    if (rawLeads.length === 0) {
+      return;
+    }
 
-    for (let i = 0; i < authorityNames.length; i++) {
-      const authority = authorityNames[i]!;
-      await reportProgress(
-        `FSA ${i + 1}/${authorityNames.length}: ${authority.name}…`,
-      );
-      if (authorityNames.length > 1) {
-        console.log(
-          `Authority ${i + 1}/${authorityNames.length}: ${authority.name}`,
-        );
-      }
-      const fetchResult = await fetchLeadsWithDeltaSync({
-        localAuthorityId: authority.id,
-        authorityLabel: authority.name,
-        businessTypeIds,
-        targetRating,
-        worstFirst,
-        maxRating,
-        postcodePrefix,
-        lastSyncTimestamp,
+    const scored = rawLeads
+      .map((lead) => ({
+        ...lead,
+        onDeliveryApp: "unknown" as const,
+        leadScore: calculateLeadScore({
+          fsaRating: lead.fsaRating,
+          fsaLastInspectionDate: lead.fsaLastInspectionDate,
+          onDeliveryApp: "unknown",
+        }),
+      }))
+      .sort((a, b) => {
+        const ra = a.fsaRating ?? 99;
+        const rb = b.fsaRating ?? 99;
+        if (ra !== rb) {
+          return ra - rb;
+        }
+        return b.leadScore - a.leadScore;
       });
-      apiRows += fetchResult.apiRows;
-      deltaRows += fetchResult.deltaRows;
-      pagesFetched += fetchResult.pagesFetched;
-      excludedByGuardrail += fetchResult.excludedByGuardrail;
-      for (const lead of fetchResult.leads) {
-        merged.set(lead.fsaId, lead);
+
+    for (const lead of scored) {
+      await upsertLead(lead);
+      stored++;
+      try {
+        const scores = await fetchEstablishmentScores(lead.fsaId);
+        if (scores) {
+          const db = getDb();
+          await db.execute({
+            sql: `UPDATE leads SET fsa_score_hygiene = ?, fsa_score_structural = ?, fsa_score_management = ? WHERE fsa_id = ?`,
+            args: [
+              scores.hygiene,
+              scores.structural,
+              scores.management,
+              lead.fsaId,
+            ],
+          });
+        }
+      } catch (err) {
+        if (isRateLimited(err)) {
+          console.warn(
+            `  FSA sub-scores skipped for ${lead.businessName} (rate limit after retries)`,
+          );
+        }
       }
     }
-  } catch (err) {
-    console.error(
-      "FSA /Establishments fetch failed — last_sync_timestamp not updated:",
-      err instanceof Error ? err.message : err,
-    );
-    throw err;
-  } finally {
-    if (heartbeat) {
-      clearInterval(heartbeat);
-    }
-  }
 
-  const rawLeads = Array.from(merged.values());
-  console.log(
-    `  Done: ${pagesFetched} page(s), ${apiRows} API rows, ${deltaRows} delta rows, ${excludedByGuardrail} excluded (cafe/coffee/etc.), ${rawLeads.length} kept.`,
-  );
-
-  const scored = rawLeads.map((lead) => ({
-    ...lead,
-    onDeliveryApp: "unknown" as const,
-    leadScore: calculateLeadScore({
-      fsaRating: lead.fsaRating,
-      fsaLastInspectionDate: lead.fsaLastInspectionDate,
-      onDeliveryApp: "unknown",
-    }),
-  }));
-
-  scored.sort((a, b) => {
-    const ra = a.fsaRating ?? 99;
-    const rb = b.fsaRating ?? 99;
-    if (ra !== rb) {
-      return ra - rb;
-    }
-    return b.leadScore - a.leadScore;
-  });
-
-  for (const lead of scored) {
-    await upsertLead(lead);
-    try {
-      const scores = await fetchEstablishmentScores(lead.fsaId);
-      if (scores) {
-        const db = getDb();
-        await db.execute({
-          sql: `UPDATE leads SET fsa_score_hygiene = ?, fsa_score_structural = ?, fsa_score_management = ? WHERE fsa_id = ?`,
-          args: [
-            scores.hygiene,
-            scores.structural,
-            scores.management,
-            lead.fsaId,
-          ],
-        });
-      }
-    } catch (err) {
-      if (isRateLimited(err)) {
-        console.warn(
-          `  FSA sub-scores skipped for ${lead.businessName} (rate limit after retries)`,
-        );
-      }
-      /* other errors — FHIS/rescore may omit scores */
-    }
-  }
-  console.log(`  Stored ${scored.length} leads (idempotent upsert on fsa_id).`);
-
-  let enriched = 0;
-  let withPhone = 0;
-  let withWebsite = 0;
-
-  if (!options?.skipEnrichment && scored.length > 0) {
-    const enrichLimit =
-      lastSyncTimestamp && !fullResync
-        ? scored.length
-        : Math.min(scored.length, productConfig.enrichTopN);
-    const toEnrich = scored.slice(0, enrichLimit);
-    if (scored.length > enrichLimit) {
-      console.log(
-        `Enriching top ${enrichLimit} of ${scored.length} lead(s) (enrichTopN cap)…`,
-      );
-    } else {
-      console.log(`Enriching ${toEnrich.length} lead(s) via Overpass API…`);
+    if (enrichBudget <= 0) {
+      return;
     }
 
-    await reportProgress(`OSM enrichment: ${toEnrich.length} lead(s)…`);
+    const toEnrich = scored.slice(0, enrichBudget);
+    enrichBudget -= toEnrich.length;
 
     for (let enrichIdx = 0; enrichIdx < toEnrich.length; enrichIdx++) {
       const lead = toEnrich[enrichIdx]!;
-      if (enrichIdx % 10 === 0) {
+      if (enrichIdx % 5 === 0) {
         await reportProgress(
           `OSM ${enrichIdx + 1}/${toEnrich.length}: ${lead.businessName}…`,
         );
@@ -393,26 +360,11 @@ export async function runFindPipeline(options?: {
           if (osm.website) {
             await tryEnrichLeadEmailFromWebsite(leadId, osm.website);
           }
-          try {
-            const phase1 = await runPhase1EnrichmentForLead(leadId, {
-              allowContactForm: false,
-            });
-            if (phase1.enrichmentStatus === "EMAIL_FOUND") {
-              process.stdout.write("+");
-            } else if (phase1.contactMethod === "CONTACT_FORM") {
-              process.stdout.write("f");
-            }
-          } catch (phaseErr) {
-            console.warn(
-              `\n  Phase1 enrich failed for ${lead.businessName}: ${phaseErr instanceof Error ? phaseErr.message : phaseErr}`,
-            );
-          }
         }
 
         enriched++;
         if (osm.phone) withPhone++;
         if (osm.website) withWebsite++;
-
         process.stdout.write(".");
       } catch (err) {
         console.warn(
@@ -422,15 +374,73 @@ export async function runFindPipeline(options?: {
 
       await sleep(OSM_REQUEST_INTERVAL_MS);
     }
-    console.log("\n  Enrichment complete.");
   }
 
-  await setLastSyncTimestamp(syncStartedAt);
-  console.log(`  Updated last_sync_timestamp → ${syncStartedAt}`);
+  try {
+    await reportProgress(`Processing ${authorityNames.length} local authority/authorities…`);
+
+    for (let i = 0; i < authorityNames.length; i++) {
+      const authority = authorityNames[i]!;
+      await reportProgress(
+        `FSA ${authorityPlan.cursorStart + i + 1}/${authorityPlan.totalAuthorities}: ${authority.name}…`,
+      );
+      if (authorityNames.length > 1 || authorityPlan.totalAuthorities > 1) {
+        console.log(
+          `Authority ${authorityPlan.cursorStart + i + 1}/${authorityPlan.totalAuthorities}: ${authority.name}`,
+        );
+      }
+      const fetchResult = await fetchLeadsWithDeltaSync({
+        localAuthorityId: authority.id,
+        authorityLabel: authority.name,
+        businessTypeIds,
+        targetRating,
+        worstFirst,
+        maxRating,
+        postcodePrefix,
+        lastSyncTimestamp,
+      });
+      apiRows += fetchResult.apiRows;
+      deltaRows += fetchResult.deltaRows;
+      pagesFetched += fetchResult.pagesFetched;
+      excludedByGuardrail += fetchResult.excludedByGuardrail;
+      await storeAndEnrichAuthorityLeads(fetchResult.leads);
+    }
+  } catch (err) {
+    console.error(
+      "FSA /Establishments fetch failed — last_sync_timestamp not updated:",
+      err instanceof Error ? err.message : err,
+    );
+    throw err;
+  } finally {
+    if (heartbeat) {
+      clearInterval(heartbeat);
+    }
+  }
+
+  console.log(
+    `  Done: ${pagesFetched} page(s), ${apiRows} API rows, ${deltaRows} delta rows, ${excludedByGuardrail} excluded (cafe/coffee/etc.), ${stored} stored.`,
+  );
+  if (enriched > 0) {
+    console.log(`  Enriched ${enriched} lead(s) via OSM.`);
+  }
+
+  const shouldUpdateSync = options?.updateSyncTimestamp !== false && authorityPlan.cycleComplete;
+  if (shouldUpdateSync) {
+    await setLastSyncTimestamp(syncStartedAt);
+    console.log(`  Updated last_sync_timestamp → ${syncStartedAt}`);
+    if (authorityPlan.ukWide) {
+      await advanceFsaFindAuthorityCursor(authorityPlan);
+    }
+  } else if (authorityPlan.ukWide && options?.authorityBatch) {
+    await advanceFsaFindAuthorityCursor(authorityPlan);
+    console.log(
+      `  UK batch complete — cursor now ${authorityPlan.cycleComplete ? 0 : authorityPlan.cursorEnd}/${authorityPlan.totalAuthorities} (sync timestamp unchanged until full cycle).`,
+    );
+  }
 
   return {
-    fetched: rawLeads.length,
-    stored: scored.length,
+    fetched: stored,
+    stored,
     enriched,
     withPhone,
     withWebsite,
@@ -438,7 +448,7 @@ export async function runFindPipeline(options?: {
     deltaRows,
     pagesFetched,
     lastSyncTimestamp: storedLastSync,
-    syncTimestampUpdated: true,
+    syncTimestampUpdated: shouldUpdateSync,
     deltaMode: !fullResync && Boolean(storedLastSync),
     fullResync,
     excludedByGuardrail,

@@ -1,7 +1,22 @@
 import { randomUUID } from "node:crypto";
+import {
+  cleanOutreachEmail,
+  explainOutreachEmailIssue,
+  formatOutreachEmailIssue,
+  isValidOutreachEmail,
+  normalizeOutreachEmail,
+} from "./outreach-email.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
 import type { LeadRow } from "./store/leads-repository.js";
+
+export {
+  cleanOutreachEmail,
+  explainOutreachEmailIssue,
+  formatOutreachEmailIssue,
+  isValidOutreachEmail,
+  normalizeOutreachEmail,
+};
 
 /** Statuses that must never receive another draft or send. */
 export const OUTREACH_HALTED_STATUSES = [
@@ -43,11 +58,6 @@ const UUID_V4_RE =
 
 export function isSecureUnsubscribeToken(token: string | null | undefined): boolean {
   return Boolean(token?.trim() && UUID_V4_RE.test(token.trim()));
-}
-
-export function normalizeOutreachEmail(email: string | null | undefined): string | null {
-  const normalized = email?.trim().toLowerCase();
-  return normalized && normalized.includes("@") ? normalized : null;
 }
 
 /** SQL fragment: lead email not on suppression_list (pass no extra args). */

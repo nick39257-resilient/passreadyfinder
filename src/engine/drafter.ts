@@ -13,6 +13,7 @@ import {
   shouldIncludeLandingInDraft,
 } from "./outreach-landing-url.js";
 import { stripUrls } from "./outreach-message.js";
+import { isValidOutreachEmail } from "./outreach-email.js";
 import {
   draftMessageSchema,
   firstTouchDraftMessageSchema,
@@ -339,8 +340,8 @@ function draftQualityGate(input: {
     return { pass: false, reason: "flagged_for_review" };
   }
 
-  // Auto-postbox lane requires a real business email.
-  if (!input.lead.email?.trim()) {
+  // Auto-postbox lane requires a mailable business email.
+  if (!isValidOutreachEmail(input.lead.email)) {
     return { pass: false, reason: "missing_business_email" };
   }
 

@@ -12,6 +12,7 @@ import {
 import { texasProductConfig } from "../../config/product.texas.config.js";
 import { getTexasAutopilotScoreUrl } from "../../config/score-urls.js";
 import { getEmailUser } from "../services/smtp-mail-service.js";
+import { closeSharedChromiumBrowser } from "../services/playwright-browser.js";
 
 export type TexasAutopilotOutcome =
   | "email_discovered"
@@ -237,33 +238,37 @@ export async function runTexasAutonomousOutreachBatch(options?: {
 
   console.log(`Texas autopilot: ${leads.length} lead(s) (risk score order, limit ${limit})\n`);
 
-  for (let i = 0; i < leads.length; i++) {
-    const row = leads[i];
-    const result = await runTexasAutopilotForLead(row);
-    summary.scanned++;
+  try {
+    for (let i = 0; i < leads.length; i++) {
+      const row = leads[i];
+      const result = await runTexasAutopilotForLead(row);
+      summary.scanned++;
 
-    if (result.outcome === "email_discovered") {
-      summary.emailDiscovered++;
-      console.log(`✓ [${row.risk_score}] ${result.businessName}: ${result.email} (${result.detail})`);
-    } else if (result.outcome === "form_submitted") {
-      summary.formSubmitted++;
-      console.log(`⊕ [${row.risk_score}] ${result.businessName}: contact form submitted`);
-    } else if (result.outcome === "captcha_skipped") {
-      summary.captchaSkipped++;
-      console.log(`⊘ [${row.risk_score}] ${result.businessName}: CAPTCHA_SKIPPED`);
-    } else if (result.outcome === "no_website" || result.outcome === "no_contact_path") {
-      summary.noContact++;
-      console.log(`— [${row.risk_score}] ${result.businessName}: ${result.detail}`);
-    } else if (result.outcome === "error") {
-      summary.errors++;
-      console.log(`✗ [${row.risk_score}] ${result.businessName}: ${result.detail}`);
-    } else {
-      console.log(`· [${row.risk_score}] ${result.businessName}: ${result.detail}`);
-    }
+      if (result.outcome === "email_discovered") {
+        summary.emailDiscovered++;
+        console.log(`✓ [${row.risk_score}] ${result.businessName}: ${result.email} (${result.detail})`);
+      } else if (result.outcome === "form_submitted") {
+        summary.formSubmitted++;
+        console.log(`⊕ [${row.risk_score}] ${result.businessName}: contact form submitted`);
+      } else if (result.outcome === "captcha_skipped") {
+        summary.captchaSkipped++;
+        console.log(`⊘ [${row.risk_score}] ${result.businessName}: CAPTCHA_SKIPPED`);
+      } else if (result.outcome === "no_website" || result.outcome === "no_contact_path") {
+        summary.noContact++;
+        console.log(`— [${row.risk_score}] ${result.businessName}: ${result.detail}`);
+      } else if (result.outcome === "error") {
+        summary.errors++;
+        console.log(`✗ [${row.risk_score}] ${result.businessName}: ${result.detail}`);
+      } else {
+        console.log(`· [${row.risk_score}] ${result.businessName}: ${result.detail}`);
+      }
 
-    if (i < leads.length - 1) {
-      await sleep(delayMs());
+      if (i < leads.length - 1) {
+        await sleep(delayMs());
+      }
     }
+  } finally {
+    await closeSharedChromiumBrowser();
   }
 
   return summary;

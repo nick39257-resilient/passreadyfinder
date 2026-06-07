@@ -1,4 +1,10 @@
 import { getDb } from "./db.js";
+import { getApprovedLeads } from "./sender-repository.js";
+import {
+  explainOutreachEmailIssue,
+  formatOutreachEmailIssue,
+  isValidOutreachEmail,
+} from "../outreach-email.js";
 
 export interface LeadStatusCounts {
   new: number;
@@ -63,6 +69,55 @@ export async function countApprovedLeads(): Promise<number> {
     WHERE status = 'approved' AND draft_message IS NOT NULL
   `);
   return Number(result.rows[0]?.count ?? 0);
+}
+
+export async function countSendReadyLeads(): Promise<number> {
+  return (await getApprovedLeads()).length;
+}
+
+export interface PostboxLeadAudit {
+  id: number;
+  businessName: string;
+  email: string | null;
+  sendReady: boolean;
+  issue: string | null;
+}
+
+export async function auditPostboxLeads(): Promise<{
+  queued: number;
+  sendReady: number;
+  blocked: number;
+  leads: PostboxLeadAudit[];
+}> {
+  const db = getDb();
+  const result = await db.execute(`
+    SELECT id, business_name, email
+    FROM leads
+    WHERE status = 'approved'
+      AND draft_message IS NOT NULL
+    ORDER BY lead_score DESC, id DESC
+  `);
+
+  const leads: PostboxLeadAudit[] = result.rows.map((row) => {
+    const email = (row.email as string | null) ?? null;
+    const issueCode = explainOutreachEmailIssue(email);
+    const sendReady = isValidOutreachEmail(email);
+    return {
+      id: Number(row.id),
+      businessName: String(row.business_name ?? ""),
+      email,
+      sendReady,
+      issue: issueCode ? formatOutreachEmailIssue(issueCode) : null,
+    };
+  });
+
+  const sendReady = leads.filter((l) => l.sendReady).length;
+  return {
+    queued: leads.length,
+    sendReady,
+    blocked: leads.length - sendReady,
+    leads,
+  };
 }
 
 export async function countNeedsEyesDrafts(): Promise<number> {

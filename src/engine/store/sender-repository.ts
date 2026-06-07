@@ -3,6 +3,7 @@ import {
   emailNotSuppressedSql,
   isLeadOutreachHalted,
   isEmailSuppressed,
+  isValidOutreachEmail,
   normalizeOutreachEmail,
   outreachHaltedSqlArgs,
   outreachHaltedSqlInClause,
@@ -52,7 +53,9 @@ export async function getApprovedLeads(limit?: number): Promise<ApprovedLead[]> 
       : [maxTouches, ...outreachHaltedSqlArgs()];
   const result = await db.execute({ sql, args });
   const rows = result.rows as unknown as (ApprovedLead & { status?: string })[];
-  return rows.filter((row) => !isLeadOutreachHalted(row));
+  return rows.filter(
+    (row) => !isLeadOutreachHalted(row) && isValidOutreachEmail(row.email),
+  );
 }
 
 /** Post-fetch guard: block sends when email is on suppression_list. */

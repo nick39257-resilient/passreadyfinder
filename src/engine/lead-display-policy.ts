@@ -1,4 +1,5 @@
 import { productConfig } from "../config/product.config.js";
+import { isValidOutreachEmail } from "./outreach-email.js";
 
 /** Takeaways only — matches FSA BusinessType naming. */
 export function isTakeawayBusinessType(businessType: string): boolean {
@@ -15,8 +16,7 @@ export function isWithinRatingBand(fsaRating: number | null): boolean {
 }
 
 export function hasUsableEmail(email: string | null | undefined): boolean {
-  const trimmed = email?.trim();
-  return Boolean(trimmed && trimmed.includes("@"));
+  return isValidOutreachEmail(email);
 }
 
 export function hasReachableContact(input: {

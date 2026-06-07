@@ -19,6 +19,12 @@ export interface DailySendQuota {
   remaining: number;
 }
 
+export interface PostboxStatusSummary {
+  queued: number;
+  sendReady: number;
+  blocked: number;
+}
+
 export interface SystemStatusResponse {
   pulse: SystemPulseState;
   pulseLabel: string;
@@ -28,6 +34,7 @@ export interface SystemStatusResponse {
   complianceTip: string;
   dailyQuota: DailySendQuota;
   dailyCapResetDescription: string;
+  postbox: PostboxStatusSummary;
 }
 
 import { fetchWithTimeout } from "../lib/fetch-with-timeout.js";

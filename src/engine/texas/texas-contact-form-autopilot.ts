@@ -4,31 +4,16 @@ import {
   type ContactFormAttemptResult,
 } from "../services/contact-form-service.js";
 import {
-  closeBrowserSafe,
   remainingMs,
   withTimeout,
 } from "../services/service-timeout.js";
+import { getSharedChromiumBrowser } from "../services/playwright-browser.js";
 
 const CONTACT_PATHS = ["/contact", "/contact-us", "/contactus", "/get-in-touch", "/enquiry", "/"];
 const CONTACT_LINK_PATTERN =
   /contact(\s+us)?|connect|drop a line|get in touch|enquiry|reach out/i;
 
 import type { Page } from "playwright";
-
-type PlaywrightModule = typeof import("playwright");
-type PlaywrightBrowser = Awaited<
-  ReturnType<PlaywrightModule["chromium"]["launch"]>
->;
-
-async function loadPlaywright(): Promise<PlaywrightModule> {
-  try {
-    return (await import("playwright")) as PlaywrightModule;
-  } catch {
-    throw new Error(
-      "Playwright not installed — run: npm install playwright && npx playwright install chromium",
-    );
-  }
-}
 
 function joinUrl(base: string, path: string): string {
   return new URL(path, base).toString();
@@ -157,12 +142,11 @@ async function runTexasAutopilotContactFormInner(input: {
   const deadline = Date.now() + CONTACT_FORM_SITE_BUDGET_MS;
   const actionTimeout = () => Math.min(15_000, Math.max(1_000, remainingMs(deadline)));
 
-  const { chromium } = await loadPlaywright();
-  let browser: PlaywrightBrowser | null = null;
+  let page: Page | null = null;
 
   try {
-    browser = await chromium.launch({ headless: true, timeout: actionTimeout() });
-    const page = await browser.newPage();
+    const browser = await getSharedChromiumBrowser();
+    page = await browser.newPage();
     page.setDefaultTimeout(actionTimeout());
     page.setDefaultNavigationTimeout(actionTimeout());
 
@@ -226,7 +210,9 @@ async function runTexasAutopilotContactFormInner(input: {
 
     return { submitted: false, contactPageUrl: null, reason: "no_contact_form" };
   } finally {
-    await closeBrowserSafe(browser);
+    if (page) {
+      await page.close().catch(() => undefined);
+    }
   }
 }
 

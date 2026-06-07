@@ -13,6 +13,9 @@ export async function runFindLeadsJob(options?: {
   skipEnrichment?: boolean;
   segmentation?: FindJobParams;
   onProgress?: (message: string) => void | Promise<void>;
+  /** UK cron: process a slice of authorities per run. */
+  authorityBatch?: boolean;
+  enrichTopNOverride?: number;
 }): Promise<FindLeadsJobResult> {
   await runMigrations();
   console.log("FindLeads: scrape → score → store (no drafting)\n");
@@ -21,6 +24,9 @@ export async function runFindLeadsJob(options?: {
       skipEnrichment: options?.skipEnrichment,
       segmentation: options?.segmentation,
       onProgress: options?.onProgress,
+      authorityBatch: options?.authorityBatch,
+      enrichTopNOverride: options?.enrichTopNOverride,
+      updateSyncTimestamp: options?.authorityBatch ? undefined : true,
     });
     await logFindLeadsResult({ stored: result.stored, fetched: result.fetched });
     return result;

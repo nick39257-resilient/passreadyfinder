@@ -2,7 +2,9 @@ import { authHeaders } from "../lib/auth-headers.js";
 
 export interface SendPreviewResponse {
   approvedCount: number;
+  sendReadyCount?: number;
   sendableCount: number;
+  blockedCount?: number;
   confirmToken: string | null;
   sendLocked: boolean;
   reason?: string | null;

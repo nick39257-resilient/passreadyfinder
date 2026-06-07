@@ -1,3 +1,5 @@
+import { isValidOutreachEmail, normalizeOutreachEmail } from "../outreach-email.js";
+
 const BLOCKED_LOCAL_PARTS = new Set([
   "noreply",
   "no-reply",
@@ -13,6 +15,8 @@ const BLOCKED_LOCAL_PARTS = new Set([
   "jpeg",
   "gif",
   "webp",
+  "privacy",
+  "contact.privacy",
 ]);
 
 function normalizeWebsiteUrl(website: string): string | null {
@@ -91,7 +95,7 @@ export function pickBusinessEmail(
     if (email.includes("example.com") || email.includes("sentry.io")) {
       return false;
     }
-    return true;
+    return isValidOutreachEmail(email);
   });
 
   if (unique.length === 0) {
@@ -104,7 +108,7 @@ export function pickBusinessEmail(
       return domain === host || domain.endsWith(`.${host}`);
     });
     if (onDomain) {
-      return onDomain;
+      return normalizeOutreachEmail(onDomain);
     }
   }
 
@@ -112,11 +116,11 @@ export function pickBusinessEmail(
   for (const prefix of preferredPrefixes) {
     const hit = unique.find((email) => email.startsWith(prefix));
     if (hit) {
-      return hit;
+      return normalizeOutreachEmail(hit);
     }
   }
 
-  return unique[0] ?? null;
+  return normalizeOutreachEmail(unique[0] ?? null);
 }
 
 /** Fetch a business site and extract the best contact email. */

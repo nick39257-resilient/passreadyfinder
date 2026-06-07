@@ -1,9 +1,15 @@
 import { fetchEmailFromWebsite } from "./email-from-website.js";
+import { isValidOutreachEmail, normalizeOutreachEmail } from "../outreach-email.js";
 import { getLeadById } from "../store/leads-repository.js";
 import { getDb } from "../store/db.js";
 
 export async function updateLeadEmail(leadId: number, email: string | null): Promise<void> {
-  const normalized = email?.trim().toLowerCase() ?? null;
+  if (email?.trim() && !isValidOutreachEmail(email)) {
+    throw new Error(
+      "That email looks invalid or blocked (privacy/noreply/scraped junk). Enter the owner's inbox.",
+    );
+  }
+  const normalized = email ? normalizeOutreachEmail(email) : null;
   const db = getDb();
   await db.execute({
     sql: `

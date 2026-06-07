@@ -345,12 +345,15 @@
         }
       }
 
-      function openSendModal(sendableCount, approvedCount) {
-        const batch =
-          sendableCount < approvedCount
-            ? `${sendableCount} of ${approvedCount} approved (daily cap)`
-            : `${sendableCount}`;
-        sendModalText.textContent = `About to send ${batch} email${sendableCount === 1 ? "" : "s"}. Confirm?`;
+      function openSendModal(sendableCount, approvedCount, sendReadyCount, blockedCount) {
+        const ready = sendReadyCount ?? sendableCount;
+        let batch = `${sendableCount}`;
+        if (sendableCount < ready) {
+          batch = `${sendableCount} of ${ready} send-ready (daily cap)`;
+        } else if (ready < approvedCount) {
+          batch = `${sendableCount} of ${ready} send-ready (${approvedCount} queued)`;
+        }
+        sendModalText.textContent = `About to send ${batch} email${sendableCount === 1 ? "" : "s"}.${blockedCount > 0 ? ` ${blockedCount} queued lead(s) have invalid emails and will be skipped.` : ""} Confirm?`;
         sendModal.classList.remove("hidden");
         sendModal.classList.add("flex");
       }
@@ -398,18 +401,25 @@
             return;
           }
 
-          if (data.sendableCount === 0 || data.approvedCount === 0) {
+          if (data.sendableCount === 0 || (data.sendReadyCount ?? data.approvedCount) === 0) {
             showJob(
               data.dailyCapReached
                 ? "Daily send cap reached — try again tomorrow"
-                : "No approved leads to send",
+                : data.blockedCount > 0
+                  ? `No send-ready emails (${data.blockedCount} queued with invalid addresses)`
+                  : "No approved leads to send",
               false,
             );
             return;
           }
 
           sendPreview = data;
-          openSendModal(data.sendableCount, data.approvedCount);
+          openSendModal(
+            data.sendableCount,
+            data.approvedCount,
+            data.sendReadyCount,
+            data.blockedCount ?? 0,
+          );
         } catch (err) {
           showJob(err.message || "Preview failed", false);
         }
