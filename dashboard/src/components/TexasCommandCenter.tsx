@@ -261,6 +261,7 @@ export function TexasCommandCenter() {
           onRunComplete={() => {
             void refreshTexasAutopilotStatus();
             void refreshScoreTraffic();
+            void load();
           }}
         />
       </div>
@@ -352,10 +353,12 @@ export function TexasCommandCenter() {
         ) : leads.length === 0 ? (
           <p className="text-sm text-slate-400">
             {filter === "hasEmail"
-              ? "No leads ready for outreach yet — run Apollo enrichment (npm run texas-enrich-apollo) to populate owner emails."
+              ? "No leads ready for email outreach yet. Tap Trigger Autopilot Run above to discover emails via web search and contact forms, or use Apollo enrichment for owner emails."
               : filter === "mobile"
-                ? "No mobile food units in this dataset. Run ingest or switch to All Records."
-                : "No Texas records yet. Run ingest to pull open-data inspections (HB 2844 mobile outreach ready)."}
+                ? "No mobile food units in this dataset. Tap Ingest Texas open data below, then Trigger Autopilot Run."
+                : stats?.total === 0
+                  ? "No Texas records yet. Tap Ingest Texas open data below — Trigger Autopilot Run will start ingest automatically if the database is empty."
+                  : "No records match this filter. Try All Records, or tap Trigger Autopilot Run to discover websites and emails."}
           </p>
         ) : (
           <div className="space-y-6">
@@ -503,8 +506,7 @@ export function TexasCommandCenter() {
                 </button>
               ) : !selected.outreachComplete ? (
                 <p className="text-xs text-slate-500">
-                  No email or website on file — add contact data or run Apollo enrichment
-                  before outreach.
+                  No email or website on file — tap Trigger Autopilot Run above, or run Apollo enrichment for owner emails.
                 </p>
               ) : null}
             </div>

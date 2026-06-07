@@ -64,6 +64,14 @@ export async function markUkLeadEmailDiscovered(input: {
   });
 }
 
+export async function countUkAutopilotQueue(): Promise<number> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `SELECT COUNT(*) AS c FROM leads WHERE ${UK_AUTOPILOT_QUEUE_SQL}`,
+  });
+  return Number(result.rows[0]?.c ?? 0);
+}
+
 export async function countUkFormsSubmitted(): Promise<number> {
   const db = getDb();
   const result = await db.execute(

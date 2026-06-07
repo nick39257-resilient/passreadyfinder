@@ -1,8 +1,12 @@
 import type { Express, Request, Response } from "express";
 import { runMigrations } from "../engine/store/db.js";
-import { countUkFormsSubmitted } from "../engine/store/leads-autopilot-repository.js";
+import {
+  countUkAutopilotQueue,
+  countUkFormsSubmitted,
+} from "../engine/store/leads-autopilot-repository.js";
+import { countLeads } from "../engine/store/leads-repository.js";
 import { createJob, getLatestJob } from "../engine/store/jobs-repository.js";
-import { startJob } from "./job-runner.js";
+import { deferStartJob } from "./autopilot-kickoff.js";
 
 type ControlAuth = (req: Request, res: Response, next: () => void) => void;
 
@@ -31,12 +35,33 @@ export function mountUkRoutes(app: Express, requireControlAuth: ControlAuth): vo
 
   app.post("/api/uk/jobs/autopilot", requireControlAuth, async (req, res) => {
     try {
-      await runMigrations();
       const limit =
         typeof req.body?.limit === "number" ? req.body.limit : undefined;
+      const [totalLeads, queueSize] = await Promise.all([
+        countLeads(),
+        countUkAutopilotQueue(),
+      ]);
+
       const jobId = await createJob("uk_autopilot", { limit: limit ?? null });
-      startJob(jobId, "uk_autopilot");
-      res.status(202).json({ jobId, status: "started" });
+      deferStartJob(jobId, "uk_autopilot");
+
+      let message = "Autopilot run started in background";
+      if (totalLeads === 0) {
+        message =
+          "Autopilot started — no UK leads in database yet. Run Find in Command Center first.";
+      } else if (queueSize === 0) {
+        message =
+          "Autopilot started in background — no leads currently need discovery (they may already have email).";
+      } else {
+        message = `Autopilot run started in background (${queueSize} lead(s) in discovery queue).`;
+      }
+
+      res.status(200).json({
+        success: true,
+        message,
+        jobId,
+        queueSize,
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({

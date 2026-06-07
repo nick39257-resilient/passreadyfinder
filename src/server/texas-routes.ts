@@ -1,8 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { runMigrations } from "../engine/store/db.js";
 import {
-  countTexasLeads,
+  countTexasAutopilotQueue,
   countTexasFormsSubmitted,
+  countTexasLeads,
   getAllTexasLeads,
   getTexasLeadById,
   type TexasLeadSegment,
@@ -11,7 +12,7 @@ import { runTexasApolloEnrichmentBatch } from "../engine/texas/texas-enrichment-
 import { executeTexasLeadOutreach } from "../engine/texas/texas-outreach-executor.js";
 import { mapTexasLeadRowToApi } from "./texas-api-mapper.js";
 import { createJob, getLatestJob } from "../engine/store/jobs-repository.js";
-import { startJob } from "./job-runner.js";
+import { deferStartJob } from "./autopilot-kickoff.js";
 import type { TexasFindJobParams } from "../types/texas.js";
 
 type ControlAuth = (req: Request, res: Response, next: () => void) => void;
@@ -127,12 +128,51 @@ export function mountTexasRoutes(
 
   app.post("/api/texas/jobs/autopilot", requireControlAuth, async (req, res) => {
     try {
-      await runMigrations();
       const limit =
         typeof req.body?.limit === "number" ? req.body.limit : undefined;
-      const jobId = await createJob("texas_autopilot", { limit: limit ?? null });
-      startJob(jobId, "texas_autopilot");
-      res.status(202).json({ jobId, status: "started" });
+      const [counts, queueSize] = await Promise.all([
+        countTexasLeads(),
+        countTexasAutopilotQueue(),
+      ]);
+
+      const jobs: Array<{ type: string; jobId: string }> = [];
+      let message = "Autopilot run started in background";
+      let primaryJobId: string;
+      let ingestStarted = false;
+
+      if (counts.total === 0) {
+        const findJobId = await createJob("find_texas", {
+          limit: 500,
+          source: "austin",
+        });
+        jobs.push({ type: "find_texas", jobId: findJobId });
+        deferStartJob(findJobId, "find_texas");
+        ingestStarted = true;
+        primaryJobId = findJobId;
+        message =
+          "No Texas records in the database — started open-data ingest in the background. Tap Trigger Autopilot Run again after ingest completes to discover websites and emails.";
+      } else {
+        const jobId = await createJob("texas_autopilot", { limit: limit ?? null });
+        jobs.push({ type: "texas_autopilot", jobId });
+        deferStartJob(jobId, "texas_autopilot");
+        primaryJobId = jobId;
+
+        if (queueSize === 0) {
+          message =
+            "Autopilot started in background — no leads currently need discovery (they may already have email). Use Ingest or check All Records.";
+        } else {
+          message = `Autopilot run started in background (${queueSize} lead(s) in discovery queue).`;
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message,
+        jobId: primaryJobId,
+        queueSize,
+        ingestStarted,
+        jobs,
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({
@@ -143,11 +183,17 @@ export function mountTexasRoutes(
 
   app.post("/api/texas/jobs/enrich-apollo", requireControlAuth, async (req, res) => {
     try {
-      await runMigrations();
       const limit =
         typeof req.body?.limit === "number" ? req.body.limit : undefined;
-      const summary = await runTexasApolloEnrichmentBatch({ limit });
-      res.json({ ok: true, summary });
+      res.status(200).json({
+        success: true,
+        message: "Texas Apollo enrichment started in background",
+      });
+      setImmediate(() => {
+        void runTexasApolloEnrichmentBatch({ limit }).catch((err) => {
+          console.error("Texas Apollo enrichment failed:", err);
+        });
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({
@@ -159,8 +205,12 @@ export function mountTexasRoutes(
   app.post("/api/texas/jobs/reclassify", requireControlAuth, async (_req, res) => {
     try {
       const jobId = await createJob("texas_reclassify", {});
-      startJob(jobId, "texas_reclassify");
-      res.status(202).json({ jobId });
+      deferStartJob(jobId, "texas_reclassify");
+      res.status(200).json({
+        success: true,
+        message: "Texas reclassify started in background",
+        jobId,
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({
@@ -179,8 +229,12 @@ export function mountTexasRoutes(
         fullResync: req.body?.fullResync === true,
       };
       const jobId = await createJob("find_texas", params);
-      startJob(jobId, "find_texas");
-      res.status(202).json({ jobId });
+      deferStartJob(jobId, "find_texas");
+      res.status(200).json({
+        success: true,
+        message: "Texas ingest started in background",
+        jobId,
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({

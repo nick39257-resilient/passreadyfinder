@@ -370,6 +370,14 @@ export async function countTexasLeads(): Promise<{
   };
 }
 
+export async function countTexasAutopilotQueue(): Promise<number> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `SELECT COUNT(*) AS c FROM texas_leads WHERE ${TEXAS_AUTOPILOT_QUEUE_SQL}`,
+  });
+  return Number(result.rows[0]?.c ?? 0);
+}
+
 export async function countTexasFormsSubmitted(): Promise<number> {
   const db = getDb();
   const result = await db.execute(

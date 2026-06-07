@@ -3,6 +3,7 @@ import {
   startTexasAutopilotJob,
   startUkAutopilotJob,
   triggerAutopilotRuns,
+  type AutopilotKickoffResponse,
 } from "../api/autopilot-trigger";
 import { pollJobUntilDone } from "../lib/job-poll";
 
@@ -15,7 +16,7 @@ type Props = {
   onRunComplete?: () => void;
 };
 
-function buttonClassName(mode: AutopilotTriggerMode, busy: boolean): string {
+function buttonClassName(mode: AutopilotTriggerMode): string {
   const base =
     "flex min-h-12 w-full items-center justify-center rounded-2xl px-4 text-sm font-bold text-white disabled:opacity-60";
   if (mode === "texas") {
@@ -30,7 +31,27 @@ function statusClassName(mode: AutopilotTriggerMode): string {
     : "mt-2 text-center text-xs text-emerald-200/90";
 }
 
-/** Full-width mobile trigger — starts UK, Texas, or both autopilot jobs. */
+function watchJobInBackground(
+  kickoff: AutopilotKickoffResponse,
+  prefix: string,
+  onProgress: (text: string) => void,
+  onComplete?: () => void,
+): void {
+  void pollJobUntilDone(kickoff.jobId, (job) => {
+    onProgress(`${prefix}: ${job.progress ?? job.status}`);
+  })
+    .promise.then(() => {
+      onProgress(`${prefix}: complete`);
+      onComplete?.();
+    })
+    .catch((err) => {
+      onProgress(
+        err instanceof Error ? err.message : `${prefix}: job failed`,
+      );
+    });
+}
+
+/** Full-width mobile trigger — returns immediately; job runs in background. */
 export function MobileAutopilotTrigger({
   mode = "both",
   onRunStarted,
@@ -45,41 +66,23 @@ export function MobileAutopilotTrigger({
 
     try {
       if (mode === "uk") {
-        setLabel("Starting UK autopilot…");
-        const { jobId } = await startUkAutopilotJob();
-        setLabel("UK autopilot running…");
-        const { promise } = pollJobUntilDone(jobId, (job) => {
-          setLabel(`UK: ${job.progress ?? job.status}`);
-        });
-        await promise;
+        const kickoff = await startUkAutopilotJob();
+        setLabel(kickoff.message);
+        watchJobInBackground(kickoff, "UK", setLabel, onRunComplete);
       } else if (mode === "texas") {
-        setLabel("Starting Texas autopilot…");
-        const { jobId } = await startTexasAutopilotJob();
-        setLabel("Texas autopilot running…");
-        const { promise } = pollJobUntilDone(jobId, (job) => {
-          setLabel(`Texas: ${job.progress ?? job.status}`);
-        });
-        await promise;
+        const kickoff = await startTexasAutopilotJob();
+        setLabel(kickoff.message);
+        watchJobInBackground(kickoff, "Texas", setLabel, onRunComplete);
       } else {
-        setLabel("Starting UK + Texas autopilot…");
-        const { ukJobId, texasJobId } = await triggerAutopilotRuns();
-        setLabel("Autopilot running in background…");
-        const { promise: ukPromise } = pollJobUntilDone(ukJobId, (job) => {
-          setLabel(`UK: ${job.progress ?? job.status}`);
-        });
-        const { promise: texasPromise } = pollJobUntilDone(texasJobId, (job) => {
-          setLabel(`Texas: ${job.progress ?? job.status}`);
-        });
-        await Promise.allSettled([ukPromise, texasPromise]);
+        const { uk, texas } = await triggerAutopilotRuns();
+        setLabel(`${uk.message} / ${texas.message}`);
+        watchJobInBackground(uk, "UK", setLabel, onRunComplete);
+        watchJobInBackground(texas, "Texas", setLabel, onRunComplete);
       }
-
-      setLabel("Autopilot run complete.");
-      onRunComplete?.();
     } catch (err) {
       setLabel(err instanceof Error ? err.message : "Autopilot failed to start");
     } finally {
       setBusy(false);
-      window.setTimeout(() => setLabel(null), 8000);
     }
   };
 
@@ -89,9 +92,9 @@ export function MobileAutopilotTrigger({
         type="button"
         disabled={busy}
         onClick={() => void handleTrigger()}
-        className={buttonClassName(mode, busy)}
+        className={buttonClassName(mode)}
       >
-        {busy ? "Autopilot running…" : "Trigger Autopilot Run"}
+        {busy ? "Starting…" : "Trigger Autopilot Run"}
       </button>
       {label ? <p className={statusClassName(mode)}>{label}</p> : null}
     </div>
