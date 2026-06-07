@@ -716,6 +716,7 @@ export function App() {
   return (
     <div className="mx-auto min-h-screen max-w-lg px-3 pb-[6.5rem] pt-5 sm:px-4">
       <MobileAutopilotTrigger
+        mode="uk"
         onRunStarted={() => {
           setUkAutopilot((prev) =>
             prev

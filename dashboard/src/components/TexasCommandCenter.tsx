@@ -19,6 +19,9 @@ import {
 import { TexasContactOptions } from "./TexasContactOptions";
 import { TexasLeadCard } from "./TexasLeadCard";
 import { AutopilotHeartbeat } from "./AutopilotHeartbeat";
+import { MobileAutopilotTrigger } from "./MobileAutopilotTrigger";
+import { ScoreTrafficCounter } from "./ScoreTrafficCounter";
+import { fetchScoreTrafficStats, type ScoreTrafficStats } from "../api/score-traffic";
 
 function jobProgressLabel(job: JobStatus): string {
   if (typeof job.progress === "string" && job.progress.trim()) {
@@ -64,6 +67,25 @@ export function TexasCommandCenter() {
     tone: "success" | "error" | "info";
     text: string;
   } | null>(null);
+  const [scoreTraffic, setScoreTraffic] = useState<ScoreTrafficStats | null>(null);
+
+  const refreshTexasAutopilotStatus = useCallback(async () => {
+    try {
+      const next = await fetchTexasAutopilotStatus();
+      setAutopilot(next);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const refreshScoreTraffic = useCallback(async () => {
+    try {
+      const stats = await fetchScoreTrafficStats();
+      setScoreTraffic(stats);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,12 +99,13 @@ export function TexasCommandCenter() {
       setLeads(leadRows);
       setStats(s);
       setAutopilot(a);
+      void refreshScoreTraffic();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, refreshScoreTraffic]);
 
   useEffect(() => {
     void load();
@@ -103,6 +126,26 @@ export function TexasCommandCenter() {
 
     void tick();
     const id = window.setInterval(tick, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const stats = await fetchScoreTrafficStats();
+        if (!cancelled) {
+          setScoreTraffic(stats);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    void tick();
+    const id = window.setInterval(tick, 45_000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -199,6 +242,29 @@ export function TexasCommandCenter() {
 
   return (
     <div className="mx-auto min-h-dvh max-w-lg bg-[#f5f2eb] text-[#333333] md:max-w-xl lg:max-w-2xl">
+      <div className="px-4 pt-3">
+        <MobileAutopilotTrigger
+          mode="texas"
+          onRunStarted={() => {
+            setAutopilot((prev) =>
+              prev
+                ? { ...prev, metadata: { ...prev.metadata, engineStatus: "Processing" } }
+                : {
+                    metadata: {
+                      engineStatus: "Processing",
+                      lastRunTimestamp: null,
+                      totalFormsSubmitted: 0,
+                    },
+                  },
+            );
+          }}
+          onRunComplete={() => {
+            void refreshTexasAutopilotStatus();
+            void refreshScoreTraffic();
+          }}
+        />
+      </div>
+
       <header className="sticky top-0 z-30 border-b border-amber-900/60 bg-[#0a1218]/95 px-4 py-3 backdrop-blur">
         <div className="flex min-h-12 items-center justify-between gap-2">
           <div>
@@ -266,6 +332,10 @@ export function TexasCommandCenter() {
           </p>
         ) : null}
       </header>
+
+      <div className="px-4 pt-3">
+        <ScoreTrafficCounter stats={scoreTraffic} />
+      </div>
 
       <main className="px-4 pb-28 pt-4">
         {error ? (
