@@ -1,4 +1,4 @@
-import { searchDuckDuckGoOnce } from "../texas/texas-duckduckgo-discovery.js";
+import { searchDuckDuckGoOnce } from "../search/web-search-discovery.js";
 
 const UK_CORP_SUFFIX_PATTERN =
   /\s*,?\s*(Ltd\.?|Limited|PLC|P\.L\.C\.|LLP|CIC|Inc\.?)\.?\s*$/i;
@@ -58,7 +58,7 @@ export async function discoverUkWebsiteViaDuckDuckGo(input: {
       category,
     });
     console.log(`[uk-ddg] searching: ${query}`);
-    const website = await searchDuckDuckGoOnce(query);
+    const website = await searchDuckDuckGoOnce(query, "uk-ddg");
     if (website) {
       console.log(`[uk-ddg] found: ${website}`);
       return website;
