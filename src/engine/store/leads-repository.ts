@@ -30,8 +30,9 @@ export async function upsertLead(input: LeadUpsertInput): Promise<void> {
         fsa_id, business_name, business_type, address, postcode,
         latitude, longitude, fsa_rating, fsa_last_inspection_date,
         fsa_score_hygiene, fsa_score_structural, fsa_score_management,
+        local_authority_name,
         phone, website, on_delivery_app, lead_score, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       ON CONFLICT(fsa_id) DO UPDATE SET
         business_name = excluded.business_name,
         business_type = excluded.business_type,
@@ -44,6 +45,7 @@ export async function upsertLead(input: LeadUpsertInput): Promise<void> {
         fsa_score_hygiene = COALESCE(excluded.fsa_score_hygiene, leads.fsa_score_hygiene),
         fsa_score_structural = COALESCE(excluded.fsa_score_structural, leads.fsa_score_structural),
         fsa_score_management = COALESCE(excluded.fsa_score_management, leads.fsa_score_management),
+        local_authority_name = COALESCE(excluded.local_authority_name, leads.local_authority_name),
         phone = COALESCE(excluded.phone, leads.phone),
         website = COALESCE(excluded.website, leads.website),
         on_delivery_app = excluded.on_delivery_app,
@@ -64,6 +66,7 @@ export async function upsertLead(input: LeadUpsertInput): Promise<void> {
       input.fsaScoreHygiene ?? null,
       input.fsaScoreStructural ?? null,
       input.fsaScoreManagement ?? null,
+      input.localAuthorityName ?? null,
       input.phone ?? null,
       input.website ?? null,
       input.onDeliveryApp ?? "unknown",
@@ -133,6 +136,8 @@ export interface LeadRow {
   contact_method?: string | null;
   owner_name?: string | null;
   enrichment_detail?: string | null;
+  local_authority_name?: string | null;
+  last_previewed_at?: string | null;
   needs_eyes_updated_at?: string | null;
   created_at: string;
   updated_at: string;

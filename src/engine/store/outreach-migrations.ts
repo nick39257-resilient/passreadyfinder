@@ -25,6 +25,8 @@ const LEAD_PHASE_B_COLUMNS = [
   "apollo_enriched_at TEXT",
   "contact_form_submitted_at TEXT",
   "contact_form_page_url TEXT",
+  "local_authority_name TEXT",
+  "last_previewed_at TEXT",
 ] as const;
 
 async function columnExists(table: string, column: string): Promise<boolean> {

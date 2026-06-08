@@ -33,9 +33,6 @@ import {
 } from "./outreach-halt.js";
 import { getDb, runMigrations } from "./store/db.js";
 
-/** 2-Star Rescue consultant tone for high-risk outreach */
-const RESCUE_TEMPLATE_RATING = 2;
-
 const queueConfig = productConfig.outreach.queueDrafter;
 
 interface LeadForQueueDraft extends LeadForDraft {
@@ -109,6 +106,7 @@ async function fetchEligibleNewLeads(limit: number): Promise<LeadForQueueDraft[]
         email,
         flag_for_review,
         fsa_last_inspection_date,
+        local_authority_name,
         phone,
         website,
         fsa_score_hygiene,
@@ -189,7 +187,6 @@ async function draftSingleLead(lead: LeadForQueueDraft, llmClient: OpenAI): Prom
       });
 
       return generateDraftForLead(lead, llmClient, {
-        templateRating: RESCUE_TEMPLATE_RATING,
         hookContext: { competitors, localPassReadyCount },
         consultantTip,
         variables,

@@ -65,6 +65,7 @@ export interface ApiLeadDetail {
   contactDiscovery: ApiContactDiscovery | null;
   contactedAt: string | null;
   repliedAt: string | null;
+  lastPreviewedAt: string | null;
 }
 
 function readStatus(row: LeadRow & { status?: string }): string {
@@ -172,5 +173,6 @@ export async function mapLeadRowToApiLead(
     contactDiscovery: options?.contactDiscovery ?? null,
     contactedAt: row.contacted_at ?? null,
     repliedAt: row.replied_at ?? null,
+    lastPreviewedAt: row.last_previewed_at ?? null,
   };
 }

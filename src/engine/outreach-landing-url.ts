@@ -25,6 +25,15 @@ export function firstTouchAllowsLandingLink(): boolean {
   return true;
 }
 
+/** Append low-profile `rid` for score-traffic attribution (Touch 2/3 CTAs). */
+export function buildTrackedLandingUrl(baseUrl: string, rid: number): string {
+  const trimmed = baseUrl.trim();
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const url = new URL(withScheme);
+  url.searchParams.set("rid", String(rid));
+  return url.toString();
+}
+
 export function shouldIncludeLandingInDraft(options: {
   includeLink?: boolean;
   hasReplied?: boolean;
@@ -36,8 +45,7 @@ export function shouldIncludeLandingInDraft(options: {
   if (options.hasReplied) {
     return true;
   }
-  if (firstTouchAllowsLandingLink() && (options.touchCount ?? 0) === 0) {
-    return true;
-  }
-  return false;
+  const touchCount = options.touchCount ?? 0;
+  // Multi-touch sequence: touch 1 & 4 are link-free; touches 2–3 carry SafeScore/WhatsApp CTA.
+  return touchCount === 1 || touchCount === 2;
 }

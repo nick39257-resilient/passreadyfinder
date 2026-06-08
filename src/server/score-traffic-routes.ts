@@ -2,6 +2,8 @@ import type { Express, Request, Response } from "express";
 import { runMigrations } from "../engine/store/db.js";
 import {
   getScoreTrafficCounts,
+  parseScoreTrafficRid,
+  recordAttributedScoreTrafficHit,
   recordScoreTrafficHit,
   type ScoreTrafficSite,
 } from "../engine/store/score-traffic-repository.js";
@@ -53,12 +55,24 @@ export function mountScoreTrafficRoutes(
   app.get("/api/score-traffic/pixel.gif", async (req, res) => {
     try {
       const site = parseSite(req.query.site);
+      const rid = parseScoreTrafficRid(req.query.rid);
+
       if (!site || !trafficKeyAuthorized(req)) {
         sendPixel(res);
         return;
       }
+
       await runMigrations();
-      await recordScoreTrafficHit(site);
+
+      if (rid !== null) {
+        const { attributed } = await recordAttributedScoreTrafficHit({ site, rid });
+        if (attributed) {
+          console.log(`Score preview attributed: site=${site} rid=${rid}`);
+        }
+      } else {
+        await recordScoreTrafficHit(site);
+      }
+
       sendPixel(res);
     } catch (err) {
       console.error(err);
@@ -78,8 +92,13 @@ export function mountScoreTrafficRoutes(
         return;
       }
       await runMigrations();
-      await recordScoreTrafficHit(site);
-      res.json({ ok: true, site });
+      const rid = parseScoreTrafficRid(req.body?.rid ?? req.query.rid);
+      if (rid !== null) {
+        await recordAttributedScoreTrafficHit({ site, rid });
+      } else {
+        await recordScoreTrafficHit(site);
+      }
+      res.json({ ok: true, site, rid });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to record score traffic hit" });

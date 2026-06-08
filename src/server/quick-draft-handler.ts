@@ -91,10 +91,14 @@ export async function quickDraftLeadById(leadId: number): Promise<QuickDraftResu
   const consultantTip = resolveConsultantTip(fsaScores);
   const leadForDraft: LeadForDraft = {
     id: row.id,
+    fsa_id: row.fsa_id,
     business_name: row.business_name,
     address: row.address,
     postcode: row.postcode,
     fsa_rating: row.fsa_rating,
+    fsa_last_inspection_date: row.fsa_last_inspection_date ?? null,
+    local_authority_name: row.local_authority_name ?? null,
+    phone: row.phone ?? null,
     email: row.email ?? null,
     flag_for_review: row.flag_for_review ?? 0,
   };
@@ -112,7 +116,6 @@ export async function quickDraftLeadById(leadId: number): Promise<QuickDraftResu
     leadForDraft,
     llm,
     {
-      templateRating: row.fsa_rating === 2 ? 2 : row.fsa_rating,
       hookContext: { competitors, localPassReadyCount },
       consultantTip,
       variables,

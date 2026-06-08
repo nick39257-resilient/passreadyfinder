@@ -45,6 +45,7 @@ import { dismissLead, isLeadHidden, snoozeLead } from "./lib/lead-storage";
 import { isOutreachHaltedStatus } from "./lib/outreach-halt";
 import { readLocal, removeLocal, writeLocal } from "./lib/safe-storage";
 import { getLeadNextAction } from "./lib/lead-next-action";
+import { liveVisitorSortKey } from "./lib/live-visitor";
 import { TexasCommandCenter } from "./components/TexasCommandCenter";
 import { AutopilotHeartbeat } from "./components/AutopilotHeartbeat";
 import { fetchUkAutopilotStatus } from "./api/uk-autopilot";
@@ -281,6 +282,10 @@ export function App() {
       .filter((lead) => !isLeadHidden(lead.id))
       .filter((lead) => showLeadInRadarList(lead, leadFilter))
       .sort((a, b) => {
+        const liveDelta = liveVisitorSortKey(b.lastPreviewedAt) - liveVisitorSortKey(a.lastPreviewedAt);
+        if (liveDelta !== 0) {
+          return liveDelta;
+        }
         const ra = a.fsaRating ?? 99;
         const rb = b.fsaRating ?? 99;
         if (ra !== rb) {

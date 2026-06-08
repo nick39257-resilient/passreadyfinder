@@ -83,6 +83,7 @@ export function establishmentToRawLead(e: FsaEstablishment): RawLead {
     longitude: parseFloat(e.geocode?.longitude ?? "0"),
     fsaRating: parseFsaRating(e.RatingValue),
     fsaLastInspectionDate: e.RatingDate ? e.RatingDate.split("T")[0] : null,
+    localAuthorityName: e.LocalAuthorityName?.trim() || null,
   };
 }
 

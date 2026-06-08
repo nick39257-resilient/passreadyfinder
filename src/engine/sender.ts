@@ -1,3 +1,4 @@
+import { resolveOutreachSubject } from "./drafter.js";
 import { getDailySendQuota } from "./daily-send-cap.js";
 import {
   getDeliverabilityStatus,
@@ -25,12 +26,6 @@ import {
   sendSmtpMail,
 } from "./services/smtp-mail-service.js";
 
-/** Override in .env — avoid scare-word subjects that hurt opens/spam scores. */
-function outreachEmailSubject(): string {
-  const custom = process.env.OUTREACH_EMAIL_SUBJECT?.trim();
-  if (custom) return custom;
-  return "Quick question about your kitchen records";
-}
 
 function isTestEmailFallbackEnabled(): boolean {
   return process.env.ALLOW_TEST_EMAIL_FALLBACK?.trim().toLowerCase() === "true";
@@ -179,7 +174,11 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
 
       const { messageId } = await sendSmtpMail({
         to,
-        subject: outreachEmailSubject(),
+        subject: resolveOutreachSubject({
+          businessName: lead.business_name,
+          address: row.address,
+          leadId: lead.id,
+        }),
         text,
         ...(html ? { html } : {}),
       });

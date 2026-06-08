@@ -9,6 +9,7 @@ import {
 import { riskPillStyles } from "../lib/risk-styles";
 import type { RiskBand } from "./ActionCard";
 import { RiskScoreBadge } from "./RiskScoreBadge";
+import { isLiveVisitor } from "../lib/live-visitor";
 import { ContactRoutesPanel } from "./ContactRoutesPanel";
 
 function ScoreCell({
@@ -100,6 +101,7 @@ export function LeadDetailDrawer({
   const [emailDraft, setEmailDraft] = useState("");
   const flaggedForReview = Boolean(lead.flagForReview);
   const needsEyesReason = lead.needsEyesReason?.trim() || null;
+  const liveVisitor = isLiveVisitor(lead.lastPreviewedAt);
 
   useEffect(() => {
     setEmailDraft(lead.email ?? "");
@@ -119,6 +121,11 @@ export function LeadDetailDrawer({
         <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-slate-600" aria-hidden />
 
         <div className="p-5 pb-6">
+          {liveVisitor ? (
+            <div className="mb-4 animate-pulse rounded-xl border-2 border-amber-400 bg-amber-950/50 px-3 py-2.5 text-sm font-semibold text-amber-100 ring-2 ring-amber-400/50">
+              Live visitor — they opened SafeScore in the last 24 hours. Follow up now.
+            </div>
+          ) : null}
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <h2 className="text-xl font-bold leading-tight">{lead.businessName}</h2>

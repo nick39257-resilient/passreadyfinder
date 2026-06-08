@@ -71,6 +71,8 @@ export function buildOutboundWaMeLink(input: {
   phone?: string | null;
   whatsapp?: string | null;
   prefillTemplate?: string;
+  /** Tracked SafeScore URL (with ?rid=) — defaults to untracked getOutreachLandingUrl(). */
+  landingUrl?: string;
 }): string | null {
   const fromWhatsapp = normalizeWhatsAppDigits(input.whatsapp);
   const fromPhone = normalizeWhatsAppDigits(input.phone);
@@ -82,7 +84,7 @@ export function buildOutboundWaMeLink(input: {
   const template =
     input.prefillTemplate?.trim() || productConfig.outreach.whatsappOutboundTemplate;
   const prefill = template.replace("[Business Name]", input.businessName.trim());
-  const landing = getOutreachLandingUrl();
+  const landing = input.landingUrl?.trim() || getOutreachLandingUrl();
   const body = prefill.includes(landing) ? prefill : `${prefill}\n\nFree score check: ${landing}`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(body)}`;
 }

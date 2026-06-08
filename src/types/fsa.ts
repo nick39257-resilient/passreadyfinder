@@ -60,6 +60,8 @@ export interface RawLead {
   longitude: number;
   fsaRating: number | null;
   fsaLastInspectionDate: string | null;
+  /** FSA establishment LocalAuthorityName — e.g. Preston, Burnley */
+  localAuthorityName?: string | null;
   fsaScoreHygiene?: number | null;
   fsaScoreStructural?: number | null;
   fsaScoreManagement?: number | null;

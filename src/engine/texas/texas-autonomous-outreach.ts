@@ -11,6 +11,7 @@ import {
 } from "../store/texas-leads-repository.js";
 import { texasProductConfig } from "../../config/product.texas.config.js";
 import { getTexasAutopilotScoreUrl } from "../../config/score-urls.js";
+import { buildTrackedLandingUrl } from "../outreach-landing-url.js";
 import { getEmailUser } from "../services/smtp-mail-service.js";
 import { closeSharedChromiumBrowser } from "../services/playwright-browser.js";
 
@@ -55,8 +56,7 @@ function autopilotSignatureLine(): string {
   return `${autopilotSenderName()} (${autopilotReplyEmail()})`;
 }
 
-function buildAutopilotFormMessage(): string {
-  const scoreUrl = getTexasAutopilotScoreUrl();
+function buildAutopilotFormMessage(scoreUrl: string): string {
   return `Hey team,
 
 I noticed your recent health inspection score. With the new Texas HB 2844 compliance regulations taking full effect this July, DSHS is completely changing how food units have to log their chain of custody.
@@ -80,8 +80,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function pitchForLead(_row: TexasLeadRow): string {
-  return buildAutopilotFormMessage();
+function pitchForLead(row: TexasLeadRow): string {
+  const scoreUrl = buildTrackedLandingUrl(getTexasAutopilotScoreUrl(), row.id);
+  return buildAutopilotFormMessage(scoreUrl);
 }
 
 async function resolveWebsite(row: TexasLeadRow): Promise<string | null> {

@@ -2,23 +2,32 @@ import OpenAI from "openai";
 import { productConfig } from "../config/product.config.js";
 import type { DraftJobParams, TargetRating } from "../types/segmentation.js";
 import type { DraftHookContext } from "./intelligence/draft-hooks.js";
-import { buildDraftHookGuidance } from "./intelligence/draft-hooks.js";
+import type { DraftVariables } from "./intelligence/draft-variables.js";
 import {
-  assertDraftUsesVariables,
-  buildDraftVariables,
-  type DraftVariables,
-} from "./intelligence/draft-variables.js";
-import {
+  buildTrackedLandingUrl,
   getOutreachLandingUrl,
   shouldIncludeLandingInDraft,
 } from "./outreach-landing-url.js";
 import { stripUrls } from "./outreach-message.js";
 import { isValidOutreachEmail } from "./outreach-email.js";
+import { calculateRiskScore } from "./risk-scorer.js";
+import { buildOutboundWaMeLink } from "./whatsapp-link.js";
 import {
+  breakupDraftMessageSchema,
   draftMessageSchema,
   firstTouchDraftMessageSchema,
+  followUpDraftMessageSchema,
 } from "../validation/draft.schemas.js";
-import { MAX_DRAFT_WORDS, wordCount } from "../validation/draft.schemas.js";
+import {
+  BANNED_FORMAL_WORDS,
+  MAX_DRAFT_WORDS,
+  stripMobileSignature,
+  wordCount,
+} from "../validation/draft.schemas.js";
+import {
+  LOCAL_AUTHORITY_FALLBACK,
+  sanitizeLocalAuthorityName,
+} from "../validation/authority.schemas.js";
 import { geminiChatCompletionSchema } from "../validation/gemini.schemas.js";
 import {
   emailNotSuppressedSql,
@@ -35,12 +44,112 @@ import { setLeadNeedsEyesReason } from "./store/leads-repository.js";
 
 export interface LeadForDraft {
   id: number;
+  fsa_id: number;
   business_name: string;
   address: string;
   postcode: string;
   fsa_rating: number | null;
+  fsa_last_inspection_date?: string | null;
+  local_authority_name?: string | null;
+  phone?: string | null;
   email: string | null;
   flag_for_review: number | null;
+}
+
+/** 1-based touch number for the email being drafted (maps from touch_count). */
+export type SequenceTouch = 1 | 2 | 3 | 4;
+
+export interface DraftSequenceContext {
+  touch: SequenceTouch;
+  businessName: string;
+  localAuthorityName: string;
+  fsaRating: number | null;
+  riskScore: number;
+  daysSinceInspection: number | null;
+  ctaUrl: string | null;
+  ctaType: "none" | "safescore" | "whatsapp";
+}
+
+/** Resolve council name for prompts — never returns blank or template tokens. */
+export function resolveDraftLocalAuthorityName(raw: string | null | undefined): string {
+  const fromLead = sanitizeLocalAuthorityName(raw);
+  if (fromLead !== LOCAL_AUTHORITY_FALLBACK) {
+    return fromLead;
+  }
+  const area = productConfig.area;
+  if (area.mode === "localAuthority") {
+    const fromConfig = sanitizeLocalAuthorityName(area.localAuthorityName);
+    if (fromConfig !== LOCAL_AUTHORITY_FALLBACK) {
+      return fromConfig;
+    }
+  }
+  return LOCAL_AUTHORITY_FALLBACK;
+}
+
+export function sequenceTouchFromCount(
+  touchCount: number,
+  hasReplied = false,
+): SequenceTouch {
+  if (hasReplied) {
+    return 2;
+  }
+  const next = Math.min(4, Math.max(1, touchCount + 1));
+  return next as SequenceTouch;
+}
+
+export function daysSinceInspection(inspectionDate: string | null | undefined): number | null {
+  if (!inspectionDate?.trim()) {
+    return null;
+  }
+  const parsed = new Date(inspectionDate);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return Math.max(0, Math.floor((Date.now() - parsed.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+const CASUAL_SUBJECT_TEMPLATES = [
+  (businessName: string, _street: string) => `quick kitchen question re: ${businessName}`,
+  (businessName: string, _street: string) => `owner / kitchen manager at ${businessName}?`,
+  (_businessName: string, street: string) => `question about your space on ${street}`,
+] as const;
+
+const MOBILE_SIGNATURES = [
+  "Sent from my iPhone",
+  "Typed on the go, please excuse typos",
+] as const;
+
+/** First line of address — high street / road name for casual subject lines. */
+export function extractStreetName(address: string): string {
+  const first = address.split(",")[0]?.trim();
+  if (first && first.length > 2) {
+    return first;
+  }
+  return address.trim() || "the high street";
+}
+
+/** Randomized low-friction subject using business name or street. */
+export function resolveOutreachSubject(input: {
+  businessName: string;
+  address: string;
+  leadId?: number;
+}): string {
+  const custom = process.env.OUTREACH_EMAIL_SUBJECT?.trim();
+  if (custom) {
+    return custom;
+  }
+  const business = input.businessName.trim();
+  const street = extractStreetName(input.address);
+  const idx =
+    Math.abs((input.leadId ?? business.length + street.length) % CASUAL_SUBJECT_TEMPLATES.length);
+  return CASUAL_SUBJECT_TEMPLATES[idx](business, street);
+}
+
+/** Append a plain-text mobile signature — one per lead, stable across touches. */
+export function appendMobileSignature(body: string, leadId: number): string {
+  const sig = MOBILE_SIGNATURES[Math.abs(leadId) % MOBILE_SIGNATURES.length];
+  const trimmed = stripMobileSignature(body);
+  return `${trimmed}\n\n${sig}`;
 }
 
 export type { DraftVariables };
@@ -118,112 +227,204 @@ function logLlmConfig(): void {
   console.log(`API key: ${process.env.OPENAI_API_KEY ? "set" : "missing"}\n`);
 }
 
-/** Internal pacing from FSA rating — never cite rating or inspection outcomes in the draft. */
-export function ratingToneGuidance(rating: number | null): string {
-  if (rating === 2) {
-    return "Internal (do not mention in copy): extra warmth—they may be stretched thin; keep it practical and human.";
+/**
+ * Internal warmth dial — never mention stars, ratings, or inspection outcomes in copy.
+ */
+export function ratingToneGuidance(input: {
+  fsaRating: number | null;
+  riskScore?: number | null;
+}): string {
+  const rating = input.fsaRating;
+  const risk = input.riskScore ?? null;
+
+  if (rating !== null && rating <= 2) {
+    return "Internal: they're probably stretched — extra warmth, zero judgment, like texting a mate who had a rough week.";
   }
   if (rating === 3) {
-    return "Internal (do not mention in copy): steady, peer-to-peer tone—habits and small wins, not lectures.";
+    return "Internal: steady mid-table spot — chat about small daily habits, not lectures.";
   }
-  if (rating === 4 || rating === 5) {
-    return "Internal (do not mention in copy): light touch—efficiency and peace of mind, not fixing problems.";
+  if (rating !== null && rating >= 4) {
+    return "Internal: they're doing fine — light nudge about staying ahead of spot checks, not fixing problems.";
   }
-  return "Internal (do not mention in copy): friendly peer who runs a kitchen, not a consultant auditing them.";
+  if (risk !== null && risk >= 75) {
+    return "Internal: extra warmth — sounds like a hurried favour, not outreach.";
+  }
+  return "Internal: friendly kitchen peer down the road, typed on your phone between services.";
 }
 
-function buildSystemPrompt(
-  rating: number | null,
-  hookLines: string[],
-  includeLink: boolean,
-  landingUrl?: string,
-): string {
+function resolveSequenceCta(input: {
+  touch: SequenceTouch;
+  businessName: string;
+  phone?: string | null;
+  landingUrl: string;
+  trackingRid: number;
+}): { ctaUrl: string | null; ctaType: DraftSequenceContext["ctaType"] } {
+  if (input.touch === 1 || input.touch === 4) {
+    return { ctaUrl: null, ctaType: "none" };
+  }
+
+  const trackedLanding = buildTrackedLandingUrl(input.landingUrl, input.trackingRid);
+
+  const whatsappUrl = buildOutboundWaMeLink({
+    businessName: input.businessName,
+    phone: input.phone,
+    landingUrl: trackedLanding,
+  });
+  if (whatsappUrl) {
+    return { ctaUrl: whatsappUrl, ctaType: "whatsapp" };
+  }
+  return { ctaUrl: trackedLanding, ctaType: "safescore" };
+}
+
+const CASUAL_BANNED_WORDS = BANNED_FORMAL_WORDS.join(", ");
+
+function authorityCasualPhrasing(authority: string): string {
+  if (authority === LOCAL_AUTHORITY_FALLBACK) {
+    return authority;
+  }
+  return `the ${authority} environmental health team`;
+}
+
+function buildAuthorityWeaveGuidance(ctx: DraftSequenceContext): string[] {
+  const council = authorityCasualPhrasing(ctx.localAuthorityName);
+  return [
+    `local_authority_name: ${ctx.localAuthorityName}`,
+    `Weave ${council} casually into the FIRST TWO SENTENCES — how a local owner talks, not a template.`,
+    `Examples: "Hear anything about the ${ctx.localAuthorityName} team doing surprise rounds this week?" or "the ${ctx.localAuthorityName} council inspectors have been busy lately."`,
+    "Never use {{brackets}} or placeholder tokens. Sound like gossip between kitchen managers.",
+  ];
+}
+
+function buildTouchSequenceGuidance(ctx: DraftSequenceContext, streetName: string): string[] {
+  switch (ctx.touch) {
+    case 1:
+      return [
+        "Touch 1 — zero links, zero pitch.",
+        ...buildAuthorityWeaveGuidance(ctx),
+        `Also mention their spot on ${streetName} or use their business name naturally.`,
+        "ONE open question only — like you spotted their team and wondered something.",
+        `Style reference: "Hey, saw your team on ${streetName}. Hear anything about the ${ctx.localAuthorityName} team doing surprise rounds this week? Got a quick checklist that helped us if you want it."`,
+        "Do NOT include URLs, wa.me, or anything that sounds like marketing.",
+      ];
+    case 2:
+      return [
+        "Touch 2 — quick bump, still casual.",
+        ...buildAuthorityWeaveGuidance(ctx),
+        "Mention a free tool you threw together for local spots — NOT a product, NOT a platform.",
+        ctx.ctaType === "whatsapp"
+          ? "Drop the WhatsApp link exactly as given — 'easier to ping me here'."
+          : "Drop the SafeScore link exactly as given — 'free thing I built, takes 10 seconds'.",
+      ];
+    case 3:
+      return [
+        "Touch 3 — different angle, still short.",
+        "Acknowledge they're slammed. Same casual tool mention — 'free tool I threw together for local spots'.",
+        ctx.ctaType === "whatsapp"
+          ? "WhatsApp link on its own line."
+          : "SafeScore link on its own line.",
+      ];
+    case 4:
+      return [
+        "Touch 4 — last note. Say this is your final message.",
+        "No links. No guilt. 'won't bug you again' energy.",
+      ];
+    default:
+      return [];
+  }
+}
+
+function buildSystemPrompt(ctx: DraftSequenceContext, streetName: string): string {
   const lines = [
-    "You write a short, conversational email to a UK takeaway owner—as one operator to another, not as a vendor.",
-    "You are a kitchen manager based in Preston with 30 years of experience.",
-    "Never claim to own/run multiple takeaways.",
-    "Never claim to be in any other town.",
-    "Never claim you are on the same road/high street as the lead or that you know their exact location.",
-    "Never invent personal history, results, customers, or relationships.",
-    ratingToneGuidance(rating),
-    "PassReady is a side project you built for your own kitchen team (EHO checklists in English, Urdu, Bengali, Polish)—mention it only as something that helped you, not as a product launch.",
-    "Hard limit: maximum 110 words (aim 80–100). No images. No attachments. Plain, internal-style tone.",
-    ...productConfig.outreach.pitchGuidelines,
-    ...hookLines,
+    "You are a UK takeaway kitchen manager typing a quick email on your phone between services.",
+    "Write like a hurried peer down the road — NOT a vendor, consultant, or official body.",
+    "Absolute max 60 words in the body (before any signature). Aim for 35–50 words.",
+    "Plain text only. No headers, dividers, bullet lists, or HTML styling.",
+    "Sound like a text message: contractions, incomplete sentences OK, one short paragraph.",
+    `NEVER use these words: ${CASUAL_BANNED_WORDS}.`,
+    "Never say: compliance, optimization, urgency, solutions, FSA pressure, platform, software, leverage.",
+    "Never mention star ratings, inspection scores, or EHO outcomes.",
+    "Never claim you're on their road or know their exact location — reference the street name only.",
+    ratingToneGuidance({
+      fsaRating: ctx.fsaRating,
+      riskScore: ctx.riskScore,
+    }),
+    ...buildTouchSequenceGuidance(ctx, streetName),
   ];
 
-  if (includeLink && landingUrl) {
+  if (ctx.ctaUrl) {
     lines.push(
-      `End with a simple next step and include this exact SafeScore link on its own line: ${landingUrl}`,
-      "Frame it as a free instant FSA score check (no sign-up) — not a sales pitch.",
-      "Do not add any other links or wa.me.",
-    );
-  } else {
-    lines.push(
-      "Do NOT include any URLs, links, or wa.me in this message.",
-      "End with a curious ask inviting a reply.",
+      `Required link (own line, exactly): ${ctx.ctaUrl}`,
+      "Frame it as: 'free tool I threw together for local spots' — nothing salesy.",
     );
   }
 
   return lines.join("\n");
 }
 
-function buildUserPrompt(
-  lead: LeadForDraft,
-  variables: DraftVariables,
-  includeLink: boolean,
-  landingUrl?: string,
-): string {
+function buildUserPrompt(lead: LeadForDraft, streetName: string, ctx: DraftSequenceContext): string {
   const lines = [
-    "Required variable injection — weave all three naturally into the message:",
-    `1) Business name (use exactly): ${variables.businessName}`,
-    `2) FSA practical issue hook (no star rating): ${variables.fsaIssue}`,
-    `3) Local reference: ${variables.localReference}`,
-    `Takeaway name: ${lead.business_name}`,
+    `business_name: ${lead.business_name}`,
+    `street_name: ${streetName}`,
+    `local_authority_name: ${ctx.localAuthorityName}`,
+    `touch: ${ctx.touch} of 4`,
+    "",
+    "Write the email body now. Use their business name OR street — at least one.",
   ];
 
-  if (lead.fsa_rating !== null) {
+  if (ctx.touch === 1 || ctx.touch === 2) {
     lines.push(
-      `Internal only (never mention in the message): FSA rating ${lead.fsa_rating}/5 — calibrate warmth only; no stars, scores, or inspection talk.`,
+      `Required: weave ${ctx.localAuthorityName} into the first two sentences — casual, like a local owner.`,
     );
   }
 
-  if (includeLink && landingUrl) {
-    lines.push(`Required closing link (use exactly): ${landingUrl}`);
+  if (ctx.ctaUrl) {
+    lines.push(`Link to include: ${ctx.ctaUrl}`);
   } else {
-    lines.push("No links in this draft.");
+    lines.push("No links.");
   }
 
   return lines.join("\n");
+}
+
+function assertCasualDraftContext(draft: string, lead: LeadForDraft): void {
+  const body = stripMobileSignature(draft).toLowerCase();
+  const name = lead.business_name.trim().toLowerCase();
+  const street = extractStreetName(lead.address).toLowerCase();
+  const streetTokens = street.split(/\s+/).filter((w) => w.length > 3);
+
+  const hasName = name.length >= 3 && body.includes(name);
+  const hasStreet = streetTokens.some((t) => body.includes(t));
+
+  if (!hasName && !hasStreet) {
+    throw new Error(`Draft must mention ${lead.business_name} or ${street}`);
+  }
 }
 
 async function shortenDraftToWordLimit(input: {
   llm: OpenAI;
   model: string;
   includeLink: boolean;
-  variables: DraftVariables;
+  lead: LeadForDraft;
   original: string;
 }): Promise<string> {
   const guard = input.includeLink
-    ? `Keep under ${MAX_DRAFT_WORDS} words. Keep the message truthful and compliant.`
+    ? `Keep under ${MAX_DRAFT_WORDS} words. Keep any CTA link. Sound like a rushed text from a mate.`
     : `Keep under ${MAX_DRAFT_WORDS} words. Remove any links/URLs.`;
 
   const system = [
-    "You rewrite drafts to be shorter while preserving meaning.",
+    "You rewrite drafts shorter — same casual phone-text tone.",
     guard,
-    "You MUST keep the required variable injection: business name, practical issue hook, and local reference.",
-    "Do not add new claims, locations, or backstory.",
-    "Return only the rewritten email body (no subject line, no bullets about what you changed).",
+    `Never use: ${CASUAL_BANNED_WORDS}.`,
+    "Keep business name or street reference.",
+    "Return only the rewritten body — no subject, no signature, no commentary.",
   ].join("\n");
 
   const user = [
-    "Required variables (must remain present, naturally):",
-    `Business name: ${input.variables.businessName}`,
-    `FSA issue hook: ${input.variables.fsaIssue}`,
-    `Local reference: ${input.variables.localReference}`,
+    `Business: ${input.lead.business_name}`,
+    `Street: ${extractStreetName(input.lead.address)}`,
     "",
     "Draft to shorten:",
-    input.original,
+    stripMobileSignature(input.original),
   ].join("\n");
 
   const completion = await geminiApiQueue.run(() =>
@@ -253,7 +454,7 @@ export async function fetchLeadsNeedingDraft(
   const result = targetRating
     ? await db.execute({
         sql: `
-          SELECT id, business_name, address, postcode, fsa_rating, email, flag_for_review
+          SELECT id, fsa_id, business_name, address, postcode, fsa_rating, fsa_last_inspection_date, local_authority_name, phone, email, flag_for_review
           FROM leads
           WHERE draft_message IS NULL
             AND ${outreachHaltedSqlInClause()}
@@ -267,7 +468,7 @@ export async function fetchLeadsNeedingDraft(
       })
     : await db.execute({
         sql: `
-          SELECT id, business_name, address, postcode, fsa_rating, email, flag_for_review
+          SELECT id, fsa_id, business_name, address, postcode, fsa_rating, fsa_last_inspection_date, local_authority_name, phone, email, flag_for_review
           FROM leads
           WHERE draft_message IS NULL
             AND ${outreachHaltedSqlInClause()}
@@ -302,7 +503,7 @@ function reviewAllDraftsEnabled(): boolean {
 }
 
 function checkPersonaForAutoApproval(draft: string): { ok: true } | { ok: false; reason: string } {
-  const text = draft.toLowerCase();
+  const text = stripMobileSignature(draft).toLowerCase();
   const disqualifying = [
     "consultant",
     "specialist",
@@ -311,6 +512,15 @@ function checkPersonaForAutoApproval(draft: string): { ok: true } | { ok: false;
     "agency",
     "software",
     "platform",
+    "compliance",
+    "optimization",
+    "optimisation",
+    "solutions",
+    "dear sir",
+    "dear madam",
+    "to whom",
+    "kind regards",
+    "best regards",
   ];
   for (const term of disqualifying) {
     if (text.includes(term)) {
@@ -318,7 +528,7 @@ function checkPersonaForAutoApproval(draft: string): { ok: true } | { ok: false;
     }
   }
 
-  const hasFirstPerson = /\b(i|i['’]m|im|i['’]ve|ive|my|me)\b/i.test(draft);
+  const hasFirstPerson = /\b(i|i['’]m|im|i['’]ve|ive|my|me|hey)\b/i.test(draft);
   if (!hasFirstPerson) {
     return { ok: false, reason: "persona_missing_first_person" };
   }
@@ -378,7 +588,6 @@ export async function generateDraftForLead(
   lead: LeadForDraft,
   client?: OpenAI,
   options?: {
-    templateRating?: number | null;
     hookContext?: DraftHookContext;
     consultantTip?: string | null;
     variables?: DraftVariables;
@@ -388,34 +597,53 @@ export async function generateDraftForLead(
     hasReplied?: boolean;
   },
 ): Promise<string> {
-  const city = extractCity(lead);
-  const hookContext = options?.hookContext ?? {
-    competitors: [],
-    localPassReadyCount: 0,
-  };
-  const consultantTip = options?.consultantTip?.trim() ?? "";
-  const variables =
-    options?.variables ??
-    buildDraftVariables({
-      businessName: lead.business_name,
-      city,
-      consultantTip,
-      competitors: hookContext.competitors,
-    });
-
   const touchCount = options?.touchCount ?? 0;
   const hasReplied = options?.hasReplied ?? false;
+  const sequenceTouch = sequenceTouchFromCount(touchCount, hasReplied);
+  const landingUrl = getOutreachLandingUrl();
+
   const includeLink = shouldIncludeLandingInDraft({
     includeLink: options?.includeLink,
     hasReplied,
     touchCount,
   });
-  const landingUrl = includeLink ? getOutreachLandingUrl() : undefined;
+
+  const riskScore = calculateRiskScore({
+    fsaRating: lead.fsa_rating,
+    fsaLastInspectionDate: lead.fsa_last_inspection_date ?? null,
+    phone: lead.phone,
+    website: null,
+  }).score;
+
+  const trackingRid = lead.fsa_id;
+  const trackedLanding =
+    trackingRid > 0 ? buildTrackedLandingUrl(landingUrl, trackingRid) : landingUrl;
+
+  const { ctaUrl, ctaType } = includeLink
+    ? resolveSequenceCta({
+        touch: sequenceTouch,
+        businessName: lead.business_name,
+        phone: lead.phone,
+        landingUrl,
+        trackingRid,
+      })
+    : { ctaUrl: null, ctaType: "none" as const };
+
+  const localAuthorityName = resolveDraftLocalAuthorityName(lead.local_authority_name);
+
+  const sequenceCtx: DraftSequenceContext = {
+    touch: sequenceTouch,
+    businessName: lead.business_name,
+    localAuthorityName,
+    fsaRating: lead.fsa_rating,
+    riskScore,
+    daysSinceInspection: daysSinceInspection(lead.fsa_last_inspection_date),
+    ctaUrl,
+    ctaType,
+  };
 
   const llm = client ?? createLlmClient();
-  const toneRating =
-    options?.templateRating !== undefined ? options.templateRating : lead.fsa_rating;
-  const hookLines = options?.hookContext ? buildDraftHookGuidance(options.hookContext) : [];
+  const streetName = extractStreetName(lead.address);
 
   const model = getGeminiDraftModel();
   let completion;
@@ -423,15 +651,15 @@ export async function generateDraftForLead(
     completion = await geminiApiQueue.run(() =>
       llm.chat.completions.create({
         model,
-        temperature: 0.7,
+        temperature: 0.85,
         messages: [
           {
             role: "system",
-            content: buildSystemPrompt(toneRating, hookLines, includeLink, landingUrl),
+            content: buildSystemPrompt(sequenceCtx, streetName),
           },
           {
             role: "user",
-            content: buildUserPrompt(lead, variables, includeLink, landingUrl),
+            content: buildUserPrompt(lead, streetName, sequenceCtx),
           },
         ],
       }),
@@ -457,15 +685,28 @@ export async function generateDraftForLead(
   }
 
   const validate = (text: string): string => {
-    if (!includeLink) {
-      const stripped = stripUrls(text);
-      return firstTouchDraftMessageSchema.parse(stripped);
+    if (sequenceTouch === 1 && !hasReplied) {
+      return firstTouchDraftMessageSchema.parse(stripUrls(text));
     }
-    const ok = draftMessageSchema.parse(text);
-    if (landingUrl && !ok.includes(landingUrl)) {
-      return `${ok.trim()}\n\n${landingUrl}`;
+    if (sequenceTouch === 4) {
+      return breakupDraftMessageSchema.parse(stripUrls(text));
     }
-    return ok;
+    if (includeLink && ctaUrl) {
+      let ok = followUpDraftMessageSchema(ctaUrl).parse(text);
+      if (!ok.includes(ctaUrl)) {
+        ok = `${ok.trim()}\n\n${ctaUrl}`;
+      }
+      return draftMessageSchema.parse(ok);
+    }
+    if (includeLink) {
+      const ok = draftMessageSchema.parse(text);
+      const linkNeedle = ctaUrl ?? trackedLanding;
+      if (linkNeedle && !ok.includes(linkNeedle)) {
+        return draftMessageSchema.parse(`${ok.trim()}\n\n${linkNeedle}`);
+      }
+      return ok;
+    }
+    return draftMessageSchema.parse(stripUrls(text));
   };
 
   try {
@@ -482,14 +723,14 @@ export async function generateDraftForLead(
       llm,
       model,
       includeLink,
-      variables,
+      lead,
       original: raw,
     });
     raw = validate(shortened);
   }
 
-  assertDraftUsesVariables(raw, variables);
-  return raw;
+  assertCasualDraftContext(raw, lead);
+  return appendMobileSignature(raw, lead.id);
 }
 
 export interface DraftRunResult {

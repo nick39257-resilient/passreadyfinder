@@ -10,6 +10,7 @@ import {
 import { getLeadNextAction } from "../lib/lead-next-action";
 import { statusPillStyles } from "../lib/risk-styles";
 import type { RiskBand } from "./ActionCard";
+import { isLiveVisitor } from "../lib/live-visitor";
 import { RiskScoreBadge } from "./RiskScoreBadge";
 
 const SWIPE_THRESHOLD = 72;
@@ -52,10 +53,15 @@ export function LeadRow({
   const statusStyle = statusPillStyles[lead.status] ?? "bg-slate-700 text-slate-200";
   const showDraftPreview = lead.status === "drafted" && Boolean(lead.draftPreview?.trim());
   const inPostbox = lead.status === "approved";
+  const liveVisitor = isLiveVisitor(lead.lastPreviewedAt);
 
   return (
     <li
-      className={`relative overflow-hidden rounded-2xl border bg-slate-900/70 ring-1 ring-slate-800/80 ${styles.border} ${styles.glow}`}
+      className={`relative overflow-hidden rounded-2xl border bg-slate-900/70 ${
+        liveVisitor
+          ? "animate-pulse border-amber-400 ring-2 ring-amber-400/70 shadow-[0_0_20px_rgba(251,191,36,0.35)]"
+          : `ring-1 ring-slate-800/80 ${styles.border} ${styles.glow}`
+      }`}
     >
       <div
         className={`pointer-events-none absolute inset-0 bg-gradient-to-r ${styles.accent}`}
@@ -163,6 +169,11 @@ export function LeadRow({
                 >
                   {priorityLabel(tier)}
                 </span>
+                {liveVisitor ? (
+                  <span className="rounded-md bg-amber-500/25 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-100 ring-2 ring-amber-400/60">
+                    Live visitor
+                  </span>
+                ) : null}
                 {lead.recentlyChanged ? (
                   <span className="rounded-md bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200 ring-1 ring-violet-500/30">
                     FSA update

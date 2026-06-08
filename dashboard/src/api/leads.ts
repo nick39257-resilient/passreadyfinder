@@ -67,6 +67,8 @@ export interface ApiLead {
   repliedAt?: string | null;
   /** Tap-to-chat wa.me link to the business (server-built). */
   whatsappUrl?: string | null;
+  /** Set when prospect hits the tracked SafeScore URL (?rid=). */
+  lastPreviewedAt?: string | null;
 }
 
 export interface LeadsListResponse {
