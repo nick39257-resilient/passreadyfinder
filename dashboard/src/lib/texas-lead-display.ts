@@ -121,7 +121,28 @@ export function normalizeTexasLead(raw: unknown): ApiTexasLead {
         ? r.hb2844DraftPreview
         : typeof r.hb2844_draft_preview === "string"
           ? r.hb2844_draft_preview
+          : typeof r.outreachDraftPreview === "string"
+            ? r.outreachDraftPreview
+            : null,
+    outreachDraftPreview:
+      typeof r.outreachDraftPreview === "string"
+        ? r.outreachDraftPreview
+        : typeof r.hb2844DraftPreview === "string"
+          ? r.hb2844DraftPreview
           : null,
+    draftHasScoreLink: r.draftHasScoreLink === true || r.draft_has_score_link === true,
+    needsScoreLinkRefresh:
+      r.needsScoreLinkRefresh === true || r.needs_score_link_refresh === true,
+    trackedScoreUrl:
+      typeof r.trackedScoreUrl === "string" && r.trackedScoreUrl.trim()
+        ? r.trackedScoreUrl
+        : typeof r.tracked_score_url === "string" && r.tracked_score_url.trim()
+          ? r.tracked_score_url
+          : "https://score.passready.us",
+    lastPreviewedAt:
+      (r.lastPreviewedAt as string | null) ?? (r.last_previewed_at as string | null) ?? null,
+    outreachSentAt:
+      (r.outreachSentAt as string | null) ?? (r.outreach_sent_at as string | null) ?? null,
   };
 }
 

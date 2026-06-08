@@ -1,4 +1,7 @@
+import { getTexasAutopilotScoreUrl } from "../../config/score-urls.js";
 import { getDb } from "./db.js";
+import { buildTrackedLandingUrl } from "../outreach-landing-url.js";
+import { draftContainsScoreLink } from "../outreach-sequence-meta.js";
 import {
   HB2844_MOBILE_PITCH_TEMPLATE,
   buildHb2844MobileOutreachMessage,
@@ -39,9 +42,20 @@ export async function getHb2844MobileTemplateBody(): Promise<string> {
 export function renderHb2844DraftForLead(input: {
   ownerName: string | null;
   businessName: string;
+  leadId?: number;
 }): string {
-  return buildHb2844MobileOutreachMessage({
+  const baseUrl = getTexasAutopilotScoreUrl();
+  const scoreUrl =
+    input.leadId != null && input.leadId > 0
+      ? buildTrackedLandingUrl(baseUrl, input.leadId)
+      : baseUrl;
+  const body = buildHb2844MobileOutreachMessage({
     ownerName: input.ownerName?.trim() || "there",
     businessName: input.businessName,
+    scoreUrl,
   });
+  if (!draftContainsScoreLink(body)) {
+    return `${body.trim()}\n\nFree score check — no sign-up:\n${scoreUrl}`;
+  }
+  return body;
 }

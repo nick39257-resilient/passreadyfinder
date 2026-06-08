@@ -1,4 +1,4 @@
-import { buildHb2844MobileOutreachMessage } from "../engine/texas/hb2844.js";
+import { buildTexasOutreachMeta } from "../engine/texas/texas-outreach-meta.js";
 import {
   isTexasOutreachComplete,
   resolveTexasOutreachChannel,
@@ -36,20 +36,18 @@ export interface ApiTexasLead {
   outreachButtonLabel: string;
   outreachComplete: boolean;
   hb2844DraftPreview: string | null;
+  outreachDraftPreview: string | null;
+  draftHasScoreLink: boolean;
+  needsScoreLinkRefresh: boolean;
+  trackedScoreUrl: string;
+  lastPreviewedAt: string | null;
+  outreachSentAt: string | null;
 }
 
 export function mapTexasLeadRowToApi(row: TexasLeadRow): ApiTexasLead {
-  const isMobile = row.is_mobile_vendor === 1;
-  const owner = row.owner_name ?? "";
-  const hb2844DraftPreview = isMobile
-    ? row.draft_message?.trim() ||
-      buildHb2844MobileOutreachMessage({
-        ownerName: owner || "there",
-        businessName: row.business_name,
-      })
-    : null;
-
+  const meta = buildTexasOutreachMeta(row);
   const outreachChannel = resolveTexasOutreachChannel(row);
+  const hb2844DraftPreview = meta.outreachDraftPreview;
 
   return {
     id: row.id,
@@ -66,7 +64,7 @@ export function mapTexasLeadRowToApi(row: TexasLeadRow): ApiTexasLead {
     inspectionScore: row.inspection_score,
     demerits: row.demerits,
     vehicleType: row.vehicle_type,
-    isMobileVendor: isMobile,
+    isMobileVendor: row.is_mobile_vendor === 1,
     vendorTier: row.vendor_tier,
     dshsLicenseStatus: row.dshs_license_status,
     texasRiskScore: row.risk_score,
@@ -79,5 +77,11 @@ export function mapTexasLeadRowToApi(row: TexasLeadRow): ApiTexasLead {
     outreachButtonLabel: texasOutreachButtonLabel(outreachChannel),
     outreachComplete: isTexasOutreachComplete(row.status),
     hb2844DraftPreview,
+    outreachDraftPreview: meta.outreachDraftPreview,
+    draftHasScoreLink: meta.draftHasScoreLink,
+    needsScoreLinkRefresh: meta.needsScoreLinkRefresh,
+    trackedScoreUrl: meta.trackedScoreUrl,
+    lastPreviewedAt: meta.lastPreviewedAt,
+    outreachSentAt: row.outreach_sent_at ?? null,
   };
 }

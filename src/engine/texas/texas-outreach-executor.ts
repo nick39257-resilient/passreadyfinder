@@ -3,7 +3,7 @@ import {
   TEXAS_STATUS_EMAIL_SENT,
   TEXAS_STATUS_FORM_SUBMITTED,
 } from "../../types/texas.js";
-import { buildHb2844MobileOutreachMessage } from "./hb2844.js";
+import { buildEffectiveTexasOutreachDraft } from "./texas-outreach-meta.js";
 import { texasLeadToApolloInput } from "./texas-enrichment-service.js";
 import { findOwnerEmailViaApollo } from "../services/apollo-service.js";
 import { isSmtpMailConfigured, sendSmtpMail } from "../services/smtp-mail-service.js";
@@ -44,14 +44,7 @@ function texasContactFormForceSubmit(): boolean {
 }
 
 function resolvePitchText(row: TexasLeadRow): string {
-  const draft = row.draft_message?.trim();
-  if (draft) {
-    return draft;
-  }
-  return buildHb2844MobileOutreachMessage({
-    ownerName: row.owner_name?.trim() || "there",
-    businessName: row.business_name,
-  });
+  return buildEffectiveTexasOutreachDraft(row);
 }
 
 async function resolveEmailForTexasLead(row: TexasLeadRow): Promise<string | null> {

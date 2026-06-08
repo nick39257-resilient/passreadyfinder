@@ -3,6 +3,7 @@ import {
   fetchTexasLeads,
   fetchTexasAutopilotStatus,
   fetchTexasStats,
+  refreshTexasLeadDraft,
   sendTexasLeadOutreach,
   startTexasFindJob,
   type ApiTexasLead,
@@ -20,7 +21,9 @@ import { TexasContactOptions } from "./TexasContactOptions";
 import { TexasLeadCard } from "./TexasLeadCard";
 import { AutopilotHeartbeat } from "./AutopilotHeartbeat";
 import { MobileAutopilotTrigger } from "./MobileAutopilotTrigger";
-import { ScoreTrafficCounter } from "./ScoreTrafficCounter";
+import { DraftPreviewBlock } from "./DraftPreviewBlock";
+import { TexasOutreachPanel } from "./TexasOutreachPanel";
+import { TexasOutreachScoreFunnel } from "./TexasOutreachScoreFunnel";
 import { fetchScoreTrafficStats, type ScoreTrafficStats } from "../api/score-traffic";
 
 function jobProgressLabel(job: JobStatus): string {
@@ -67,6 +70,7 @@ export function TexasCommandCenter() {
     tone: "success" | "error" | "info";
     text: string;
   } | null>(null);
+  const [refreshBusy, setRefreshBusy] = useState(false);
   const [scoreTraffic, setScoreTraffic] = useState<ScoreTrafficStats | null>(null);
 
   const refreshTexasAutopilotStatus = useCallback(async () => {
@@ -173,6 +177,33 @@ export function TexasCommandCenter() {
   const patchLeadInList = (updated: ApiTexasLead) => {
     setLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
     setSelected(updated);
+  };
+
+  const runRefreshDraft = async () => {
+    if (!selected) {
+      return;
+    }
+    setRefreshBusy(true);
+    setSendFeedback({ tone: "info", text: "Refreshing draft with tracked score link…" });
+    try {
+      const { lead } = await refreshTexasLeadDraft(selected.id);
+      if (lead) {
+        patchLeadInList(lead);
+        setSendFeedback({
+          tone: "success",
+          text: lead.draftHasScoreLink
+            ? "Draft updated — SafeScore link is in the message."
+            : "Draft refreshed.",
+        });
+      }
+    } catch (e) {
+      setSendFeedback({
+        tone: "error",
+        text: e instanceof Error ? e.message : "Draft refresh failed",
+      });
+    } finally {
+      setRefreshBusy(false);
+    }
   };
 
   const runSendOutreach = async () => {
@@ -443,6 +474,9 @@ export function TexasCommandCenter() {
                 {formatTexasField(selected.statusLabel, selected.status)}
               </p>
             ) : null}
+
+            <TexasOutreachPanel lead={selected} />
+
             <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-400">
               <dt>Status</dt>
               <dd>{formatTexasField(selected.statusLabel, selected.status)}</dd>
@@ -463,11 +497,12 @@ export function TexasCommandCenter() {
               <dt>HB 2844 tier</dt>
               <dd>{formatVendorTier(selected.vendorTier)}</dd>
             </dl>
-            {typeof selected.hb2844DraftPreview === "string" &&
-            selected.hb2844DraftPreview.trim() ? (
-              <p className="mt-4 text-sm leading-relaxed text-slate-300">
-                {selected.hb2844DraftPreview}
-              </p>
+            {(selected.outreachDraftPreview ?? selected.hb2844DraftPreview)?.trim() ? (
+              <DraftPreviewBlock
+                text={selected.outreachDraftPreview ?? selected.hb2844DraftPreview ?? ""}
+                hasScoreLink={selected.draftHasScoreLink}
+                maxLines={6}
+              />
             ) : null}
             <div className="mt-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -489,6 +524,19 @@ export function TexasCommandCenter() {
               </p>
             ) : null}
             <div className="mt-4 flex flex-col gap-2">
+              {!selected.outreachComplete &&
+              (selected.needsScoreLinkRefresh || !selected.draftHasScoreLink) ? (
+                <button
+                  type="button"
+                  disabled={refreshBusy || sendBusy}
+                  onClick={() => void runRefreshDraft()}
+                  className="min-h-12 w-full rounded-2xl border border-amber-500/50 bg-amber-950/40 text-sm font-bold text-amber-100 disabled:opacity-50"
+                >
+                  {refreshBusy
+                    ? "Refreshing draft…"
+                    : "Refresh draft with score link"}
+                </button>
+              ) : null}
               {!selected.outreachComplete &&
               selected.outreachChannel !== "unavailable" ? (
                 <button

@@ -30,6 +30,12 @@ export interface ApiTexasLead {
   outreachButtonLabel: string;
   outreachComplete: boolean;
   hb2844DraftPreview: string | null;
+  outreachDraftPreview: string | null;
+  draftHasScoreLink: boolean;
+  needsScoreLinkRefresh: boolean;
+  trackedScoreUrl: string;
+  lastPreviewedAt: string | null;
+  outreachSentAt: string | null;
 }
 
 export interface TexasSendOutreachResult {
@@ -134,6 +140,20 @@ export async function startTexasFindJob(
     await parseTexasError(res, "Texas find failed");
   }
   return res.json() as Promise<{ jobId: string }>;
+}
+
+export async function refreshTexasLeadDraft(
+  leadId: number,
+  secret?: string,
+): Promise<{ ok: boolean; lead: ApiTexasLead | null }> {
+  const res = await fetch(`/api/texas/leads/${leadId}/refresh-draft`, {
+    method: "POST",
+    headers: texasAuthHeaders(secret),
+  });
+  if (!res.ok) {
+    await parseTexasError(res, "Texas draft refresh failed");
+  }
+  return res.json() as Promise<{ ok: boolean; lead: ApiTexasLead | null }>;
 }
 
 export async function sendTexasLeadOutreach(

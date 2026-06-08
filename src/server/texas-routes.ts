@@ -6,6 +6,7 @@ import {
   countTexasLeads,
   getAllTexasLeads,
   getTexasLeadById,
+  refreshTexasLeadOutreachDraft,
   type TexasLeadSegment,
 } from "../engine/store/texas-leads-repository.js";
 import { runTexasApolloEnrichmentBatch } from "../engine/texas/texas-enrichment-service.js";
@@ -97,6 +98,27 @@ export function mountTexasRoutes(
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to load Texas lead" });
+    }
+  });
+
+  app.post("/api/texas/leads/:id/refresh-draft", requireControlAuth, async (req, res) => {
+    try {
+      await runMigrations();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id < 1) {
+        res.status(400).json({ error: "Invalid lead id" });
+        return;
+      }
+      const ok = await refreshTexasLeadOutreachDraft(id);
+      if (!ok) {
+        res.status(400).json({ error: "Could not refresh draft for this lead" });
+        return;
+      }
+      const row = await getTexasLeadById(id);
+      res.json({ ok: true, lead: row ? mapTexasLeadRowToApi(row) : null });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to refresh Texas outreach draft" });
     }
   });
 

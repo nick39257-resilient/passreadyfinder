@@ -33,6 +33,7 @@ export interface TexasLeadRow {
   last_inspection_date: string | null;
   status: string;
   draft_message: string | null;
+  last_previewed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -174,6 +175,7 @@ export async function updateTexasMobileLeadMetadata(input: {
   const draftMessage = renderHb2844DraftForLead({
     ownerName: input.ownerName,
     businessName: input.businessName,
+    leadId: input.leadId,
   });
 
   await db.execute({
@@ -320,6 +322,37 @@ export async function markTexasLeadEmailSent(input: {
     `,
     args: [input.resendId, input.leadId],
   });
+}
+
+export async function refreshTexasLeadOutreachDraft(leadId: number): Promise<boolean> {
+  const row = await getTexasLeadById(leadId);
+  if (!row) {
+    return false;
+  }
+
+  const db = getDb();
+  const draftMessage =
+    row.is_mobile_vendor === 1
+      ? renderHb2844DraftForLead({
+          ownerName: row.owner_name,
+          businessName: row.business_name,
+          leadId: row.id,
+        })
+      : null;
+
+  if (!draftMessage?.trim()) {
+    return false;
+  }
+
+  const result = await db.execute({
+    sql: `
+      UPDATE texas_leads
+      SET draft_message = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [draftMessage.trim(), leadId],
+  });
+  return (result.rowsAffected ?? 0) > 0;
 }
 
 export async function markTexasLeadFormSubmitted(input: {
