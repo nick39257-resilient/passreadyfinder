@@ -4,8 +4,11 @@ import type { DraftJobParams, TargetRating } from "../types/segmentation.js";
 import type { DraftHookContext } from "./intelligence/draft-hooks.js";
 import type { DraftVariables } from "./intelligence/draft-variables.js";
 import {
+  breakupAllowsLandingLink,
   buildTrackedLandingUrl,
+  firstTouchAllowsLandingLink,
   getOutreachLandingUrl,
+  preferSafeScoreCta,
   shouldIncludeLandingInDraft,
 } from "./outreach-landing-url.js";
 import { stripUrls } from "./outreach-message.js";
@@ -17,6 +20,7 @@ import {
   draftMessageSchema,
   firstTouchDraftMessageSchema,
   followUpDraftMessageSchema,
+  legacyFirstTouchDraftMessageSchema,
 } from "../validation/draft.schemas.js";
 import {
   BANNED_FORMAL_WORDS,
@@ -37,10 +41,11 @@ import {
 } from "./outreach-halt.js";
 import { getGeminiDraftModel } from "./gemini-draft-model.js";
 import { geminiApiQueue } from "./rate-limit-queue.js";
+import { isLeadOutreachHalted } from "./outreach-halt.js";
 import { getDb } from "./store/db.js";
 import { runMigrations } from "./store/db.js";
 import { queueLeadToPostbox } from "./store/review-repository.js";
-import { setLeadNeedsEyesReason } from "./store/leads-repository.js";
+import { getLeadById, setLeadNeedsEyesReason } from "./store/leads-repository.js";
 
 export interface LeadForDraft {
   id: number;
@@ -114,6 +119,12 @@ const CASUAL_SUBJECT_TEMPLATES = [
   (_businessName: string, street: string) => `question about your space on ${street}`,
 ] as const;
 
+const SCORE_FOLLOWUP_SUBJECT_TEMPLATES = [
+  (businessName: string, _street: string) => `free score check for ${businessName}?`,
+  (businessName: string, _street: string) => `quick one for ${businessName}`,
+  (businessName: string, street: string) => `score thing for ${businessName} on ${street}`,
+] as const;
+
 const MOBILE_SIGNATURES = [
   "Sent from my iPhone",
   "Typed on the go, please excuse typos",
@@ -133,6 +144,7 @@ export function resolveOutreachSubject(input: {
   businessName: string;
   address: string;
   leadId?: number;
+  touchCount?: number;
 }): string {
   const custom = process.env.OUTREACH_EMAIL_SUBJECT?.trim();
   if (custom) {
@@ -140,9 +152,11 @@ export function resolveOutreachSubject(input: {
   }
   const business = input.businessName.trim();
   const street = extractStreetName(input.address);
-  const idx =
-    Math.abs((input.leadId ?? business.length + street.length) % CASUAL_SUBJECT_TEMPLATES.length);
-  return CASUAL_SUBJECT_TEMPLATES[idx](business, street);
+  const touchCount = input.touchCount ?? 0;
+  const templates =
+    touchCount >= 1 ? SCORE_FOLLOWUP_SUBJECT_TEMPLATES : CASUAL_SUBJECT_TEMPLATES;
+  const idx = Math.abs((input.leadId ?? business.length + street.length) % templates.length);
+  return templates[idx](business, street);
 }
 
 /** Append a plain-text mobile signature — one per lead, stable across touches. */
@@ -259,18 +273,28 @@ function resolveSequenceCta(input: {
   landingUrl: string;
   trackingRid: number;
 }): { ctaUrl: string | null; ctaType: DraftSequenceContext["ctaType"] } {
-  if (input.touch === 1 || input.touch === 4) {
+  const trackedLanding =
+    input.trackingRid > 0
+      ? buildTrackedLandingUrl(input.landingUrl, input.trackingRid)
+      : input.landingUrl;
+
+  if (input.touch === 1 && !firstTouchAllowsLandingLink()) {
+    return { ctaUrl: null, ctaType: "none" };
+  }
+  if (input.touch === 4 && !breakupAllowsLandingLink()) {
     return { ctaUrl: null, ctaType: "none" };
   }
 
-  const trackedLanding = buildTrackedLandingUrl(input.landingUrl, input.trackingRid);
+  if (preferSafeScoreCta()) {
+    return { ctaUrl: trackedLanding, ctaType: "safescore" };
+  }
 
   const whatsappUrl = buildOutboundWaMeLink({
     businessName: input.businessName,
     phone: input.phone,
     landingUrl: trackedLanding,
   });
-  if (whatsappUrl) {
+  if (whatsappUrl && input.touch !== 1 && input.touch !== 4) {
     return { ctaUrl: whatsappUrl, ctaType: "whatsapp" };
   }
   return { ctaUrl: trackedLanding, ctaType: "safescore" };
@@ -298,36 +322,51 @@ function buildAuthorityWeaveGuidance(ctx: DraftSequenceContext): string[] {
 function buildTouchSequenceGuidance(ctx: DraftSequenceContext, streetName: string): string[] {
   switch (ctx.touch) {
     case 1:
-      return [
-        "Touch 1 — zero links, zero pitch.",
-        ...buildAuthorityWeaveGuidance(ctx),
-        `Also mention their spot on ${streetName} or use their business name naturally.`,
-        "ONE open question only — like you spotted their team and wondered something.",
-        `Style reference: "Hey, saw your team on ${streetName}. Hear anything about the ${ctx.localAuthorityName} team doing surprise rounds this week? Got a quick checklist that helped us if you want it."`,
-        "Do NOT include URLs, wa.me, or anything that sounds like marketing.",
-      ];
+      return firstTouchAllowsLandingLink()
+        ? [
+            "Touch 1 — one SafeScore link only, still casual.",
+            ...buildAuthorityWeaveGuidance(ctx),
+            `Mention their spot on ${streetName} or business name naturally.`,
+            "Tease a free 10-second score check — what council has on file, no signup.",
+            "Drop the SafeScore link on its own line — 'free thing I built, takes 10 seconds'.",
+            "No wa.me, no sales pitch, no product name.",
+          ]
+        : [
+            "Touch 1 — zero links, zero pitch.",
+            ...buildAuthorityWeaveGuidance(ctx),
+            `Also mention their spot on ${streetName} or use their business name naturally.`,
+            "ONE open question only — like you spotted their team and wondered something.",
+            `Style reference: "Hey, saw your team on ${streetName}. Hear anything about the ${ctx.localAuthorityName} team doing surprise rounds this week? Got a quick checklist that helped us if you want it."`,
+            "Do NOT include URLs, wa.me, or anything that sounds like marketing.",
+          ];
     case 2:
       return [
         "Touch 2 — quick bump, still casual.",
         ...buildAuthorityWeaveGuidance(ctx),
-        "Mention a free tool you threw together for local spots — NOT a product, NOT a platform.",
+        "Lead with curiosity — 'shows what the council has on file in about 10 seconds'.",
         ctx.ctaType === "whatsapp"
           ? "Drop the WhatsApp link exactly as given — 'easier to ping me here'."
-          : "Drop the SafeScore link exactly as given — 'free thing I built, takes 10 seconds'.",
+          : "Drop the SafeScore link exactly as given — own line, 'no signup, just curious what you'd get'.",
       ];
     case 3:
       return [
         "Touch 3 — different angle, still short.",
-        "Acknowledge they're slammed. Same casual tool mention — 'free tool I threw together for local spots'.",
+        "Acknowledge they're slammed. Frame as a favour — 'built this for our kitchen, might save you a headache before the next round'.",
         ctx.ctaType === "whatsapp"
           ? "WhatsApp link on its own line."
-          : "SafeScore link on its own line.",
+          : "SafeScore link on its own line — mention it's free and takes seconds.",
       ];
     case 4:
-      return [
-        "Touch 4 — last note. Say this is your final message.",
-        "No links. No guilt. 'won't bug you again' energy.",
-      ];
+      return breakupAllowsLandingLink()
+        ? [
+            "Touch 4 — last note. Say this is your final message.",
+            "Soft close — 'if you ever want to see your score, link below — won't bug you again'.",
+            "Include the SafeScore link on its own line. No guilt, no pressure.",
+          ]
+        : [
+            "Touch 4 — last note. Say this is your final message.",
+            "No links. No guilt. 'won't bug you again' energy.",
+          ];
     default:
       return [];
   }
@@ -354,7 +393,8 @@ function buildSystemPrompt(ctx: DraftSequenceContext, streetName: string): strin
   if (ctx.ctaUrl) {
     lines.push(
       `Required link (own line, exactly): ${ctx.ctaUrl}`,
-      "Frame it as: 'free tool I threw together for local spots' — nothing salesy.",
+      "Frame it as a free 10-second score check — what the council has on file, no signup.",
+      "Never say platform, software, or compliance product.",
     );
   }
 
@@ -686,9 +726,23 @@ export async function generateDraftForLead(
 
   const validate = (text: string): string => {
     if (sequenceTouch === 1 && !hasReplied) {
+      if (firstTouchAllowsLandingLink() && includeLink && ctaUrl) {
+        let ok = legacyFirstTouchDraftMessageSchema.parse(text);
+        if (!ok.includes(ctaUrl)) {
+          ok = `${ok.trim()}\n\n${ctaUrl}`;
+        }
+        return draftMessageSchema.parse(ok);
+      }
       return firstTouchDraftMessageSchema.parse(stripUrls(text));
     }
     if (sequenceTouch === 4) {
+      if (breakupAllowsLandingLink() && includeLink && ctaUrl) {
+        let ok = breakupDraftMessageSchema.parse(text);
+        if (!ok.includes(ctaUrl)) {
+          ok = `${ok.trim()}\n\n${ctaUrl}`;
+        }
+        return draftMessageSchema.parse(ok);
+      }
       return breakupDraftMessageSchema.parse(stripUrls(text));
     }
     if (includeLink && ctaUrl) {
@@ -737,6 +791,56 @@ export interface DraftRunResult {
   drafted: number;
   skipped: number;
   errors: { leadId: number; businessName: string; error: string }[];
+}
+
+export interface FollowUpDraftResult {
+  drafted: boolean;
+  lane?: "postbox" | "needs_eyes";
+  reason?: string;
+  touch?: SequenceTouch;
+}
+
+/** After a send, draft the next sequence touch (2–4) so SafeScore links reach the postbox. */
+export async function draftSequenceFollowUpForLead(
+  leadId: number,
+  client?: OpenAI,
+): Promise<FollowUpDraftResult> {
+  const row = await getLeadById(leadId);
+  if (!row || isLeadOutreachHalted(row)) {
+    return { drafted: false };
+  }
+  if (row.replied_at?.trim()) {
+    return { drafted: false };
+  }
+
+  const touchCount = row.touch_count ?? 0;
+  if (touchCount >= productConfig.outreach.maxTouchesPerLead) {
+    return { drafted: false };
+  }
+
+  const lead: LeadForDraft = {
+    id: row.id,
+    fsa_id: row.fsa_id,
+    business_name: row.business_name,
+    address: row.address,
+    postcode: row.postcode,
+    fsa_rating: row.fsa_rating,
+    fsa_last_inspection_date: row.fsa_last_inspection_date ?? null,
+    local_authority_name: row.local_authority_name ?? null,
+    phone: row.phone ?? null,
+    email: row.email ?? null,
+    flag_for_review: row.flag_for_review ?? 0,
+  };
+
+  const sequenceTouch = sequenceTouchFromCount(touchCount, false);
+  const draft = await generateDraftForLead(lead, client, { touchCount });
+  await saveDraftMessage(leadId, draft);
+  const routed = await routeDraftAfterSave({ lead, draft });
+
+  if (routed.lane === "postbox") {
+    return { drafted: true, lane: "postbox", touch: sequenceTouch };
+  }
+  return { drafted: true, lane: "needs_eyes", reason: routed.reason, touch: sequenceTouch };
 }
 
 /** Fetch top un-drafted leads, generate copy via LLM, save to draft_message. Does not send. */

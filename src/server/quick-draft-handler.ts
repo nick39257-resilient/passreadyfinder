@@ -15,6 +15,7 @@ import {
   findLocalCompetitors,
 } from "../engine/intelligence/competitors.js";
 import { resolveConsultantTip, scoresFromRow } from "../engine/intelligence/carrot.js";
+import { productConfig } from "../config/product.config.js";
 import { isLeadOutreachHalted } from "../engine/outreach-halt.js";
 import { getLeadById } from "../engine/store/leads-repository.js";
 import { markLeadReplied } from "../engine/store/sender-repository.js";
@@ -58,10 +59,13 @@ export async function quickDraftLeadById(leadId: number): Promise<QuickDraftResu
     throw new Error("Outreach is halted for this business (suppressed, replied, or converted)");
   }
   const hasReplied = Boolean((row as { replied_at?: string | null }).replied_at);
-  if (row.contacted_at && !hasReplied) {
-    throw new Error(
-      "Lead already contacted — mark as replied before generating a follow-up draft",
-    );
+  const touchCount = row.touch_count ?? 0;
+  if (
+    row.contacted_at &&
+    !hasReplied &&
+    touchCount >= productConfig.outreach.maxTouchesPerLead
+  ) {
+    throw new Error("Lead has completed the outreach sequence — no further drafts");
   }
 
   let emailDiscovered: string | null = null;

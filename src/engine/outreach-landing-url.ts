@@ -25,6 +25,24 @@ export function firstTouchAllowsLandingLink(): boolean {
   return true;
 }
 
+/** Breakup (touch 4) may include a soft SafeScore link. Default on; set OUTREACH_BREAKUP_LINK=false to disable. */
+export function breakupAllowsLandingLink(): boolean {
+  const raw = process.env.OUTREACH_BREAKUP_LINK?.trim().toLowerCase();
+  if (raw === "false" || raw === "0" || raw === "no") {
+    return false;
+  }
+  return true;
+}
+
+/** Prefer direct SafeScore URL over wa.me when both are available. Default on. */
+export function preferSafeScoreCta(): boolean {
+  const raw = process.env.OUTREACH_PREFER_SAFESCORE?.trim().toLowerCase();
+  if (raw === "false" || raw === "0" || raw === "no") {
+    return false;
+  }
+  return true;
+}
+
 /** Append low-profile `rid` for score-traffic attribution (Touch 2/3 CTAs). */
 export function buildTrackedLandingUrl(baseUrl: string, rid: number): string {
   const trimmed = baseUrl.trim();
@@ -46,6 +64,12 @@ export function shouldIncludeLandingInDraft(options: {
     return true;
   }
   const touchCount = options.touchCount ?? 0;
-  // Multi-touch sequence: touch 1 & 4 are link-free; touches 2–3 carry SafeScore/WhatsApp CTA.
+  if (touchCount === 0 && firstTouchAllowsLandingLink()) {
+    return true;
+  }
+  if (touchCount === 3 && breakupAllowsLandingLink()) {
+    return true;
+  }
+  // Touches 2–3 always carry SafeScore/WhatsApp CTA.
   return touchCount === 1 || touchCount === 2;
 }

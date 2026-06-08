@@ -104,12 +104,29 @@ export function prepareOutboundMessage(options: PrepareOutboundMessageOptions): 
   };
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function linkifyEscapedLine(line: string): string {
+  return line
+    .replace(
+      /(https?:\/\/[^\s<]+)/gi,
+      (url) => `<a href="${url}">${url}</a>`,
+    )
+    .replace(
+      /(\bwa\.me\/[^\s<]+)/gi,
+      (url) => `<a href="https://${url}">${url}</a>`,
+    );
+}
+
 function plainTextToHtml(text: string): string {
   return text
     .split("\n")
-    .map(
-      (line) =>
-        `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`,
-    )
+    .map((line) => `<p>${linkifyEscapedLine(escapeHtml(line))}</p>`)
     .join("");
 }

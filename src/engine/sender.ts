@@ -1,4 +1,4 @@
-import { resolveOutreachSubject } from "./drafter.js";
+import { createLlmClient, draftSequenceFollowUpForLead, resolveOutreachSubject } from "./drafter.js";
 import { getDailySendQuota } from "./daily-send-cap.js";
 import {
   getDeliverabilityStatus,
@@ -122,6 +122,8 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
     await report(`Test fallback enabled: ${testEmail} (only when lead has no business email)\n`);
   }
 
+  let followUpLlm: ReturnType<typeof createLlmClient> | null = null;
+
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i];
     try {
@@ -178,6 +180,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
           businessName: lead.business_name,
           address: row.address,
           leadId: lead.id,
+          touchCount: lead.touch_count,
         }),
         text,
         ...(html ? { html } : {}),
@@ -186,6 +189,23 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
       await markLeadContacted(lead.id, messageId);
       result.sent++;
       await report(`  ✓ sent (message id: ${messageId})\n`);
+
+      try {
+        followUpLlm ??= createLlmClient();
+        const followUp = await draftSequenceFollowUpForLead(lead.id, followUpLlm);
+        if (followUp.drafted) {
+          const laneLabel =
+            followUp.lane === "postbox"
+              ? "postbox"
+              : `Needs Eyes (${followUp.reason ?? "review"})`;
+          await report(
+            `  ↻ touch ${followUp.touch ?? "?"} follow-up drafted → ${laneLabel}\n`,
+          );
+        }
+      } catch (followUpErr) {
+        const msg = followUpErr instanceof Error ? followUpErr.message : String(followUpErr);
+        await report(`  ⚠ follow-up draft failed: ${msg}\n`);
+      }
 
       if (i < leads.length - 1) {
         const delayMs = randomSendDelayMs();
