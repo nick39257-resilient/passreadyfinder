@@ -20,14 +20,18 @@ export async function runScoreTrafficMigrations(): Promise<void> {
       )`,
       `CREATE INDEX IF NOT EXISTS idx_score_traffic_hits_site ON score_traffic_hits(site)`,
       `CREATE INDEX IF NOT EXISTS idx_score_traffic_hits_created ON score_traffic_hits(created_at DESC)`,
-      `CREATE INDEX IF NOT EXISTS idx_score_traffic_hits_rid ON score_traffic_hits(rid)`,
     ],
     "write",
   );
 
+  // Existing DBs may predate `rid` — add column before creating the index.
   if (!(await hitsColumnExists("rid"))) {
     await db.execute(`ALTER TABLE score_traffic_hits ADD COLUMN rid TEXT`);
   }
+
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_score_traffic_hits_rid ON score_traffic_hits(rid)`,
+  );
 }
 
 export async function recordScoreTrafficHit(
