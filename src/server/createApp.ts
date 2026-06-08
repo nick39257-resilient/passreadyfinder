@@ -27,7 +27,7 @@ import { getComplianceTipOfDay } from "../engine/intelligence/compliance.js";
 import { getSystemActivity } from "../engine/intelligence/activity.js";
 import { getSystemStatus } from "../engine/intelligence/system-status.js";
 import {
-  getAllLeads,
+  getDashboardLeads,
   getLeadById,
   setLeadFlagForReview,
   setLeadStatus,
@@ -263,7 +263,7 @@ export async function createApp(options?: {
   app.get("/api/leads", async (_req, res) => {
     try {
       const lastSyncAt = await getLastSyncTimestamp();
-      const rows = await getAllLeads();
+      const rows = await getDashboardLeads();
       let summaries = new Map<
         number,
         {

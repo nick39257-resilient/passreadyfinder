@@ -1,7 +1,18 @@
 import type { DeliveryAppStatus } from "../../types/lead.js";
 import type { RawLead } from "../../types/fsa.js";
+import { productConfig } from "../../config/product.config.js";
 import { normalizeOutreachEmail } from "../outreach-halt.js";
 import { getDb } from "./db.js";
+
+const OUTBOUND_DASHBOARD_STATUSES = [
+  "contacted",
+  "replied",
+  "opted_in",
+  "trial_started",
+  "nurture",
+  "ready_to_review",
+  "form_submitted",
+] as const;
 
 export interface LeadUpsertInput extends RawLead {
   phone?: string | null;
@@ -130,6 +141,31 @@ export interface LeadRow {
 export async function getAllLeads(): Promise<LeadRow[]> {
   const db = getDb();
   const result = await db.execute(`SELECT * FROM leads`);
+  return result.rows as unknown as LeadRow[];
+}
+
+/** Leads for the Command Center list — pre-filtered in SQL (not full-table scan). */
+export async function getDashboardLeads(): Promise<LeadRow[]> {
+  const db = getDb();
+  const statusPlaceholders = OUTBOUND_DASHBOARD_STATUSES.map(() => "?").join(", ");
+  const result = await db.execute({
+    sql: `
+      SELECT * FROM leads
+      WHERE (
+        LOWER(COALESCE(status, 'new')) IN (${statusPlaceholders})
+        OR (
+          (LOWER(business_type) LIKE '%takeaway%' OR LOWER(business_type) LIKE '%sandwich%')
+          AND (fsa_rating IS NULL OR fsa_rating <= ?)
+          AND (
+            (phone IS NOT NULL AND TRIM(phone) != '')
+            OR (website IS NOT NULL AND TRIM(website) != '')
+            OR (email IS NOT NULL AND TRIM(email) != '')
+          )
+        )
+      )
+    `,
+    args: [...OUTBOUND_DASHBOARD_STATUSES, productConfig.maxRating],
+  });
   return result.rows as unknown as LeadRow[];
 }
 

@@ -29,7 +29,9 @@ export function getDb(): Client {
   return client;
 }
 
-export async function runMigrations(): Promise<void> {
+let migrationsPromise: Promise<void> | null = null;
+
+async function runMigrationsOnce(): Promise<void> {
   const db = getDb();
 
   await db.batch(
@@ -84,6 +86,16 @@ export async function runMigrations(): Promise<void> {
 
   const { runScoreTrafficMigrations } = await import("./score-traffic-repository.js");
   await runScoreTrafficMigrations();
+}
+
+export async function runMigrations(): Promise<void> {
+  if (!migrationsPromise) {
+    migrationsPromise = runMigrationsOnce().catch((err) => {
+      migrationsPromise = null;
+      throw err;
+    });
+  }
+  await migrationsPromise;
 }
 
 export async function closeDb(): Promise<void> {
