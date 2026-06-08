@@ -16,6 +16,7 @@ import {
 } from "../daily-send-cap.js";
 import { countNeedsEyesDrafts, auditPostboxLeads, getLeadStatusCounts } from "../store/stats-repository.js";
 import { runMigrations } from "../store/db.js";
+import { runLeadTriage } from "../lead-triage.js";
 import {
   findJobStillRunning,
   reclaimStaleJobs,
@@ -88,6 +89,14 @@ export async function getSystemStatus(feedLimit = 5): Promise<SystemStatus> {
   const feed = logs.map(mapFeedEntry);
 
   await reclaimStaleJobs();
+  try {
+    await runLeadTriage();
+  } catch (triageErr) {
+    console.warn(
+      "Lead triage during status poll failed:",
+      triageErr instanceof Error ? triageErr.message : triageErr,
+    );
+  }
   const jobsAfterReclaim = await getRecentJobs(20);
 
   const runningFind = findJobStillRunning(jobsAfterReclaim);
