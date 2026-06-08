@@ -52,7 +52,7 @@ import { fetchUkAutopilotStatus } from "./api/uk-autopilot";
 import { fetchScoreTrafficStats, type ScoreTrafficStats } from "./api/score-traffic";
 import type { AutopilotStatusMetadata } from "./lib/autopilot-heartbeat";
 import { MobileAutopilotTrigger } from "./components/MobileAutopilotTrigger";
-import { ScoreTrafficCounter } from "./components/ScoreTrafficCounter";
+import { OutreachScoreFunnel } from "./components/OutreachScoreFunnel";
 
 function isTexasCommandCenterRoute(): boolean {
   if (typeof window === "undefined") {
@@ -69,7 +69,10 @@ function canQuickDraftLead(lead: ApiLead): boolean {
   if (isOutreachHaltedStatus(lead.status)) {
     return false;
   }
-  return lead.status !== "contacted" && lead.status !== "approved";
+  if (lead.sequenceComplete) {
+    return false;
+  }
+  return lead.status !== "approved";
 }
 
 function countByFilter(
@@ -398,7 +401,9 @@ export function App() {
     if (!canQuickDraftLead(lead)) {
       const msg = isOutreachHaltedStatus(lead.status)
         ? "Outreach is stopped for this business."
-        : "Already sent — mark as replied (stop sequence) before re-drafting.";
+        : lead.sequenceComplete
+          ? "This lead has finished the 4-touch sequence."
+          : "Lead is in postbox — wait for send or remove from queue before re-drafting.";
       setDrawerError(msg);
       setBanner({ tone: "error", message: msg });
       return;
@@ -413,9 +418,12 @@ export function App() {
       });
       await loadAll();
       if (outcome.lane === "postbox") {
+        const hasLink = outcome.draft.includes("score.passready");
         setBanner({
           tone: "success",
-          message: `${lead.businessName} drafted and queued — auto-sends at 2pm UK.`,
+          message: hasLink
+            ? `${lead.businessName} drafted with SafeScore link — queued for 2pm UK.`
+            : `${lead.businessName} drafted and queued — auto-sends at 2pm UK.`,
         });
       } else if (outcome.reason === "missing_business_email") {
         setBanner({
@@ -782,7 +790,7 @@ export function App() {
         <AutopilotHeartbeat metadata={ukAutopilot} />
       </div>
 
-      <ScoreTrafficCounter stats={scoreTraffic} />
+      <OutreachScoreFunnel leads={leads} scoreTraffic={scoreTraffic} />
 
       {banner ? (
         <ActionBanner

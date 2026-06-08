@@ -11,6 +11,8 @@ import type { RiskBand } from "./ActionCard";
 import { RiskScoreBadge } from "./RiskScoreBadge";
 import { isLiveVisitor } from "../lib/live-visitor";
 import { ContactRoutesPanel } from "./ContactRoutesPanel";
+import { DraftPreviewBlock } from "./DraftPreviewBlock";
+import { OutreachSequencePanel } from "./OutreachSequencePanel";
 
 function ScoreCell({
   label,
@@ -126,6 +128,20 @@ export function LeadDetailDrawer({
               Live visitor — they opened SafeScore in the last 24 hours. Follow up now.
             </div>
           ) : null}
+
+          <OutreachSequencePanel
+            lead={lead}
+            trackedScoreUrl={lead.trackedScoreUrl || outreachLandingUrl}
+          />
+
+          {(lead.draftFull ?? lead.draftPreview)?.trim() ? (
+            <DraftPreviewBlock
+              text={lead.draftFull ?? lead.draftPreview ?? ""}
+              hasScoreLink={lead.draftHasScoreLink}
+              maxLines={6}
+            />
+          ) : null}
+
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <h2 className="text-xl font-bold leading-tight">{lead.businessName}</h2>

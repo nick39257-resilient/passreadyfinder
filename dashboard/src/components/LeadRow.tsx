@@ -11,13 +11,11 @@ import { getLeadNextAction } from "../lib/lead-next-action";
 import { statusPillStyles } from "../lib/risk-styles";
 import type { RiskBand } from "./ActionCard";
 import { isLiveVisitor } from "../lib/live-visitor";
+import { sequenceTouchLabel } from "../lib/outreach-sequence";
+import { DraftPreviewBlock } from "./DraftPreviewBlock";
 import { RiskScoreBadge } from "./RiskScoreBadge";
 
 const SWIPE_THRESHOLD = 72;
-
-function formatDraftPreview(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
 
 export function LeadRow({
   lead,
@@ -51,7 +49,9 @@ export function LeadRow({
   const [hint, setHint] = useState<"left" | "right" | null>(null);
 
   const statusStyle = statusPillStyles[lead.status] ?? "bg-slate-700 text-slate-200";
-  const showDraftPreview = lead.status === "drafted" && Boolean(lead.draftPreview?.trim());
+  const showDraftPreview =
+    Boolean(lead.draftPreview?.trim()) &&
+    (lead.status === "drafted" || lead.status === "approved" || lead.status === "contacted");
   const inPostbox = lead.status === "approved";
   const liveVisitor = isLiveVisitor(lead.lastPreviewedAt);
 
@@ -184,6 +184,20 @@ export function LeadRow({
                     2pm send
                   </span>
                 ) : null}
+                {!lead.sequenceComplete ? (
+                  <span className="rounded-md bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200 ring-1 ring-violet-500/30">
+                    {sequenceTouchLabel(lead)}
+                  </span>
+                ) : null}
+                {lead.draftHasScoreLink ? (
+                  <span className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-100 ring-1 ring-emerald-500/40">
+                    SafeScore link
+                  </span>
+                ) : lead.draftPreview ? (
+                  <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-500/30">
+                    Needs re-draft
+                  </span>
+                ) : null}
               </div>
 
               {reasons.length > 0 ? (
@@ -199,9 +213,11 @@ export function LeadRow({
                   ))}
                 </ul>
               ) : showDraftPreview ? (
-                <p className="mt-2 line-clamp-2 text-xs leading-snug text-slate-300">
-                  {formatDraftPreview(lead.draftPreview ?? "")}
-                </p>
+                <DraftPreviewBlock
+                  text={lead.draftPreview ?? ""}
+                  hasScoreLink={lead.draftHasScoreLink}
+                  maxLines={2}
+                />
               ) : (
                 <p className="mt-1.5 text-xs text-slate-500">{lead.postcode}</p>
               )}

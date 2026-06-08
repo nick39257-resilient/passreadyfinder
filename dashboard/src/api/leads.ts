@@ -69,6 +69,13 @@ export interface ApiLead {
   whatsappUrl?: string | null;
   /** Set when prospect hits the tracked SafeScore URL (?rid=). */
   lastPreviewedAt?: string | null;
+  touchCount: number;
+  sequenceTouch: number;
+  sequenceMaxTouches: number;
+  sequenceComplete: boolean;
+  draftHasScoreLink: boolean;
+  trackedScoreUrl: string;
+  draftFull?: string | null;
 }
 
 export interface LeadsListResponse {
@@ -108,6 +115,13 @@ function normalizeLead(lead: ApiLead): ApiLead {
     },
     recentlyChanged: lead.recentlyChanged ?? false,
     whatsappUrl: lead.whatsappUrl ?? null,
+    touchCount: lead.touchCount ?? 0,
+    sequenceTouch: lead.sequenceTouch ?? 1,
+    sequenceMaxTouches: lead.sequenceMaxTouches ?? 4,
+    sequenceComplete: lead.sequenceComplete ?? false,
+    draftHasScoreLink: lead.draftHasScoreLink ?? false,
+    trackedScoreUrl: lead.trackedScoreUrl ?? "https://score.passready.uk",
+    draftFull: lead.draftFull ?? lead.draftPreview,
   };
 }
 

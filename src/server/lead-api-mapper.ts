@@ -15,6 +15,7 @@ import {
   countLocalPassReadyUsers,
   findLocalCompetitors,
 } from "../engine/intelligence/competitors.js";
+import { buildOutreachSequenceMeta } from "../engine/outreach-sequence-meta.js";
 import { calculateRiskScore } from "../engine/risk-scorer.js";
 import type { LeadRow } from "../engine/store/leads-repository.js";
 import type { ApiContactDiscovery } from "../engine/store/contact-discovery-repository.js";
@@ -66,6 +67,13 @@ export interface ApiLeadDetail {
   contactedAt: string | null;
   repliedAt: string | null;
   lastPreviewedAt: string | null;
+  touchCount: number;
+  sequenceTouch: number;
+  sequenceMaxTouches: number;
+  sequenceComplete: boolean;
+  draftHasScoreLink: boolean;
+  trackedScoreUrl: string;
+  draftFull: string | null;
 }
 
 function readStatus(row: LeadRow & { status?: string }): string {
@@ -129,6 +137,12 @@ export async function mapLeadRowToApiLead(
     typeof draftRaw === "string" && draftRaw.trim()
       ? draftRaw.trim().slice(0, 220)
       : null;
+  const sequence = buildOutreachSequenceMeta({
+    touch_count: row.touch_count,
+    replied_at: row.replied_at,
+    draft_message: draftRaw,
+    fsa_id: row.fsa_id,
+  });
 
   return {
     id: row.id,
@@ -174,5 +188,12 @@ export async function mapLeadRowToApiLead(
     contactedAt: row.contacted_at ?? null,
     repliedAt: row.replied_at ?? null,
     lastPreviewedAt: row.last_previewed_at ?? null,
+    touchCount: sequence.touchCount,
+    sequenceTouch: sequence.sequenceTouch,
+    sequenceMaxTouches: sequence.sequenceMaxTouches,
+    sequenceComplete: sequence.sequenceComplete,
+    draftHasScoreLink: sequence.draftHasScoreLink,
+    trackedScoreUrl: sequence.trackedScoreUrl,
+    draftFull: sequence.draftFull,
   };
 }
