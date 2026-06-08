@@ -30,6 +30,7 @@ import { isExcludedLead } from "./lead-guardrails.js";
 function passesVenueNameGuardrail(lead: RawLead): boolean {
   return !isExcludedLead({ businessName: lead.businessName });
 }
+import { runPipelineLeadRecovery } from "./lead-triage.js";
 import { calculateLeadScore } from "./score/scorer.js";
 import { getDb, runMigrations } from "./store/db.js";
 import {
@@ -415,6 +416,7 @@ export async function runFindPipeline(options?: {
     if (heartbeat) {
       clearInterval(heartbeat);
     }
+    await runPipelineLeadRecovery();
   }
 
   console.log(

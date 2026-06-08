@@ -647,6 +647,17 @@ export async function createApp(options?: {
     }
   });
 
+  app.post("/api/jobs/triage", requireControlAuth, async (_req, res) => {
+    try {
+      const { runLeadTriage } = await import("../engine/lead-triage.js");
+      const result = await runLeadTriage();
+      res.json(result);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to run lead triage" });
+    }
+  });
+
   app.get("/api/jobs/:id", async (req, res) => {
     try {
       const job = await getJob(req.params.id);

@@ -10,7 +10,7 @@ import {
   isLeadOutreachHalted,
 } from "./outreach-halt.js";
 import { prepareOutboundMessage } from "./outreach-message.js";
-import { getLeadById } from "./store/leads-repository.js";
+import { flagLeadForReviewWithReason, getLeadById } from "./store/leads-repository.js";
 import { runMigrations } from "./store/db.js";
 import {
   filterLeadsAllowedToSend,
@@ -149,6 +149,9 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         result.skipped++;
+        if (message.includes("No business email")) {
+          await flagLeadForReviewWithReason(lead.id, "STUCK_IN_POSTBOX_NO_EMAIL");
+        }
         await report(`  ⊘ skipped ${lead.business_name}: ${message}\n`);
         continue;
       }

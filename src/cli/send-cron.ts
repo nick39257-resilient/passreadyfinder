@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import "dotenv/config";
+import { runLeadTriage } from "../engine/lead-triage.js";
 import { runSender } from "../engine/sender.js";
 import { getNextUkSendWindowLabel, getUkDateKey, isWithinUkSendWindow } from "../engine/send-schedule.js";
 import { closeDb } from "../engine/store/db.js";
@@ -49,6 +50,13 @@ async function main(): Promise<void> {
     } else {
       console.log(
         `Postbox had ${approvedBefore} lead(s) but 0 sent — not recording send day (will retry).`,
+      );
+    }
+
+    const triage = await runLeadTriage();
+    if (triage.flagged + triage.clearedPending + triage.routedWhatsapp + triage.movedToNurture > 0) {
+      console.log(
+        `Triage: flagged=${triage.flagged} clearedPending=${triage.clearedPending} whatsapp=${triage.routedWhatsapp} nurture=${triage.movedToNurture}`,
       );
     }
   } finally {

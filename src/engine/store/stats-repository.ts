@@ -125,7 +125,7 @@ export async function countNeedsEyesDrafts(): Promise<number> {
   const result = await db.execute(`
     SELECT COUNT(*) AS count
     FROM leads
-    WHERE status = 'drafted'
+    WHERE status IN ('drafted', 'approved', 'ready_to_review')
       AND (
         COALESCE(flag_for_review, 0) = 1
         OR (needs_eyes_reason IS NOT NULL AND TRIM(needs_eyes_reason) != '')

@@ -5,7 +5,7 @@ export type EnrichmentStatus =
   | "NO_EMAIL_FALLBACK"
   | "FAILED";
 
-export type ContactMethod = "EMAIL" | "CONTACT_FORM";
+export type ContactMethod = "EMAIL" | "CONTACT_FORM" | "WHATSAPP";
 
 /** Lead workflow statuses introduced in Phase 1 */
 export const LEAD_STATUS_READY_TO_REVIEW = "ready_to_review" as const;

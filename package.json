@@ -30,6 +30,7 @@
     "uk-autopilot": "tsx src/cli/uk-autopilot.ts",
     "ensure-playwright-chromium": "node scripts/ensure-playwright-chromium.mjs",
     "diagnose": "tsx src/cli/diagnose-outreach.ts",
+    "triage": "tsx src/cli/triage-leads.ts",
     "diagnose-postbox": "tsx src/cli/diagnose-postbox.ts",
     "call-list": "tsx src/cli/call-list.ts",
     "smoke": "tsx scripts/smoke-test.mjs",

@@ -8,11 +8,14 @@ const STALE_WITHOUT_HEARTBEAT_MS: Partial<Record<JobType, number>> = {
   texas_reclassify: 10 * 60 * 1000,
   texas_autopilot: 25 * 60 * 1000,
   uk_autopilot: 25 * 60 * 1000,
+  draft: 15 * 60 * 1000,
+  quick_draft: 15 * 60 * 1000,
+  send: 15 * 60 * 1000,
   draft_all: 45 * 60 * 1000,
-  contact_discovery: 25 * 60 * 1000,
+  contact_discovery: 15 * 60 * 1000,
 };
 
-const DEFAULT_STALE_MS = 30 * 60 * 1000;
+const DEFAULT_STALE_MS = 15 * 60 * 1000;
 
 function parseSqliteUtc(iso: string): number {
   const normalized = iso.includes("T") ? iso : iso.replace(" ", "T") + "Z";

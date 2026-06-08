@@ -201,6 +201,15 @@ export function startJob(jobId: string, type: JobType): void {
       });
       if (type === "send") {
         await logSendJobOutcome(result);
+        try {
+          const { runLeadTriage } = await import("../engine/lead-triage.js");
+          await runLeadTriage();
+        } catch (triageErr) {
+          console.warn(
+            "Post-send triage failed:",
+            triageErr instanceof Error ? triageErr.message : triageErr,
+          );
+        }
       }
     } catch (err) {
       const message =

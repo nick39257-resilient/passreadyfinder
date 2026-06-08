@@ -193,6 +193,25 @@ export async function setLeadFlagForReview(leadId: number, flagged: boolean): Pr
   });
 }
 
+/** Flag for operator review with a machine-readable triage reason. */
+export async function flagLeadForReviewWithReason(
+  leadId: number,
+  reason: string,
+): Promise<void> {
+  const db = getDb();
+  await db.execute({
+    sql: `
+      UPDATE leads
+      SET flag_for_review = 1,
+          needs_eyes_reason = ?,
+          needs_eyes_updated_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [reason, leadId],
+  });
+}
+
 export async function setLeadNeedsEyesReason(
   leadId: number,
   reason: string | null,
