@@ -366,7 +366,7 @@ export function TexasCommandCenter() {
       </header>
 
       <div className="px-4 pt-3">
-        <ScoreTrafficCounter stats={scoreTraffic} />
+        <TexasOutreachScoreFunnel leads={leads} scoreTraffic={scoreTraffic} />
       </div>
 
       <main className="px-4 pb-28 pt-4">
