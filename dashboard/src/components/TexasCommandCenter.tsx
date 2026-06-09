@@ -64,6 +64,7 @@ export function TexasCommandCenter() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [apolloBusy, setApolloBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<ApiTexasLead | null>(null);
   const [sendBusy, setSendBusy] = useState(false);
