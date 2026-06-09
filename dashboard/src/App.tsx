@@ -739,9 +739,13 @@ export function App() {
               : { engineStatus: "Processing", lastRunTimestamp: null, totalFormsSubmitted: 0 },
           );
         }}
+        onRunFailed={() => {
+          void refreshUkAutopilotStatus();
+        }}
         onRunComplete={() => {
           void refreshUkAutopilotStatus();
           void refreshScoreTraffic();
+          void loadAll();
         }}
       />
 

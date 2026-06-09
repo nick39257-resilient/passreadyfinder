@@ -1,5 +1,6 @@
 import { productConfig } from "../../config/product.config.js";
 import { getUkAutopilotScoreUrl } from "../../config/score-urls.js";
+import { buildTrackedLandingUrl } from "../outreach-landing-url.js";
 import { scrapeEmailFromWebsite } from "../enrich/website-email-scraper.js";
 import { enrichFromOsm } from "../enrich/osm-enricher.js";
 import { getEmailUser } from "../services/smtp-mail-service.js";
@@ -17,10 +18,10 @@ import { closeSharedChromiumBrowser } from "../services/playwright-browser.js";
 
 function ukAutopilotContactFormsEnabled(): boolean {
   const raw = process.env.UK_AUTOPILOT_CONTACT_FORMS?.trim().toLowerCase();
-  if (raw === "1" || raw === "true" || raw === "yes") {
-    return true;
+  if (raw === "0" || raw === "false" || raw === "no") {
+    return false;
   }
-  return false;
+  return true;
 }
 
 export type UkAutopilotOutcome =
@@ -64,13 +65,13 @@ function autopilotSignatureLine(): string {
   return `${autopilotSenderName()} (${autopilotReplyEmail()})`;
 }
 
-function buildAutopilotFormMessage(businessName: string): string {
-  const scoreUrl = getUkAutopilotScoreUrl();
+function buildAutopilotFormMessage(row: LeadRow): string {
+  const scoreUrl = buildTrackedLandingUrl(getUkAutopilotScoreUrl(), row.fsa_id);
   return `Hey team,
 
 I'm a kitchen manager in Preston and built PassReady for our takeaway team (EHO checklists, allergens, multilingual staff).
 
-We put together a free FSA score check for ${businessName} — no sign-up:
+We put together a free FSA score check for ${row.business_name} — no sign-up:
 ${scoreUrl}
 
 Who is the best person to pass a 7-day trial link to?
@@ -87,11 +88,15 @@ function delayMs(): number {
 }
 
 function batchLimit(options?: { limit?: number }): number {
-  return (
-    options?.limit ??
-    (Number(process.env.UK_AUTOPILOT_LIMIT) ||
-      productConfig.enrichment.ukAutopilotBatchLimit)
-  );
+  const fromOptions = options?.limit;
+  if (fromOptions !== undefined && Number.isFinite(fromOptions) && fromOptions > 0) {
+    return fromOptions;
+  }
+  const fromEnv = Number(process.env.UK_AUTOPILOT_LIMIT);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) {
+    return fromEnv;
+  }
+  return productConfig.enrichment.ukAutopilotBatchLimit;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -206,7 +211,7 @@ export async function runUkAutopilotForLead(row: LeadRow): Promise<UkAutopilotLe
     const form = await tryTexasAutopilotContactForm({
       website,
       businessName: row.business_name,
-      message: buildAutopilotFormMessage(row.business_name),
+      message: buildAutopilotFormMessage(row),
       senderName: autopilotSenderName(),
       senderEmail: autopilotReplyEmail(),
     });
@@ -255,6 +260,7 @@ export async function runUkAutopilotForLead(row: LeadRow): Promise<UkAutopilotLe
 
 export async function runUkAutonomousOutreachBatch(options?: {
   limit?: number;
+  onProgress?: (message: string) => void | Promise<void>;
 }): Promise<UkAutopilotSummary> {
   await runMigrations();
 
@@ -274,6 +280,9 @@ export async function runUkAutonomousOutreachBatch(options?: {
   try {
     for (let i = 0; i < leads.length; i++) {
       const row = leads[i];
+      await options?.onProgress?.(
+        `UK autopilot: ${i + 1}/${leads.length} — ${row.business_name}`,
+      );
       const result = await runUkAutopilotForLead(row);
       summary.scanned++;
 

@@ -42,7 +42,7 @@ export type TexasAutopilotSummary = {
   errors: number;
 };
 
-const AUTOPILOT_SENDER_TITLE = "PassReady US Compliance Compliance Desk";
+const AUTOPILOT_SENDER_TITLE = "PassReady US Compliance Desk";
 
 function autopilotReplyEmail(): string {
   return getEmailUser();
@@ -217,15 +217,25 @@ export async function runTexasAutopilotForLead(
   }
 }
 
+function batchLimit(options?: { limit?: number }): number {
+  const fromOptions = options?.limit;
+  if (fromOptions !== undefined && Number.isFinite(fromOptions) && fromOptions > 0) {
+    return fromOptions;
+  }
+  const fromEnv = Number(process.env.TEXAS_AUTOPILOT_LIMIT);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) {
+    return fromEnv;
+  }
+  return texasProductConfig.enrichment.autopilotBatchLimit;
+}
+
 export async function runTexasAutonomousOutreachBatch(options?: {
   limit?: number;
+  onProgress?: (message: string) => void | Promise<void>;
 }): Promise<TexasAutopilotSummary> {
   await runMigrations();
 
-  const limit =
-    options?.limit ??
-    (Number(process.env.TEXAS_AUTOPILOT_LIMIT) ||
-      texasProductConfig.enrichment.autopilotBatchLimit);
+  const limit = batchLimit(options);
 
   const leads = await getTexasLeadsForAutopilot(limit);
   const summary: TexasAutopilotSummary = {
@@ -242,6 +252,9 @@ export async function runTexasAutonomousOutreachBatch(options?: {
   try {
     for (let i = 0; i < leads.length; i++) {
       const row = leads[i];
+      await options?.onProgress?.(
+        `Texas autopilot: ${i + 1}/${leads.length} — ${row.business_name}`,
+      );
       const result = await runTexasAutopilotForLead(row);
       summary.scanned++;
 

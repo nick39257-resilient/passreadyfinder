@@ -15,7 +15,7 @@ export function resolveTexasOutreachChannel(row: TexasLeadRow): TexasOutreachCha
   if (isTexasOutreachComplete(row.status)) {
     return "unavailable";
   }
-  if (normalizeOutreachEmail(row.email) || row.apollo_enriched_at) {
+  if (normalizeOutreachEmail(row.email)) {
     return "email";
   }
   if (row.website?.trim()) {

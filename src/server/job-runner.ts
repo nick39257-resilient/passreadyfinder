@@ -94,6 +94,9 @@ async function runJobBody(
       });
       return runTexasAutonomousOutreachBatch({
         limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
+        onProgress: async (message) => {
+          await updateJob(jobId, { progress: message });
+        },
       });
     }
     case "uk_autopilot": {
@@ -104,6 +107,9 @@ async function runJobBody(
       });
       return runUkAutonomousOutreachBatch({
         limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
+        onProgress: async (message) => {
+          await updateJob(jobId, { progress: message });
+        },
       });
     }
     case "draft": {

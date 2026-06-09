@@ -12,8 +12,12 @@ import {
 import { runTexasApolloEnrichmentBatch } from "../engine/texas/texas-enrichment-service.js";
 import { executeTexasLeadOutreach } from "../engine/texas/texas-outreach-executor.js";
 import { mapTexasLeadRowToApi } from "./texas-api-mapper.js";
-import { createJob, getLatestJob } from "../engine/store/jobs-repository.js";
+import { createJob } from "../engine/store/jobs-repository.js";
 import { deferStartJob } from "./autopilot-kickoff.js";
+import {
+  getActiveJobId,
+  resolveEngineStatus,
+} from "./pipeline-status.js";
 import type { TexasFindJobParams } from "../types/texas.js";
 
 type ControlAuth = (req: Request, res: Response, next: () => void) => void;
@@ -39,15 +43,14 @@ export function mountTexasRoutes(
   app.get("/api/texas/status", requireControlAuth, async (_req, res) => {
     try {
       await runMigrations();
-      const latest = await getLatestJob("texas_autopilot");
+      const { engineStatus, lastRunTimestamp } = await resolveEngineStatus([
+        "texas_autopilot",
+        "find_texas",
+      ]);
       const totalFormsSubmitted = await countTexasFormsSubmitted();
-      const engineStatus =
-        latest && (latest.status === "pending" || latest.status === "running")
-          ? "Processing"
-          : "Idle";
       res.json({
         metadata: {
-          lastRunTimestamp: latest?.updated_at ?? null,
+          lastRunTimestamp,
           engineStatus,
           totalFormsSubmitted,
         },
@@ -150,8 +153,11 @@ export function mountTexasRoutes(
 
   app.post("/api/texas/jobs/autopilot", requireControlAuth, async (req, res) => {
     try {
+      await runMigrations();
       const limit =
         typeof req.body?.limit === "number" ? req.body.limit : undefined;
+      const source =
+        typeof req.body?.source === "string" ? req.body.source : "austin";
       const [counts, queueSize] = await Promise.all([
         countTexasLeads(),
         countTexasAutopilotQueue(),
@@ -163,9 +169,23 @@ export function mountTexasRoutes(
       let ingestStarted = false;
 
       if (counts.total === 0) {
+        const activeFind = await getActiveJobId("find_texas");
+        if (activeFind) {
+          res.status(200).json({
+            success: true,
+            message: "Texas ingest already running in background",
+            jobId: activeFind,
+            queueSize,
+            ingestStarted: true,
+            alreadyRunning: true,
+            jobs: [{ type: "find_texas", jobId: activeFind }],
+          });
+          return;
+        }
+
         const findJobId = await createJob("find_texas", {
-          limit: 500,
-          source: "austin",
+          limit: limit ?? 500,
+          source,
         });
         jobs.push({ type: "find_texas", jobId: findJobId });
         deferStartJob(findJobId, "find_texas");
@@ -174,6 +194,20 @@ export function mountTexasRoutes(
         message =
           "No Texas records in the database — started open-data ingest in the background. Tap Trigger Autopilot Run again after ingest completes to discover websites and emails.";
       } else {
+        const activeAutopilot = await getActiveJobId("texas_autopilot");
+        if (activeAutopilot) {
+          res.status(200).json({
+            success: true,
+            message: "Texas autopilot already running in background",
+            jobId: activeAutopilot,
+            queueSize,
+            ingestStarted: false,
+            alreadyRunning: true,
+            jobs: [{ type: "texas_autopilot", jobId: activeAutopilot }],
+          });
+          return;
+        }
+
         const jobId = await createJob("texas_autopilot", { limit: limit ?? null });
         jobs.push({ type: "texas_autopilot", jobId });
         deferStartJob(jobId, "texas_autopilot");

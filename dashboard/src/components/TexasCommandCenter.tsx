@@ -5,6 +5,7 @@ import {
   fetchTexasStats,
   refreshTexasLeadDraft,
   sendTexasLeadOutreach,
+  startTexasEnrichApolloJob,
   startTexasFindJob,
   type ApiTexasLead,
   type TexasAutopilotStatus,
@@ -247,6 +248,22 @@ export function TexasCommandCenter() {
     setSendBusy(false);
   };
 
+  const runApolloEnrich = async () => {
+    setApolloBusy(true);
+    setMessage(null);
+    try {
+      const result = await startTexasEnrichApolloJob();
+      setMessage(result.message);
+      window.setTimeout(() => {
+        void load();
+      }, 15000);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Apollo enrichment failed");
+    } finally {
+      setApolloBusy(false);
+    }
+  };
+
   const runIngest = async () => {
     setBusy(true);
     setMessage(null);
@@ -288,6 +305,9 @@ export function TexasCommandCenter() {
                     },
                   },
             );
+          }}
+          onRunFailed={() => {
+            void refreshTexasAutopilotStatus();
           }}
           onRunComplete={() => {
             void refreshTexasAutopilotStatus();
@@ -369,7 +389,7 @@ export function TexasCommandCenter() {
         <TexasOutreachScoreFunnel leads={leads} scoreTraffic={scoreTraffic} />
       </div>
 
-      <main className="px-4 pb-28 pt-4">
+      <main className="px-4 pb-40 pt-4">
         {error ? (
           <p className="rounded-lg bg-red-950/60 p-3 text-sm text-red-200">{error}</p>
         ) : null}
@@ -431,14 +451,24 @@ export function TexasCommandCenter() {
       </main>
 
       <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-amber-900/50 bg-[#0a1218]/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void runIngest()}
-          className="min-h-12 w-full rounded-2xl bg-amber-600 text-sm font-bold text-slate-950 disabled:opacity-50"
-        >
-          {busy ? "Ingesting Texas data…" : "Ingest Texas open data"}
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            disabled={busy || apolloBusy}
+            onClick={() => void runIngest()}
+            className="min-h-12 w-full rounded-2xl bg-amber-600 text-sm font-bold text-slate-950 disabled:opacity-50"
+          >
+            {busy ? "Ingesting Texas data…" : "Ingest Texas open data"}
+          </button>
+          <button
+            type="button"
+            disabled={busy || apolloBusy}
+            onClick={() => void runApolloEnrich()}
+            className="min-h-12 w-full rounded-2xl border border-amber-600/60 bg-slate-900 text-sm font-bold text-amber-200 disabled:opacity-50"
+          >
+            {apolloBusy ? "Starting Apollo enrichment…" : "Run Apollo enrichment"}
+          </button>
+        </div>
       </footer>
 
       {selected ? (

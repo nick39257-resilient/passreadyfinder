@@ -14,6 +14,8 @@ type Props = {
   mode?: AutopilotTriggerMode;
   onRunStarted?: () => void;
   onRunComplete?: () => void;
+  /** Called when kickoff or background job fails (resets optimistic UI). */
+  onRunFailed?: () => void;
 };
 
 function buttonClassName(mode: AutopilotTriggerMode): string {
@@ -36,6 +38,7 @@ function watchJobInBackground(
   prefix: string,
   onProgress: (text: string) => void,
   onComplete?: () => void,
+  onFailed?: () => void,
 ): void {
   void pollJobUntilDone(kickoff.jobId, (job) => {
     onProgress(`${prefix}: ${job.progress ?? job.status}`);
@@ -48,6 +51,7 @@ function watchJobInBackground(
       onProgress(
         err instanceof Error ? err.message : `${prefix}: job failed`,
       );
+      onFailed?.();
     });
 }
 
@@ -56,6 +60,7 @@ export function MobileAutopilotTrigger({
   mode = "both",
   onRunStarted,
   onRunComplete,
+  onRunFailed,
 }: Props) {
   const [busy, setBusy] = useState(false);
   const [label, setLabel] = useState<string | null>(null);
@@ -68,19 +73,20 @@ export function MobileAutopilotTrigger({
       if (mode === "uk") {
         const kickoff = await startUkAutopilotJob();
         setLabel(kickoff.message);
-        watchJobInBackground(kickoff, "UK", setLabel, onRunComplete);
+        watchJobInBackground(kickoff, "UK", setLabel, onRunComplete, onRunFailed);
       } else if (mode === "texas") {
         const kickoff = await startTexasAutopilotJob();
         setLabel(kickoff.message);
-        watchJobInBackground(kickoff, "Texas", setLabel, onRunComplete);
+        watchJobInBackground(kickoff, "Texas", setLabel, onRunComplete, onRunFailed);
       } else {
         const { uk, texas } = await triggerAutopilotRuns();
         setLabel(`${uk.message} / ${texas.message}`);
-        watchJobInBackground(uk, "UK", setLabel, onRunComplete);
-        watchJobInBackground(texas, "Texas", setLabel, onRunComplete);
+        watchJobInBackground(uk, "UK", setLabel, onRunComplete, onRunFailed);
+        watchJobInBackground(texas, "Texas", setLabel, onRunComplete, onRunFailed);
       }
     } catch (err) {
       setLabel(err instanceof Error ? err.message : "Autopilot failed to start");
+      onRunFailed?.();
     } finally {
       setBusy(false);
     }

@@ -120,6 +120,21 @@ export async function fetchTexasAutopilotStatus(
   return res.json() as Promise<TexasAutopilotStatus>;
 }
 
+export async function startTexasEnrichApolloJob(
+  options?: { limit?: number },
+  secret?: string,
+): Promise<{ success: boolean; message: string }> {
+  const res = await fetch("/api/texas/jobs/enrich-apollo", {
+    method: "POST",
+    headers: texasAuthHeaders(secret),
+    body: JSON.stringify({ limit: options?.limit }),
+  });
+  if (!res.ok) {
+    await parseTexasError(res, "Texas Apollo enrichment failed");
+  }
+  return res.json() as Promise<{ success: boolean; message: string }>;
+}
+
 export async function startTexasFindJob(
   options: {
     mobileOnly?: boolean;

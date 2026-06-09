@@ -3,6 +3,7 @@ import type { TexasLeadInput } from "../../types/texas.js";
 import type { MobileVendorTier } from "../../types/texas.js";
 import { TEXAS_MULTI_CHANNEL_READY_SQL } from "../texas/texas-multi-channel.js";
 import { renderHb2844DraftForLead } from "./texas-outreach-repository.js";
+import { buildTexasFixedSiteOutreachPitch } from "../texas/texas-outreach-pitch.js";
 
 export interface TexasLeadRow {
   id: number;
@@ -338,7 +339,10 @@ export async function refreshTexasLeadOutreachDraft(leadId: number): Promise<boo
           businessName: row.business_name,
           leadId: row.id,
         })
-      : null;
+      : buildTexasFixedSiteOutreachPitch({
+          leadId: row.id,
+          businessName: row.business_name,
+        });
 
   if (!draftMessage?.trim()) {
     return false;

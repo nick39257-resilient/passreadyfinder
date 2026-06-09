@@ -2,6 +2,7 @@ import { getTexasAutopilotScoreUrl } from "../../config/score-urls.js";
 import { draftContainsScoreLink } from "../outreach-sequence-meta.js";
 import { buildTrackedLandingUrl } from "../outreach-landing-url.js";
 import { renderHb2844DraftForLead } from "../store/texas-outreach-repository.js";
+import { buildTexasFixedSiteOutreachPitch } from "./texas-outreach-pitch.js";
 import type { TexasLeadRow } from "../store/texas-leads-repository.js";
 import {
   isTexasOutreachComplete,
@@ -33,6 +34,11 @@ export function buildEffectiveTexasOutreachDraft(row: TexasLeadRow): string {
       ownerName: row.owner_name,
       businessName: row.business_name,
       leadId: row.id,
+    });
+  } else if (!draft) {
+    draft = buildTexasFixedSiteOutreachPitch({
+      leadId: row.id,
+      businessName: row.business_name,
     });
   }
 

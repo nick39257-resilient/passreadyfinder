@@ -26,11 +26,14 @@ export type TexasOutreachResult = {
   contactPageUrl?: string | null;
 };
 
-function texasEmailSubject(): string {
-  return (
-    process.env.TEXAS_OUTREACH_EMAIL_SUBJECT?.trim() ||
-    texasProductConfig.outreach.emailSubject
-  );
+function texasEmailSubject(row: TexasLeadRow): string {
+  if (process.env.TEXAS_OUTREACH_EMAIL_SUBJECT?.trim()) {
+    return process.env.TEXAS_OUTREACH_EMAIL_SUBJECT.trim();
+  }
+  if (row.is_mobile_vendor === 1) {
+    return texasProductConfig.outreach.emailSubject;
+  }
+  return texasProductConfig.outreach.emailSubjectFixed;
 }
 
 function texasContactFormForceSubmit(): boolean {
@@ -72,14 +75,14 @@ async function resolveEmailForTexasLead(row: TexasLeadRow): Promise<string | nul
   return apollo.email.trim().toLowerCase();
 }
 
-async function sendTexasEmail(_row: TexasLeadRow, to: string, text: string): Promise<string> {
+async function sendTexasEmail(row: TexasLeadRow, to: string, text: string): Promise<string> {
   if (!isSmtpMailConfigured()) {
     throw new Error("EMAIL_PASS (or MAIL_PASSWORD) is required for SMTP outreach");
   }
 
   const { messageId } = await sendSmtpMail({
     to,
-    subject: texasEmailSubject(),
+    subject: texasEmailSubject(row),
     text,
   });
 

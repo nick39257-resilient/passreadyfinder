@@ -2,10 +2,11 @@ import type { LeadRow } from "./leads-repository.js";
 import { getDb } from "./db.js";
 import { LEAD_STATUS_READY_TO_REVIEW } from "../../types/enrichment.js";
 
-/** Leads eligible for UK autopilot — no email, not yet contacted via form. */
+/** Leads eligible for UK autopilot — discovery only, not in outreach pipeline. */
 export const UK_AUTOPILOT_QUEUE_SQL = `
   (email IS NULL OR TRIM(email) = '')
-  AND status NOT IN ('suppressed', 'form_submitted', 'contacted', 'replied')
+  AND status IN ('new', 'ready_to_review')
+  AND status NOT IN ('suppressed', 'replied', 'opted_in', 'trial_started', 'form_submitted', 'contacted')
 `;
 
 export async function getUkLeadsForAutopilot(limit: number): Promise<LeadRow[]> {

@@ -34,10 +34,10 @@ export function OutreachScoreFunnel({
           hint="Opened score page (24h)"
         />
         <FunnelStat
-          label="Score page hits"
-          value={scoreTraffic?.total ?? null}
+          label="UK score hits"
+          value={scoreTraffic?.uk ?? null}
           tone="sky"
-          hint="All-time pixel count"
+          hint="All-time UK pixel count"
         />
         <FunnelStat
           label="On touch 2+"
