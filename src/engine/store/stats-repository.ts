@@ -66,7 +66,7 @@ export async function countApprovedLeads(): Promise<number> {
   const result = await db.execute(`
     SELECT COUNT(*) AS count
     FROM leads
-    WHERE status = 'approved' AND draft_message IS NOT NULL
+    WHERE status IN ('approved', 'ready_to_contact') AND draft_message IS NOT NULL
   `);
   return Number(result.rows[0]?.count ?? 0);
 }
@@ -93,7 +93,7 @@ export async function auditPostboxLeads(): Promise<{
   const result = await db.execute(`
     SELECT id, business_name, email
     FROM leads
-    WHERE status = 'approved'
+    WHERE status IN ('approved', 'ready_to_contact')
       AND draft_message IS NOT NULL
     ORDER BY lead_score DESC, id DESC
   `);
@@ -125,7 +125,7 @@ export async function countNeedsEyesDrafts(): Promise<number> {
   const result = await db.execute(`
     SELECT COUNT(*) AS count
     FROM leads
-    WHERE status IN ('drafted', 'approved', 'ready_to_review')
+    WHERE status IN ('drafted', 'approved', 'ready_to_contact', 'ready_to_review')
       AND (
         COALESCE(flag_for_review, 0) = 1
         OR (needs_eyes_reason IS NOT NULL AND TRIM(needs_eyes_reason) != '')

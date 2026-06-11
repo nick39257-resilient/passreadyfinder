@@ -326,7 +326,7 @@ export async function findLeadIdByBusinessEmail(email: string): Promise<number |
       FROM leads
       WHERE LOWER(TRIM(email)) = ?
       ORDER BY
-        CASE WHEN status = 'contacted' THEN 0 WHEN status = 'approved' THEN 1 ELSE 2 END,
+        CASE WHEN status = 'contacted' THEN 0 WHEN status IN ('approved', 'ready_to_contact') THEN 1 ELSE 2 END,
         contacted_at DESC,
         updated_at DESC
       LIMIT 1

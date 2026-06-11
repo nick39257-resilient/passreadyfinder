@@ -672,7 +672,7 @@ export function App() {
         });
         return;
       }
-      if (preview.sendableCount === 0 || !preview.confirmToken) {
+      if (preview.sendableCount === 0) {
         setBanner({
           tone: "info",
           message:
@@ -695,17 +695,13 @@ export function App() {
   };
 
   const handleSendConfirm = async () => {
-    if (!sendPreview?.confirmToken) {
+    if (!sendPreview || sendPreview.sendableCount === 0) {
       return;
     }
     try {
       const secret = ensureControlSecret(getControlSecret());
       setSendModalOpen(false);
-      const jobId = await startSendJob(
-        sendPreview.confirmToken,
-        sendPreview.sendableCount,
-        secret,
-      );
+      const jobId = await startSendJob(secret);
       setSendPreview(null);
       await runBackgroundJob(jobId, "Sending emails…", (result) => {
         const r = result as { sent?: number; errors?: unknown[] } | null;

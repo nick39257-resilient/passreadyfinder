@@ -58,20 +58,18 @@ export async function startDraftAllJob(secret?: string): Promise<string> {
   return data.jobId;
 }
 
-export async function startSendJob(
-  confirmToken: string,
-  expectedCount: number,
-  secret?: string,
-): Promise<string> {
+export async function startSendJob(secret?: string): Promise<string> {
   const res = await fetch("/api/jobs/send", {
     method: "POST",
     headers: authHeaders(secret),
-    body: JSON.stringify({ confirmToken, expectedCount }),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(body.error ?? `Send job failed (${res.status})`);
   }
-  const data = (await res.json()) as { jobId: string };
+  const data = (await res.json()) as { jobId: string | null; message?: string };
+  if (!data.jobId) {
+    throw new Error(data.message ?? "Nothing to send — queue empty or daily cap reached.");
+  }
   return data.jobId;
 }

@@ -50,7 +50,7 @@ async function main(): Promise<void> {
       SUM(CASE WHEN phone IS NOT NULL AND TRIM(phone) != '' THEN 1 ELSE 0 END) AS with_phone,
       SUM(CASE WHEN website IS NOT NULL AND TRIM(website) != '' THEN 1 ELSE 0 END) AS with_website,
       SUM(CASE WHEN draft_message IS NOT NULL AND TRIM(draft_message) != '' THEN 1 ELSE 0 END) AS with_draft,
-      SUM(CASE WHEN status = 'approved' AND draft_message IS NOT NULL
+      SUM(CASE WHEN status IN ('approved', 'ready_to_contact') AND draft_message IS NOT NULL
           AND email IS NOT NULL AND TRIM(email) != '' THEN 1 ELSE 0 END) AS send_ready
     FROM leads
   `);

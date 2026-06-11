@@ -26,6 +26,7 @@ const JOB_TIMEOUT_MS: Partial<Record<JobType, number>> = {
   uk_autopilot: 55 * 60 * 1000,
   draft_all: 60 * 60 * 1000,
   contact_discovery: 20 * 60 * 1000,
+  send: 4 * 60 * 60 * 1000,
 };
 
 const DEFAULT_JOB_TIMEOUT_MS = 60 * 60 * 1000;
@@ -131,7 +132,7 @@ async function runJobBody(
     case "send": {
       await updateJob(jobId, {
         status: "running",
-        progress: "Sending approved emails via Private Email SMTP…",
+        progress: "Sending ready_to_contact queue via Private Email SMTP…",
       });
       return runSender(onProgress);
     }

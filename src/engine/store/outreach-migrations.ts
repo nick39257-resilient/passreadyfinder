@@ -27,6 +27,7 @@ const LEAD_PHASE_B_COLUMNS = [
   "contact_form_page_url TEXT",
   "local_authority_name TEXT",
   "last_previewed_at TEXT",
+  "email_sent_at TEXT",
 ] as const;
 
 async function columnExists(table: string, column: string): Promise<boolean> {
@@ -106,6 +107,17 @@ export async function runOutreachMigrations(): Promise<void> {
   await db.execute(`
     UPDATE leads SET status = 'drafted'
     WHERE draft_message IS NOT NULL AND status = 'new'
+  `);
+
+  // Postbox queue uses ready_to_contact (legacy approved rows)
+  await db.execute(`
+    UPDATE leads SET status = 'ready_to_contact'
+    WHERE status = 'approved' AND draft_message IS NOT NULL
+  `);
+
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_leads_outbound_queue
+    ON leads(status, email_sent_at)
   `);
 }
 

@@ -124,7 +124,19 @@ async function ensureMigrations(): Promise<void> {
   }
 }
 
-function requireControlAuth(_req: Request, _res: Response, next: NextFunction): void {
+function requireControlAuth(req: Request, res: Response, next: NextFunction): void {
+  const secret = process.env.CONTROL_PANEL_SECRET?.trim();
+  if (!secret) {
+    next();
+    return;
+  }
+
+  const auth = req.headers.authorization?.trim();
+  if (auth !== `Bearer ${secret}`) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   next();
 }
 
@@ -799,20 +811,7 @@ export async function createApp(options?: {
     }
   });
 
-  app.post("/api/jobs/send", requireControlAuth, async (req, res) => {
-    const confirmToken =
-      typeof req.body?.confirmToken === "string" ? req.body.confirmToken.trim() : "";
-    const expectedCount = Number(req.body?.expectedCount);
-
-    if (!confirmToken) {
-      res.status(400).json({ error: "confirmToken is required" });
-      return;
-    }
-    if (!Number.isInteger(expectedCount) || expectedCount < 1) {
-      res.status(400).json({ error: "expectedCount must be a positive integer" });
-      return;
-    }
-
+  app.post("/api/jobs/send", requireControlAuth, async (_req, res) => {
     try {
       const deliverability = await getDeliverabilityStatus();
       if (deliverability.sendLocked) {
@@ -825,37 +824,33 @@ export async function createApp(options?: {
       const dailyQuota = await getDailySendQuota();
       const sendableCount = Math.min(sendReadyCount, dailyQuota.remaining);
 
-      if (approvedCount === 0 || sendReadyCount === 0 || sendableCount === 0) {
-        res.status(400).json({
-          error:
+      if (sendReadyCount === 0 || sendableCount === 0) {
+        res.status(200).json({
+          success: true,
+          message:
             sendReadyCount === 0
-              ? "No send-ready emails in postbox — fix invalid addresses first"
-              : "No approved leads to send",
+              ? "No send-ready leads in queue (ready_to_contact with valid email)."
+              : "Daily send cap reached — nothing to send.",
+          jobId: null,
           approvedCount,
           sendReadyCount,
           sendableCount: 0,
+          dailyQuota,
         });
-        return;
-      }
-      if (sendableCount !== expectedCount) {
-        res.status(409).json({
-          error: `Send batch size changed (${expectedCount} → ${sendableCount}). Preview again.`,
-          approvedCount,
-          sendReadyCount,
-          sendableCount,
-        });
-        return;
-      }
-
-      const tokenCheck = await consumeSendConfirmToken(confirmToken, expectedCount);
-      if (!tokenCheck.ok) {
-        res.status(400).json({ error: tokenCheck.reason });
         return;
       }
 
       const jobId = await createJob("send", { sendableCount });
       startJob(jobId, "send");
-      res.status(202).json({ jobId });
+      res.status(202).json({
+        success: true,
+        message: `Outbound batch started (${sendableCount} lead(s) queued, max 50 per run).`,
+        jobId,
+        approvedCount,
+        sendReadyCount,
+        sendableCount,
+        dailyQuota,
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to start send job" });

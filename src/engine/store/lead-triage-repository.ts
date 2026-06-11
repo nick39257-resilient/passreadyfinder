@@ -164,7 +164,7 @@ export async function findApprovedPostboxLeads(): Promise<StuckLeadRow[]> {
     sql: `
       SELECT id, business_name, status, email, phone, website, contact_method, enrichment_status, updated_at
       FROM leads
-      WHERE status = 'approved'
+      WHERE status IN ('approved', 'ready_to_contact')
         AND draft_message IS NOT NULL
     `,
   });

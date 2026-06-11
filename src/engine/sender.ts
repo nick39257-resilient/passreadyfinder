@@ -1,10 +1,6 @@
-import { createLlmClient, draftSequenceFollowUpForLead, resolveOutreachSubject } from "./drafter.js";
+import { createLlmClient, draftSequenceFollowUpForLead } from "./drafter.js";
 import { getDailySendQuota } from "./daily-send-cap.js";
-import {
-  getDeliverabilityStatus,
-  randomSendDelayMs,
-  sleepWithProgress,
-} from "./deliverability.js";
+import { getDeliverabilityStatus, sleepWithProgress } from "./deliverability.js";
 import {
   buildUnsubscribeUrl,
   ensureLeadUnsubscribeToken,
@@ -14,10 +10,13 @@ import { prepareOutboundMessage } from "./outreach-message.js";
 import { flagLeadForReviewWithReason, getLeadById } from "./store/leads-repository.js";
 import { runMigrations } from "./store/db.js";
 import {
+  claimReadyToContactBatch,
   filterLeadsAllowedToSend,
-  getApprovedLeads,
   markLeadContacted,
-  type ApprovedLead,
+  markLeadFailedDelivery,
+  OUTBOUND_BATCH_LIMIT,
+  revertLeadToReadyToContact,
+  type OutboundQueueLead,
 } from "./store/sender-repository.js";
 import { isEmailSuppressed, normalizeOutreachEmail } from "./outreach-halt.js";
 import {
@@ -25,13 +24,22 @@ import {
   isSmtpMailConfigured,
   sendSmtpMail,
 } from "./services/smtp-mail-service.js";
+import {
+  applyBodySpintax,
+  buildSpintaxLeadContext,
+  resolveSpintaxSubject,
+} from "./spintax.js";
 
+/** Random delay between 1.5 and 4 minutes after each send (human pacing). */
+export function randomOutboundThrottleMs(): number {
+  return Math.floor(Math.random() * (240_000 - 90_000 + 1)) + 90_000;
+}
 
 function isTestEmailFallbackEnabled(): boolean {
   return process.env.ALLOW_TEST_EMAIL_FALLBACK?.trim().toLowerCase() === "true";
 }
 
-function resolveRecipient(lead: ApprovedLead): {
+function resolveRecipient(lead: OutboundQueueLead): {
   to: string;
   usingTestFallback: boolean;
 } {
@@ -57,11 +65,12 @@ export interface SendRunResult {
   sendLocked?: boolean;
   dailyCapReached?: boolean;
   dailyQuota?: { sentToday: number; cap: number; remaining: number };
+  claimed?: number;
 }
 
 export type SendProgressCallback = (message: string) => void | Promise<void>;
 
-/** Sweep approved leads and send via Namecheap Private Email SMTP. Marks each as contacted or nurture on success. */
+/** Process ready_to_contact queue sequentially with spintax + human throttling. */
 export async function runSender(onProgress?: SendProgressCallback): Promise<SendRunResult> {
   await runMigrations();
 
@@ -88,6 +97,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
     skipped: 0,
     errors: [],
     dailyQuota: quota,
+    claimed: 0,
   };
 
   if (quota.remaining <= 0) {
@@ -102,20 +112,30 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
     await onProgress?.(msg);
   };
 
-  const approvedPool = await getApprovedLeads(quota.remaining);
-  const { allowed: leads, skippedSuppressed } = await filterLeadsAllowedToSend(approvedPool);
+  const batchLimit = Math.min(OUTBOUND_BATCH_LIMIT, quota.remaining);
+  const claimedPool = await claimReadyToContactBatch(batchLimit);
+  const { allowed: leads, skippedSuppressed } = await filterLeadsAllowedToSend(claimedPool);
+
+  const allowedIds = new Set(leads.map((l) => l.id));
+  for (const lead of claimedPool) {
+    if (!allowedIds.has(lead.id)) {
+      await revertLeadToReadyToContact(lead.id);
+    }
+  }
+
+  result.claimed = leads.length;
 
   if (skippedSuppressed > 0) {
     await report(`  ⊘ skipped ${skippedSuppressed} lead(s) — email on suppression list\n`);
   }
 
   if (leads.length === 0) {
-    console.log("No approved leads to send.");
+    console.log("No ready_to_contact leads to send.");
     return result;
   }
 
   await report(
-    `Sending ${leads.length} approved lead(s) via Private Email SMTP (${quota.sentToday}/${quota.cap} sent today, cap ${quota.cap})…`,
+    `Sending ${leads.length} lead(s) via Private Email SMTP (${quota.sentToday}/${quota.cap} sent today, batch cap ${OUTBOUND_BATCH_LIMIT})…`,
   );
   await report(`From: ${getPassreadyMailFrom()}`);
   if (testFallbackEnabled && testEmail) {
@@ -123,13 +143,14 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
   }
 
   let followUpLlm: ReturnType<typeof createLlmClient> | null = null;
+  const customSubject = process.env.OUTREACH_EMAIL_SUBJECT?.trim() || null;
 
-  for (let i = 0; i < leads.length; i++) {
-    const lead = leads[i];
+  for (const lead of leads) {
     try {
       const row = await getLeadById(lead.id);
       if (!row || isLeadOutreachHalted(row)) {
         result.skipped++;
+        await revertLeadToReadyToContact(lead.id);
         await report(`  ⊘ skipped ${lead.business_name} (outreach halted)\n`);
         continue;
       }
@@ -146,6 +167,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         result.skipped++;
+        await revertLeadToReadyToContact(lead.id);
         if (message.includes("No business email")) {
           await flagLeadForReviewWithReason(lead.id, "STUCK_IN_POSTBOX_NO_EMAIL");
         }
@@ -156,6 +178,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
       const sendAddress = normalizeOutreachEmail(to);
       if (sendAddress && (await isEmailSuppressed(sendAddress))) {
         result.skipped++;
+        await revertLeadToReadyToContact(lead.id);
         await report(`  ⊘ skipped ${lead.business_name} — suppressed email\n`);
         continue;
       }
@@ -166,22 +189,32 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
         await report(`→ ${lead.business_name}: ${to}`);
       }
 
+      const spintaxContext = buildSpintaxLeadContext({
+        business_name: lead.business_name,
+        owner_name: lead.owner_name,
+        local_authority_name: lead.local_authority_name,
+        address: lead.address,
+        postcode: lead.postcode,
+      });
+
       const hasReplied = Boolean(lead.replied_at?.trim());
+      const spintaxBody = applyBodySpintax(lead.draft_message, spintaxContext);
       const { text, html } = prepareOutboundMessage({
-        body: lead.draft_message,
+        body: spintaxBody,
         touchCount: lead.touch_count,
         hasReplied,
         unsubscribeUrl,
       });
 
+      const subject = resolveSpintaxSubject(
+        spintaxContext,
+        lead.touch_count,
+        customSubject,
+      );
+
       const { messageId } = await sendSmtpMail({
         to,
-        subject: resolveOutreachSubject({
-          businessName: lead.business_name,
-          address: row.address,
-          leadId: lead.id,
-          touchCount: lead.touch_count,
-        }),
+        subject,
         text,
         ...(html ? { html } : {}),
       });
@@ -196,7 +229,7 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
         if (followUp.drafted) {
           const laneLabel =
             followUp.lane === "postbox"
-              ? "postbox"
+              ? "ready_to_contact"
               : `Needs Eyes (${followUp.reason ?? "review"})`;
           await report(
             `  ↻ touch ${followUp.touch ?? "?"} follow-up drafted → ${laneLabel}\n`,
@@ -206,19 +239,22 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
         const msg = followUpErr instanceof Error ? followUpErr.message : String(followUpErr);
         await report(`  ⚠ follow-up draft failed: ${msg}\n`);
       }
-
-      if (i < leads.length - 1) {
-        const delayMs = randomSendDelayMs();
-        await sleepWithProgress(delayMs, report);
-      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      console.error(`SMTP send failed for lead ${lead.id} (${lead.business_name}):`, err);
       result.errors.push({
         leadId: lead.id,
         businessName: lead.business_name,
         error: message,
       });
-      await report(`  ✗ ${lead.business_name}: ${message}\n`);
+      await markLeadFailedDelivery(lead.id, message);
+      await report(`  ✗ ${lead.business_name}: ${message} (marked failed_delivery)\n`);
+    }
+
+    const isLast = lead === leads[leads.length - 1];
+    if (!isLast) {
+      const delayMs = randomOutboundThrottleMs();
+      await sleepWithProgress(delayMs, report);
     }
   }
 

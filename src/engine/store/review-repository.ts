@@ -34,7 +34,7 @@ export async function approveDraft(
     sql: `
       UPDATE leads
       SET draft_message = ?,
-          status = 'approved',
+          status = 'ready_to_contact',
           needs_eyes_reason = NULL,
           needs_eyes_updated_at = datetime('now'),
           updated_at = datetime('now')
@@ -70,7 +70,7 @@ export async function queueLeadToPostbox(id: number): Promise<boolean> {
   const result = await db.execute({
     sql: `
       UPDATE leads
-      SET status = 'approved', updated_at = datetime('now')
+      SET status = 'ready_to_contact', updated_at = datetime('now')
       WHERE id = ?
         AND status = 'drafted'
         AND draft_message IS NOT NULL
