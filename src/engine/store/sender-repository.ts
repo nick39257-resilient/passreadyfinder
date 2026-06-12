@@ -27,6 +27,8 @@ export interface OutboundQueueLead extends ApprovedLead {
   local_authority_name: string | null;
   owner_name: string | null;
   postcode: string | null;
+  /** HB 2844 vendor tier when present (TYPE_I / TYPE_II / TYPE_III). */
+  vendor_tier?: string | null;
 }
 
 /** Leads approved for the next outbound touch (first or follow-up sequence). */
@@ -43,7 +45,7 @@ const OUTBOUND_QUEUE_WHERE = `
 const OUTBOUND_SELECT_COLUMNS = `
   id, business_name, email, draft_message, status,
   COALESCE(touch_count, 0) AS touch_count,
-  replied_at, address, local_authority_name, owner_name, postcode
+  replied_at, address, local_authority_name, owner_name, postcode, vendor_tier
 `;
 
 export async function countSendsTodayUtc(): Promise<number> {

@@ -30,6 +30,12 @@ import {
   resolveSpintaxSubject,
 } from "./spintax.js";
 import {
+  buildTexasHb2844SpintaxContext,
+  resolveTexasHb2844Body,
+  resolveTexasHb2844Subject,
+} from "./texas/texas-hb2844-spintax.js";
+import { getOutreachLandingUrl } from "./outreach-landing-url.js";
+import {
   releaseOutboundSendLock,
   tryAcquireOutboundSendLock,
 } from "./outbound-send-lock.js";
@@ -74,6 +80,47 @@ export interface SendRunResult {
 }
 
 export type SendProgressCallback = (message: string) => void | Promise<void>;
+
+/** Spintax subject + body for one outbound lead (UK default; HB 2844 when vendor_tier is set). */
+export function buildOutboundSpintaxContent(
+  lead: OutboundQueueLead,
+  options: {
+    customSubject: string | null;
+    draftMessage: string;
+  },
+): { subject: string; body: string } {
+  const spintaxContext = buildSpintaxLeadContext({
+    business_name: lead.business_name,
+    owner_name: lead.owner_name,
+    local_authority_name: lead.local_authority_name,
+    address: lead.address,
+    postcode: lead.postcode,
+  });
+
+  if (lead.vendor_tier?.trim()) {
+    const texasContext = buildTexasHb2844SpintaxContext({
+      business_name: lead.business_name,
+      owner_name: lead.owner_name,
+      local_authority_name: lead.local_authority_name,
+      address: lead.address,
+      postcode: lead.postcode,
+      scoreUrl: process.env.TEXAS_SCORE_URL?.trim() || getOutreachLandingUrl(),
+    });
+    return {
+      subject: resolveTexasHb2844Subject(texasContext, options.customSubject),
+      body: resolveTexasHb2844Body(texasContext, lead.vendor_tier),
+    };
+  }
+
+  return {
+    subject: resolveSpintaxSubject(
+      spintaxContext,
+      lead.touch_count,
+      options.customSubject,
+    ),
+    body: applyBodySpintax(options.draftMessage, spintaxContext),
+  };
+}
 
 /** Process ready_to_contact queue sequentially with spintax + human throttling. */
 export async function runSender(onProgress?: SendProgressCallback): Promise<SendRunResult> {
@@ -213,28 +260,17 @@ async function runSenderBody(onProgress?: SendProgressCallback): Promise<SendRun
         await report(`→ ${lead.business_name}: ${to}`);
       }
 
-      const spintaxContext = buildSpintaxLeadContext({
-        business_name: lead.business_name,
-        owner_name: lead.owner_name,
-        local_authority_name: lead.local_authority_name,
-        address: lead.address,
-        postcode: lead.postcode,
-      });
-
       const hasReplied = Boolean(lead.replied_at?.trim());
-      const spintaxBody = applyBodySpintax(lead.draft_message, spintaxContext);
+      const { subject, body: spintaxBody } = buildOutboundSpintaxContent(lead, {
+        customSubject,
+        draftMessage: lead.draft_message,
+      });
       const { text, html } = prepareOutboundMessage({
         body: spintaxBody,
         touchCount: lead.touch_count,
         hasReplied,
         unsubscribeUrl,
       });
-
-      const subject = resolveSpintaxSubject(
-        spintaxContext,
-        lead.touch_count,
-        customSubject,
-      );
 
       const { messageId } = await sendSmtpMail({
         to,

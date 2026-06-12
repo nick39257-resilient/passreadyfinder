@@ -1,8 +1,11 @@
 import { getTexasAutopilotScoreUrl } from "../../config/score-urls.js";
 import { draftContainsScoreLink } from "../outreach-sequence-meta.js";
 import { buildTrackedLandingUrl } from "../outreach-landing-url.js";
-import { renderHb2844DraftForLead } from "../store/texas-outreach-repository.js";
 import { buildTexasFixedSiteOutreachPitch } from "./texas-outreach-pitch.js";
+import {
+  buildTexasHb2844SpintaxContext,
+  resolveTexasHb2844Body,
+} from "./texas-hb2844-spintax.js";
 import type { TexasLeadRow } from "../store/texas-leads-repository.js";
 import {
   isTexasOutreachComplete,
@@ -26,21 +29,26 @@ export function buildTrackedTexasScoreUrl(leadId: number): string {
 
 /** Effective outreach copy shown in UI / sent at runtime — always includes tracked SafeScore when possible. */
 export function buildEffectiveTexasOutreachDraft(row: TexasLeadRow): string {
-  const trackedScoreUrl = buildTrackedTexasScoreUrl(row.id);
-  let draft = row.draft_message?.trim() ?? "";
-
-  if (!draft && row.is_mobile_vendor === 1) {
-    draft = renderHb2844DraftForLead({
-      ownerName: row.owner_name,
-      businessName: row.business_name,
-      leadId: row.id,
+  if (row.is_mobile_vendor === 1) {
+    const context = buildTexasHb2844SpintaxContext({
+      business_name: row.business_name,
+      owner_name: row.owner_name,
+      local_authority_name: row.county,
+      address: row.address,
+      postcode: row.zip,
+      city: row.city,
+      scoreUrl: buildTrackedTexasScoreUrl(row.id),
     });
-  } else if (!draft) {
-    draft = buildTexasFixedSiteOutreachPitch({
-      leadId: row.id,
-      businessName: row.business_name,
-    });
+    return resolveTexasHb2844Body(context, row.vendor_tier);
   }
+
+  const trackedScoreUrl = buildTrackedTexasScoreUrl(row.id);
+  const draft =
+    row.draft_message?.trim() ||
+    buildTexasFixedSiteOutreachPitch({
+      leadId: row.id,
+      businessName: row.business_name,
+    });
 
   if (!draft) {
     return "";

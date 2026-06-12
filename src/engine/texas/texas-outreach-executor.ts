@@ -3,7 +3,15 @@ import {
   TEXAS_STATUS_EMAIL_SENT,
   TEXAS_STATUS_FORM_SUBMITTED,
 } from "../../types/texas.js";
-import { buildEffectiveTexasOutreachDraft } from "./texas-outreach-meta.js";
+import {
+  buildEffectiveTexasOutreachDraft,
+  buildTrackedTexasScoreUrl,
+} from "./texas-outreach-meta.js";
+import {
+  buildTexasHb2844SpintaxContext,
+  resolveTexasHb2844Body,
+  resolveTexasHb2844Subject,
+} from "./texas-hb2844-spintax.js";
 import { texasLeadToApolloInput } from "./texas-enrichment-service.js";
 import { findOwnerEmailViaApollo } from "../services/apollo-service.js";
 import { isSmtpMailConfigured, sendSmtpMail } from "../services/smtp-mail-service.js";
@@ -26,12 +34,25 @@ export type TexasOutreachResult = {
   contactPageUrl?: string | null;
 };
 
+function texasHb2844Context(row: TexasLeadRow) {
+  return buildTexasHb2844SpintaxContext({
+    business_name: row.business_name,
+    owner_name: row.owner_name,
+    local_authority_name: row.county,
+    address: row.address,
+    postcode: row.zip,
+    city: row.city,
+    scoreUrl: buildTrackedTexasScoreUrl(row.id),
+  });
+}
+
 function texasEmailSubject(row: TexasLeadRow): string {
-  if (process.env.TEXAS_OUTREACH_EMAIL_SUBJECT?.trim()) {
-    return process.env.TEXAS_OUTREACH_EMAIL_SUBJECT.trim();
-  }
+  const custom = process.env.TEXAS_OUTREACH_EMAIL_SUBJECT?.trim() || null;
   if (row.is_mobile_vendor === 1) {
-    return texasProductConfig.outreach.emailSubject;
+    return resolveTexasHb2844Subject(texasHb2844Context(row), custom);
+  }
+  if (custom) {
+    return custom;
   }
   return texasProductConfig.outreach.emailSubjectFixed;
 }
@@ -47,6 +68,9 @@ function texasContactFormForceSubmit(): boolean {
 }
 
 function resolvePitchText(row: TexasLeadRow): string {
+  if (row.is_mobile_vendor === 1) {
+    return resolveTexasHb2844Body(texasHb2844Context(row), row.vendor_tier);
+  }
   return buildEffectiveTexasOutreachDraft(row);
 }
 
