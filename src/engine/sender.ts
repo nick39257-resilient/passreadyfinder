@@ -29,6 +29,10 @@ import {
   buildSpintaxLeadContext,
   resolveSpintaxSubject,
 } from "./spintax.js";
+import {
+  releaseOutboundSendLock,
+  tryAcquireOutboundSendLock,
+} from "./outbound-send-lock.js";
 
 /** Random delay between 1.5 and 4 minutes after each send (human pacing). */
 export function randomOutboundThrottleMs(): number {
@@ -66,6 +70,7 @@ export interface SendRunResult {
   dailyCapReached?: boolean;
   dailyQuota?: { sentToday: number; cap: number; remaining: number };
   claimed?: number;
+  batchAlreadyRunning?: boolean;
 }
 
 export type SendProgressCallback = (message: string) => void | Promise<void>;
@@ -73,6 +78,10 @@ export type SendProgressCallback = (message: string) => void | Promise<void>;
 /** Process ready_to_contact queue sequentially with spintax + human throttling. */
 export async function runSender(onProgress?: SendProgressCallback): Promise<SendRunResult> {
   await runMigrations();
+
+  if (!isSmtpMailConfigured()) {
+    throw new Error("EMAIL_PASS (or MAIL_PASSWORD) is required in .env");
+  }
 
   const deliverability = await getDeliverabilityStatus();
   if (deliverability.sendLocked) {
@@ -85,10 +94,25 @@ export async function runSender(onProgress?: SendProgressCallback): Promise<Send
     };
   }
 
-  if (!isSmtpMailConfigured()) {
-    throw new Error("EMAIL_PASS (or MAIL_PASSWORD) is required in .env");
+  const lockAcquired = await tryAcquireOutboundSendLock();
+  if (!lockAcquired) {
+    console.log("Outbound send lock held — another batch is still running.");
+    return {
+      sent: 0,
+      skipped: 0,
+      errors: [],
+      batchAlreadyRunning: true,
+    };
   }
 
+  try {
+    return await runSenderBody(onProgress);
+  } finally {
+    await releaseOutboundSendLock();
+  }
+}
+
+async function runSenderBody(onProgress?: SendProgressCallback): Promise<SendRunResult> {
   const testFallbackEnabled = isTestEmailFallbackEnabled();
   const testEmail = process.env.TEST_EMAIL_ADDRESS?.trim();
   const quota = await getDailySendQuota();

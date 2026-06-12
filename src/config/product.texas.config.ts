@@ -40,8 +40,8 @@ export const texasProductConfig = {
       "DSHS compliance check — PassReady",
     scoreUrl: process.env.TEXAS_SCORE_URL ?? "https://score.passready.us",
     siteUrl: process.env.TEXAS_SITE_URL ?? "https://passready.us",
-    hb2844MobileTemplate:
-      "Hey [OwnerName], with the new state compliance rules kicking in this July under HB 2844, DSHS is centralizing all mobile truck inspections into a permanent statewide record. If you're still tracking logs on paper during transport, an inspector can halt your operations. We built PassReady to automate this exact digital chain of custody...",
+    /** Optional override — set TEXAS_HB2844_MOBILE_TEMPLATE in .env for a custom body. */
+    hb2844MobileTemplate: process.env.TEXAS_HB2844_MOBILE_TEMPLATE ?? "",
   },
 } as const;
 

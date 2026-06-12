@@ -29,9 +29,9 @@ export interface OutboundQueueLead extends ApprovedLead {
   postcode: string | null;
 }
 
+/** Leads approved for the next outbound touch (first or follow-up sequence). */
 const OUTBOUND_QUEUE_WHERE = `
   status = 'ready_to_contact'
-  AND email_sent_at IS NULL
   AND draft_message IS NOT NULL
   AND email IS NOT NULL
   AND TRIM(email) != ''
@@ -90,9 +90,18 @@ export async function getApprovedLeads(limit?: number): Promise<ApprovedLead[]> 
   return getReadyToContactLeads(limit);
 }
 
+function processingStaleMinutes(): number {
+  const fromEnv = Number(process.env.OUTBOUND_PROCESSING_STALE_MINUTES);
+  if (Number.isFinite(fromEnv) && fromEnv >= 60) {
+    return fromEnv;
+  }
+  // Max batch (50) × 4 min delay ≈ 200 min; keep reclaim beyond send job timeout (4h).
+  return 300;
+}
+
 /** Reset processing rows stuck longer than maxAgeMinutes (crashed send batches). */
 export async function reclaimStaleProcessingLeads(
-  maxAgeMinutes = 120,
+  maxAgeMinutes = processingStaleMinutes(),
 ): Promise<number> {
   const db = getDb();
   const result = await db.execute({
@@ -100,7 +109,6 @@ export async function reclaimStaleProcessingLeads(
       UPDATE leads
       SET status = 'ready_to_contact', updated_at = datetime('now')
       WHERE status = 'processing'
-        AND email_sent_at IS NULL
         AND datetime(updated_at) < datetime('now', ?)
     `,
     args: [`-${maxAgeMinutes} minutes`],
@@ -130,7 +138,6 @@ export async function claimReadyToContactBatch(
         LIMIT ?
       )
       AND status = 'ready_to_contact'
-      AND email_sent_at IS NULL
       RETURNING ${OUTBOUND_SELECT_COLUMNS}
     `,
     args: [maxTouches, ...outreachHaltedSqlArgs(), batchCap],
@@ -148,7 +155,7 @@ export async function revertLeadToReadyToContact(leadId: number): Promise<void> 
     sql: `
       UPDATE leads
       SET status = 'ready_to_contact', updated_at = datetime('now')
-      WHERE id = ? AND status = 'processing' AND email_sent_at IS NULL
+      WHERE id = ? AND status = 'processing'
     `,
     args: [leadId],
   });

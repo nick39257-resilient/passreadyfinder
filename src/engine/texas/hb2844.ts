@@ -1,9 +1,21 @@
 import { texasProductConfig } from "../../config/product.texas.config.js";
 import type { MobileVendorTier } from "../../types/texas.js";
 
-/** Strict HB 2844 mobile pitch — stored in texas_outreach_templates and lead draft_message. */
-export const HB2844_MOBILE_PITCH_TEMPLATE =
-  "Hey [OwnerName], with the new state compliance rules kicking in this July under HB 2844, DSHS is centralizing all mobile truck inspections into a permanent statewide record. If you're still tracking logs on paper during transport, an inspector can halt your operations. We built PassReady to automate this exact digital chain of custody...";
+/** HB 2844 mobile pitch — stored in texas_outreach_templates and lead draft_message. */
+export const HB2844_MOBILE_PITCH_TEMPLATE = `Hey [OwnerName],
+
+Texas HB 2844 takes full effect July 1, 2026. DSHS is moving mobile food units onto a permanent statewide inspection and chain-of-custody record — paper logs during transport are increasingly a reason inspectors pause operations on-site.
+
+We built the PassReady US mobile module for [BusinessName] and operators like you: digital temperature logs, transport records, and inspection-ready paperwork in one place before the July deadline.
+
+Free DSHS readiness score check (no sign-up):
+[ScoreUrl]
+
+Learn more: [SiteUrl]
+
+Happy to share a short walkthrough if useful.
+
+— Nick Clark, PassReady US Compliance Desk`;
 
 const TYPE_I_PATTERNS = [
   /\bpre[- ]?packaged\b/i,
@@ -115,13 +127,16 @@ export interface Hb2844OutreachParams {
 
 export function buildHb2844MobileOutreachMessage(params: Hb2844OutreachParams): string {
   const owner = params.ownerName.trim() || "there";
-  const template =
-    texasProductConfig.outreach.hb2844MobileTemplate || HB2844_MOBILE_PITCH_TEMPLATE;
+  const custom = texasProductConfig.outreach.hb2844MobileTemplate?.trim();
+  const template = custom || HB2844_MOBILE_PITCH_TEMPLATE;
+  const scoreUrl = params.scoreUrl ?? texasProductConfig.outreach.scoreUrl;
+  const siteUrl = texasProductConfig.outreach.siteUrl;
 
   return template
     .replace(/\[OwnerName\]/g, owner)
     .replace(/\[BusinessName\]/g, params.businessName?.trim() || "your truck")
-    .replace(/\[ScoreUrl\]/g, params.scoreUrl ?? texasProductConfig.outreach.scoreUrl);
+    .replace(/\[ScoreUrl\]/g, scoreUrl)
+    .replace(/\[SiteUrl\]/g, siteUrl);
 }
 
 export function defaultDshsLicenseStatus(): string {

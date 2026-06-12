@@ -4,6 +4,7 @@ import { runLeadTriage } from "../engine/lead-triage.js";
 import { runSender } from "../engine/sender.js";
 import { getNextUkSendWindowLabel, getUkDateKey, isWithinUkSendWindow } from "../engine/send-schedule.js";
 import { closeDb } from "../engine/store/db.js";
+import { getInFlightSendJob } from "../engine/store/jobs-repository.js";
 import { getSetting, setSetting } from "../engine/store/outreach-migrations.js";
 import { countApprovedLeads, countSendReadyLeads } from "../engine/store/stats-repository.js";
 
@@ -21,6 +22,14 @@ async function main(): Promise<void> {
     const lastSendDay = await getSetting(LAST_SEND_KEY);
     if (lastSendDay === ukDay) {
       console.log(`Already sent during today's UK window (${ukDay}).`);
+      return;
+    }
+
+    const inFlightSend = await getInFlightSendJob();
+    if (inFlightSend) {
+      console.log(
+        `Send job already in progress (${inFlightSend.id}, ${inFlightSend.status}) — skipping cron run.`,
+      );
       return;
     }
 
@@ -47,6 +56,8 @@ async function main(): Promise<void> {
       console.log("Send locked — will retry in window if cron runs again.");
     } else if (result.dailyCapReached) {
       console.log("Daily cap reached — not recording send day.");
+    } else if (result.batchAlreadyRunning) {
+      console.log("Another outbound batch is active — not recording send day.");
     } else {
       console.log(
         `Postbox had ${approvedBefore} lead(s) but 0 sent — not recording send day (will retry).`,

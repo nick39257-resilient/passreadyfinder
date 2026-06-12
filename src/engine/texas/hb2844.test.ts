@@ -52,8 +52,11 @@ if (!msg.includes("HB 2844") || !msg.includes("Maria")) {
   console.error("HB 2844 template missing tokens");
   process.exit(1);
 }
-if (!HB2844_MOBILE_PITCH_TEMPLATE.includes("chain of custody")) {
-  console.error("strict template missing chain of custody phrase");
+if (
+  !HB2844_MOBILE_PITCH_TEMPLATE.includes("chain-of-custody") ||
+  !HB2844_MOBILE_PITCH_TEMPLATE.includes("PassReady US mobile module")
+) {
+  console.error("HB 2844 template missing mobile module / chain-of-custody copy");
   process.exit(1);
 }
 

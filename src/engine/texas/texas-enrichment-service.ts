@@ -13,6 +13,7 @@ import {
   TEXAS_STATUS_EMAIL_SENT,
   TEXAS_STATUS_FORM_SUBMITTED,
 } from "../../types/texas.js";
+import { tryAutoSendTexasMobileOutreach } from "./texas-mobile-auto-send.js";
 
 export type TexasApolloEnrichmentResult = {
   leadId: number;
@@ -81,6 +82,21 @@ export async function enrichTexasLeadViaApollo(
       email: apollo.email,
       ownerName: apollo.ownerName,
     });
+
+    if (row.is_mobile_vendor === 1) {
+      const autoSend = await tryAutoSendTexasMobileOutreach(row.id);
+      if (autoSend.sent) {
+        return {
+          leadId: row.id,
+          businessName: row.business_name,
+          outcome: "email_found",
+          email: apollo.email,
+          ownerName: apollo.ownerName,
+          detail: `apollo:${apollo.source};hb2844_auto_send:${autoSend.channel}`,
+        };
+      }
+    }
+
     return {
       leadId: row.id,
       businessName: row.business_name,

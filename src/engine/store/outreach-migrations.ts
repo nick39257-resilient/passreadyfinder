@@ -103,6 +103,11 @@ export async function runOutreachMigrations(): Promise<void> {
     args: [],
   });
 
+  await db.execute({
+    sql: `INSERT OR IGNORE INTO outreach_settings (key, value) VALUES ('outbound_send_lock', '')`,
+    args: [],
+  });
+
   // Backfill: leads with AI drafts should appear in the review queue
   await db.execute(`
     UPDATE leads SET status = 'drafted'

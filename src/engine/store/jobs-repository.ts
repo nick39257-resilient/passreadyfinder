@@ -137,6 +137,21 @@ export async function getRecentJobs(limit = 8): Promise<JobRecord[]> {
   return result.rows as unknown as JobRecord[];
 }
 
+/** True when a send job is already queued or running (prevents overlapping SMTP batches). */
+export async function getInFlightSendJob(): Promise<JobRecord | null> {
+  const db = getDb();
+  const result = await db.execute(`
+    SELECT * FROM jobs
+    WHERE type = 'send' AND status IN ('pending', 'running')
+    ORDER BY created_at DESC
+    LIMIT 1
+  `);
+  if (result.rows.length === 0) {
+    return null;
+  }
+  return result.rows[0] as unknown as JobRecord;
+}
+
 export async function getLatestJob(type?: JobType): Promise<JobRecord | null> {
   const db = getDb();
   const result = type

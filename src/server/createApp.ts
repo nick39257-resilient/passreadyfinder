@@ -13,6 +13,7 @@ import {
   consumeSendConfirmToken,
   createJob,
   createSendConfirmToken,
+  getInFlightSendJob,
   getJob,
 } from "../engine/store/jobs-repository.js";
 import {
@@ -823,6 +824,16 @@ export async function createApp(options?: {
       const sendReadyCount = await countSendReadyLeads();
       const dailyQuota = await getDailySendQuota();
       const sendableCount = Math.min(sendReadyCount, dailyQuota.remaining);
+
+      const inFlightSend = await getInFlightSendJob();
+      if (inFlightSend) {
+        res.status(409).json({
+          error: "Send job already in progress — wait for the current batch to finish.",
+          jobId: inFlightSend.id,
+          status: inFlightSend.status,
+        });
+        return;
+      }
 
       if (sendReadyCount === 0 || sendableCount === 0) {
         res.status(200).json({

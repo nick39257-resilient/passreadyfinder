@@ -4,6 +4,8 @@ import type { MobileVendorTier } from "../../types/texas.js";
 import { TEXAS_MULTI_CHANNEL_READY_SQL } from "../texas/texas-multi-channel.js";
 import { renderHb2844DraftForLead } from "./texas-outreach-repository.js";
 import { buildTexasFixedSiteOutreachPitch } from "../texas/texas-outreach-pitch.js";
+import { tryAutoSendTexasMobileOutreach } from "../texas/texas-mobile-auto-send.js";
+import { isValidOutreachEmail } from "../outreach-email.js";
 
 export interface TexasLeadRow {
   id: number;
@@ -114,7 +116,23 @@ export async function upsertTexasLead(input: TexasLeadInput): Promise<number> {
     args: [input.externalId, input.source],
   });
   const id = lookup.rows[0]?.id;
-  return typeof id === "number" ? id : Number(id);
+  const leadId = typeof id === "number" ? id : Number(id);
+
+  if (
+    input.isMobileVendor &&
+    isValidOutreachEmail(input.email) &&
+    Number.isFinite(leadId) &&
+    leadId > 0
+  ) {
+    const autoSend = await tryAutoSendTexasMobileOutreach(leadId);
+    if (autoSend.sent) {
+      console.log(
+        `Texas mobile auto-send: ${input.businessName} (lead ${leadId}) via ${autoSend.channel}`,
+      );
+    }
+  }
+
+  return leadId;
 }
 
 export type TexasLeadSegment = "all" | "mobile" | "hasEmail";

@@ -10,13 +10,14 @@ import {
   type TexasLeadRow,
 } from "../store/texas-leads-repository.js";
 import { texasProductConfig } from "../../config/product.texas.config.js";
-import { getTexasAutopilotScoreUrl } from "../../config/score-urls.js";
-import { buildTrackedLandingUrl } from "../outreach-landing-url.js";
 import { getEmailUser } from "../services/smtp-mail-service.js";
 import { closeSharedChromiumBrowser } from "../services/playwright-browser.js";
+import { buildEffectiveTexasOutreachDraft } from "./texas-outreach-meta.js";
+import { tryAutoSendTexasMobileOutreach } from "./texas-mobile-auto-send.js";
 
 export type TexasAutopilotOutcome =
   | "email_discovered"
+  | "email_sent"
   | "form_submitted"
   | "captcha_skipped"
   | "no_website"
@@ -36,6 +37,7 @@ export type TexasAutopilotLeadResult = {
 export type TexasAutopilotSummary = {
   scanned: number;
   emailDiscovered: number;
+  emailSent: number;
   formSubmitted: number;
   captchaSkipped: number;
   noContact: number;
@@ -56,22 +58,6 @@ function autopilotSignatureLine(): string {
   return `${autopilotSenderName()} (${autopilotReplyEmail()})`;
 }
 
-function buildAutopilotFormMessage(scoreUrl: string): string {
-  return `Hey team,
-
-I noticed your recent health inspection score. With the new Texas HB 2844 compliance regulations taking full effect this July, DSHS is completely changing how food units have to log their chain of custody.
-
-State inspectors will soon have the authority to pause operations on-site if logs are still being managed on manual paper tracking systems. We built PassReady specifically for Texas hospitality operators to automate these compliance logs, digitize your records, and protect your license before the July 1st deadline.
-
-Free score check for your operation — no sign-up:
-${scoreUrl}
-
-Who is the best person to pass a free temporary access link to so you can see your pre-filled logs?
-
-Thanks,
-${autopilotSignatureLine()}`;
-}
-
 function delayMs(): number {
   return Number(process.env.TEXAS_AUTOPILOT_DELAY_MS) || 1500;
 }
@@ -81,8 +67,11 @@ function sleep(ms: number): Promise<void> {
 }
 
 function pitchForLead(row: TexasLeadRow): string {
-  const scoreUrl = buildTrackedLandingUrl(getTexasAutopilotScoreUrl(), row.id);
-  return buildAutopilotFormMessage(scoreUrl);
+  const draft = buildEffectiveTexasOutreachDraft(row).trim();
+  if (draft) {
+    return draft;
+  }
+  return `Hey team,\n\nPassReady US — Texas mobile compliance outreach.\n\nThanks,\n${autopilotSignatureLine()}`;
 }
 
 async function resolveWebsite(row: TexasLeadRow): Promise<string | null> {
@@ -105,6 +94,18 @@ export async function runTexasAutopilotForLead(
   row: TexasLeadRow,
 ): Promise<TexasAutopilotLeadResult> {
   if (row.email?.trim()) {
+    if (row.is_mobile_vendor === 1) {
+      const autoSend = await tryAutoSendTexasMobileOutreach(row.id);
+      if (autoSend.sent) {
+        return {
+          leadId: row.id,
+          businessName: row.business_name,
+          outcome: "email_sent",
+          detail: `hb2844_auto_send:${autoSend.channel}`,
+          email: row.email,
+        };
+      }
+    }
     return {
       leadId: row.id,
       businessName: row.business_name,
@@ -157,6 +158,21 @@ export async function runTexasAutopilotForLead(
         email,
         website,
       });
+
+      if (row.is_mobile_vendor === 1) {
+        const autoSend = await tryAutoSendTexasMobileOutreach(row.id);
+        if (autoSend.sent) {
+          return {
+            leadId: row.id,
+            businessName: row.business_name,
+            outcome: "email_sent",
+            detail: `hb2844_auto_send:${autoSend.channel}`,
+            email,
+            website,
+          };
+        }
+      }
+
       return {
         leadId: row.id,
         businessName: row.business_name,
@@ -241,6 +257,7 @@ export async function runTexasAutonomousOutreachBatch(options?: {
   const summary: TexasAutopilotSummary = {
     scanned: 0,
     emailDiscovered: 0,
+    emailSent: 0,
     formSubmitted: 0,
     captchaSkipped: 0,
     noContact: 0,
@@ -261,6 +278,9 @@ export async function runTexasAutonomousOutreachBatch(options?: {
       if (result.outcome === "email_discovered") {
         summary.emailDiscovered++;
         console.log(`✓ [${row.risk_score}] ${result.businessName}: ${result.email} (${result.detail})`);
+      } else if (result.outcome === "email_sent") {
+        summary.emailSent++;
+        console.log(`✉ [${row.risk_score}] ${result.businessName}: HB 2844 email sent (${result.detail})`);
       } else if (result.outcome === "form_submitted") {
         summary.formSubmitted++;
         console.log(`⊕ [${row.risk_score}] ${result.businessName}: contact form submitted`);
