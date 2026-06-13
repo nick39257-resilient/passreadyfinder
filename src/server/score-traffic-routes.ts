@@ -105,7 +105,7 @@ export function mountScoreTrafficRoutes(
     }
   });
 
-  app.get("/api/score-traffic/stats", requireControlAuth, async (_req, res) => {
+  app.get("/api/score-traffic/stats", async (_req, res) => {
     try {
       await runMigrations();
       const counts = await getScoreTrafficCounts();

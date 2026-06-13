@@ -15,7 +15,7 @@ import {
 type ControlAuth = (req: Request, res: Response, next: () => void) => void;
 
 export function mountUkRoutes(app: Express, requireControlAuth: ControlAuth): void {
-  app.get("/api/uk/status", requireControlAuth, async (_req, res) => {
+  app.get("/api/uk/status", async (_req, res) => {
     try {
       await runMigrations();
       const { engineStatus, lastRunTimestamp } = await resolveEngineStatus([

@@ -168,7 +168,7 @@ export async function createApp(options?: {
 
   app.get("/api/config", (_req, res) => {
     res.json({
-      requiresControlSecret: false,
+      requiresControlSecret: Boolean(process.env.CONTROL_PANEL_SECRET?.trim()),
       outreachLandingUrl: getOutreachLandingUrl(),
     });
   });

@@ -1,5 +1,5 @@
 import { authHeaders } from "../lib/auth-headers.js";
-import { getControlSecret } from "../lib/control-secret.js";
+import { getControlSecret, promptForControlSecret } from "../lib/control-auth.js";
 import { normalizeTexasLead } from "../lib/texas-lead-display.js";
 
 export interface ApiTexasLead {
@@ -71,8 +71,24 @@ function texasAuthHeaders(secret?: string): Record<string, string> {
   return authHeaders(secret ?? getControlSecret());
 }
 
+function requireTexasWriteSecret(): string {
+  const secret = promptForControlSecret(
+    "Texas actions need your CONTROL_PANEL_SECRET (same as Render env var).",
+  );
+  if (!secret) {
+    throw new Error("CONTROL_PANEL_SECRET required — tap Key (top right) to save it.");
+  }
+  return secret;
+}
+
 async function parseTexasError(res: Response, fallback: string): Promise<never> {
   const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (res.status === 401) {
+    throw new Error(
+      body.error ??
+        "Unauthorized — tap Key (top right) and paste CONTROL_PANEL_SECRET from Render.",
+    );
+  }
   throw new Error(body.error ?? `${fallback} (${res.status})`);
 }
 
@@ -124,9 +140,10 @@ export async function startTexasEnrichApolloJob(
   options?: { limit?: number },
   secret?: string,
 ): Promise<{ success: boolean; message: string }> {
+  const authSecret = secret ?? requireTexasWriteSecret();
   const res = await fetch("/api/texas/jobs/enrich-apollo", {
     method: "POST",
-    headers: texasAuthHeaders(secret),
+    headers: texasAuthHeaders(authSecret),
     body: JSON.stringify({ limit: options?.limit }),
   });
   if (!res.ok) {
@@ -142,9 +159,10 @@ export async function startTexasFindJob(
   },
   secret?: string,
 ): Promise<{ jobId: string }> {
+  const authSecret = secret ?? requireTexasWriteSecret();
   const res = await fetch("/api/texas/jobs/find", {
     method: "POST",
-    headers: texasAuthHeaders(secret),
+    headers: texasAuthHeaders(authSecret),
     body: JSON.stringify({
       mobileOnly: options.mobileOnly === true,
       limit: options.limit ?? 500,
@@ -161,9 +179,10 @@ export async function refreshTexasLeadDraft(
   leadId: number,
   secret?: string,
 ): Promise<{ ok: boolean; lead: ApiTexasLead | null }> {
+  const authSecret = secret ?? requireTexasWriteSecret();
   const res = await fetch(`/api/texas/leads/${leadId}/refresh-draft`, {
     method: "POST",
-    headers: texasAuthHeaders(secret),
+    headers: texasAuthHeaders(authSecret),
   });
   if (!res.ok) {
     await parseTexasError(res, "Texas draft refresh failed");
@@ -175,9 +194,10 @@ export async function sendTexasLeadOutreach(
   leadId: number,
   secret?: string,
 ): Promise<TexasSendOutreachResult> {
+  const authSecret = secret ?? requireTexasWriteSecret();
   const res = await fetch(`/api/texas/leads/${leadId}/send-outreach`, {
     method: "POST",
-    headers: texasAuthHeaders(secret),
+    headers: texasAuthHeaders(authSecret),
   });
   if (!res.ok) {
     await parseTexasError(res, "Texas outreach send failed");
