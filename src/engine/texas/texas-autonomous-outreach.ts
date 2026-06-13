@@ -1,5 +1,6 @@
 import { scrapeEmailFromWebsite } from "../enrich/website-email-scraper.js";
 import { tryTexasAutopilotContactForm } from "./texas-contact-form-autopilot.js";
+import { texasAutopilotContactFormsEnabled } from "../outreach-day-mode.js";
 import { discoverWebsiteViaDuckDuckGo } from "./texas-duckduckgo-discovery.js";
 import { runMigrations } from "../store/db.js";
 import {
@@ -183,13 +184,15 @@ export async function runTexasAutopilotForLead(
       };
     }
 
-    const form = await tryTexasAutopilotContactForm({
-      website,
-      businessName: row.business_name,
-      message: pitchForLead(row),
-      senderName: autopilotSenderName(),
-      senderEmail: autopilotReplyEmail(),
-    });
+    const form = texasAutopilotContactFormsEnabled()
+      ? await tryTexasAutopilotContactForm({
+          website,
+          businessName: row.business_name,
+          message: pitchForLead(row),
+          senderName: autopilotSenderName(),
+          senderEmail: autopilotReplyEmail(),
+        })
+      : { submitted: false, contactPageUrl: null, reason: "contact_forms_disabled" as const };
 
     if (form.submitted) {
       await markTexasLeadFormSubmitted({

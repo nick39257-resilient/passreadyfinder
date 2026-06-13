@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import "dotenv/config";
+import { isOutreachDayMode } from "../engine/outreach-day-mode.js";
 import { runLeadTriage } from "../engine/lead-triage.js";
 import { runSender } from "../engine/sender.js";
 import { getNextUkSendWindowLabel, getUkDateKey, isWithinUkSendWindow } from "../engine/send-schedule.js";
@@ -19,10 +20,12 @@ async function main(): Promise<void> {
     }
 
     const ukDay = getUkDateKey(now);
-    const lastSendDay = await getSetting(LAST_SEND_KEY);
-    if (lastSendDay === ukDay) {
-      console.log(`Already sent during today's UK window (${ukDay}).`);
-      return;
+    if (!isOutreachDayMode()) {
+      const lastSendDay = await getSetting(LAST_SEND_KEY);
+      if (lastSendDay === ukDay) {
+        console.log(`Already sent during today's UK window (${ukDay}).`);
+        return;
+      }
     }
 
     const inFlightSend = await getInFlightSendJob();
@@ -43,9 +46,14 @@ async function main(): Promise<void> {
       console.log(`Errors: ${result.errors.length}`);
     }
 
-    if (result.sent > 0) {
+    if (result.dailyCapReached) {
+      await setSetting(LAST_SEND_KEY, ukDay);
+      console.log(`Daily cap reached — recorded send day ${ukDay}.`);
+    } else if (result.sent > 0 && !isOutreachDayMode()) {
       await setSetting(LAST_SEND_KEY, ukDay);
       console.log(`Recorded UK send window run for ${ukDay} (${result.sent} sent).`);
+    } else if (result.sent > 0 && isOutreachDayMode()) {
+      console.log(`Day mode: sent ${result.sent} — will retry on next cron until daily cap.`);
     } else if (approvedBefore === 0) {
       console.log("Postbox empty — not recording send day.");
     } else if (sendReadyBefore === 0) {
@@ -54,8 +62,6 @@ async function main(): Promise<void> {
       );
     } else if (result.sendLocked) {
       console.log("Send locked — will retry in window if cron runs again.");
-    } else if (result.dailyCapReached) {
-      console.log("Daily cap reached — not recording send day.");
     } else if (result.batchAlreadyRunning) {
       console.log("Another outbound batch is active — not recording send day.");
     } else {

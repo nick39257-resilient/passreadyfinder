@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { productConfig } from "../config/product.config.js";
+import { outreachMobileSignatureEnabled } from "./outreach-day-mode.js";
 import type { DraftJobParams, TargetRating } from "../types/segmentation.js";
 import type { DraftHookContext } from "./intelligence/draft-hooks.js";
 import type { DraftVariables } from "./intelligence/draft-variables.js";
@@ -161,6 +162,9 @@ export function resolveOutreachSubject(input: {
 
 /** Append a plain-text mobile signature — one per lead, stable across touches. */
 export function appendMobileSignature(body: string, leadId: number): string {
+  if (!outreachMobileSignatureEnabled()) {
+    return stripMobileSignature(body);
+  }
   const sig = MOBILE_SIGNATURES[Math.abs(leadId) % MOBILE_SIGNATURES.length];
   const trimmed = stripMobileSignature(body);
   return `${trimmed}\n\n${sig}`;

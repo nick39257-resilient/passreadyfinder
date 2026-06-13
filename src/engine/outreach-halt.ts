@@ -228,10 +228,19 @@ export function buildUnsubscribeUrl(token: string): string {
 export const OPT_OUT_FOOTER_PREFIX =
   "\n\n—\nTo stop emails from PassReady about hygiene support, unsubscribe here:";
 
-export function appendOptOutFooter(body: string, unsubscribeUrl: string): string {
+const LIGHT_OPT_OUT_FOOTER = "\n\n—\nReply STOP to opt out.";
+
+export function appendOptOutFooter(
+  body: string,
+  unsubscribeUrl: string,
+  touchCount = 0,
+): string {
   const trimmed = body.trim();
-  if (trimmed.toLowerCase().includes("unsubscribe")) {
+  if (trimmed.toLowerCase().includes("unsubscribe") || trimmed.toLowerCase().includes("reply stop")) {
     return trimmed;
+  }
+  if (touchCount === 0) {
+    return `${trimmed}${LIGHT_OPT_OUT_FOOTER}`;
   }
   return `${trimmed}${OPT_OUT_FOOTER_PREFIX} ${unsubscribeUrl}`;
 }

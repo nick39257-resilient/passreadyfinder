@@ -1,6 +1,7 @@
 import { createLlmClient, draftSequenceFollowUpForLead } from "./drafter.js";
 import { getDailySendQuota } from "./daily-send-cap.js";
 import { getDeliverabilityStatus, sleepWithProgress } from "./deliverability.js";
+import { isOutreachDayMode } from "./outreach-day-mode.js";
 import {
   buildUnsubscribeUrl,
   ensureLeadUnsubscribeToken,
@@ -40,8 +41,11 @@ import {
   tryAcquireOutboundSendLock,
 } from "./outbound-send-lock.js";
 
-/** Random delay between 1.5 and 4 minutes after each send (human pacing). */
+/** Random delay between sends — faster in day mode while still human-paced. */
 export function randomOutboundThrottleMs(): number {
+  if (isOutreachDayMode()) {
+    return Math.floor(Math.random() * (90_000 - 45_000 + 1)) + 45_000;
+  }
   return Math.floor(Math.random() * (240_000 - 90_000 + 1)) + 90_000;
 }
 

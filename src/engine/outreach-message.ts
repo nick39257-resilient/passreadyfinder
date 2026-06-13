@@ -90,7 +90,7 @@ export function prepareOutboundMessage(options: PrepareOutboundMessageOptions): 
   }
 
   if (options.unsubscribeUrl?.trim()) {
-    text = appendOptOutFooter(text, options.unsubscribeUrl.trim());
+    text = appendOptOutFooter(text, options.unsubscribeUrl.trim(), options.touchCount);
   }
 
   const landing = getOutreachLandingUrl();

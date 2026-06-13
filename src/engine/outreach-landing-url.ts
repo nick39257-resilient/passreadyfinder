@@ -16,13 +16,13 @@ export function getOutreachLandingUrl(): string {
   return DEFAULT_OUTREACH_LANDING_URL;
 }
 
-/** First-touch emails may include only the SafeScore URL. Default on; set OUTREACH_FIRST_TOUCH_LINK=false to disable. */
+/** First-touch emails: link-free by default (better reply rate). Set OUTREACH_FIRST_TOUCH_LINK=true to include SafeScore on touch 1. */
 export function firstTouchAllowsLandingLink(): boolean {
   const raw = process.env.OUTREACH_FIRST_TOUCH_LINK?.trim().toLowerCase();
-  if (raw === "false" || raw === "0" || raw === "no") {
-    return false;
+  if (raw === "true" || raw === "1" || raw === "yes") {
+    return true;
   }
-  return true;
+  return false;
 }
 
 /** Breakup (touch 4) may include a soft SafeScore link. Default on; set OUTREACH_BREAKUP_LINK=false to disable. */

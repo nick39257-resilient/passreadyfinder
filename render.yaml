@@ -37,6 +37,20 @@ services:
         sync: false
       - key: CONTROL_PANEL_SECRET
         sync: false
+      - key: OUTREACH_DAY_MODE
+        value: "true"
+      - key: OUTREACH_FIRST_TOUCH_LINK
+        value: "false"
+      - key: DAILY_SEND_CAP
+        value: "50"
+      - key: EMAIL_FROM_NAME
+        value: "Nick – PassReady"
+      - key: EMAIL_USER_UK
+        sync: false
+      - key: QUEUE_DRAFTER_BATCH_SIZE
+        value: "8"
+      - key: QUEUE_DRAFTER_RISK_THRESHOLD
+        value: "30"
 
   # FindLeads — scrape & score once per day at 03:00 UTC (UK batched to stay under 512MB)
   - type: cron
@@ -56,7 +70,7 @@ services:
       - key: FIND_CRON_AUTHORITY_BATCH
         value: "20"
       - key: FIND_CRON_ENRICH_TOP_N
-        value: "15"
+        value: "50"
       - key: TURSO_DATABASE_URL
         fromService:
           type: web
@@ -68,14 +82,14 @@ services:
           name: passreadyfinder
           envVarKey: TURSO_AUTH_TOKEN
 
-  # QueueDrafter — 2 leads per run, every 30 min
+  # QueueDrafter — 8 leads per run, every 15 min (day mode)
   - type: cron
     name: passreadyfinder-queue-draft
     runtime: node
     plan: starter
     repo: https://github.com/nick39257-resilient/passreadyfinder
     branch: main
-    schedule: "*/30 * * * *"
+    schedule: "*/15 * * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install
     startCommand: npm run queue-draft
     envVars:
@@ -113,15 +127,131 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: WHATSAPP_NUMBER
+      - key: OUTREACH_DAY_MODE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_DAY_MODE
+      - key: QUEUE_DRAFTER_BATCH_SIZE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: QUEUE_DRAFTER_BATCH_SIZE
+      - key: QUEUE_DRAFTER_RISK_THRESHOLD
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: QUEUE_DRAFTER_RISK_THRESHOLD
 
-  # Sender — check hourly, send only during 2pm UK window
+  # Day pipeline — draft + send every 2h while OUTREACH_DAY_MODE=true
+  - type: cron
+    name: passreadyfinder-day-pipeline
+    runtime: node
+    plan: starter
+    repo: https://github.com/nick39257-resilient/passreadyfinder
+    branch: main
+    schedule: "15 */2 * * *"
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm install
+    startCommand: npm run day-pipeline-cron
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=448"
+      - key: TURSO_DATABASE_URL
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_DATABASE_URL
+      - key: TURSO_AUTH_TOKEN
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TURSO_AUTH_TOKEN
+      - key: OPENAI_API_KEY
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OPENAI_API_KEY
+      - key: OPENAI_BASE_URL
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OPENAI_BASE_URL
+      - key: GEMINI_DRAFT_MODEL
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: GEMINI_DRAFT_MODEL
+      - key: WHATSAPP_NUMBER
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: WHATSAPP_NUMBER
+      - key: EMAIL_USER
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_USER
+      - key: EMAIL_USER_UK
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_USER_UK
+      - key: EMAIL_PASS
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_PASS
+      - key: EMAIL_HOST
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_HOST
+      - key: EMAIL_PORT
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_PORT
+      - key: EMAIL_FROM_NAME
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_FROM_NAME
+      - key: OUTREACH_DAY_MODE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_DAY_MODE
+      - key: OUTREACH_FIRST_TOUCH_LINK
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_FIRST_TOUCH_LINK
+      - key: DAILY_SEND_CAP
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: DAILY_SEND_CAP
+      - key: QUEUE_DRAFTER_BATCH_SIZE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: QUEUE_DRAFTER_BATCH_SIZE
+      - key: QUEUE_DRAFTER_RISK_THRESHOLD
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: QUEUE_DRAFTER_RISK_THRESHOLD
+
+  # Sender — every 30 min during UK business hours (day mode: 7am–8pm UK)
   - type: cron
     name: passreadyfinder-send
     runtime: node
     plan: starter
     repo: https://github.com/nick39257-resilient/passreadyfinder
     branch: main
-    schedule: "5,20,35,50 13,14 * * *"
+    schedule: "*/30 6-19 * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install
     startCommand: npm run send-cron
     envVars:
@@ -164,15 +294,40 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: TEST_EMAIL_ADDRESS
+      - key: EMAIL_USER_UK
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_USER_UK
+      - key: EMAIL_FROM_NAME
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: EMAIL_FROM_NAME
+      - key: OUTREACH_DAY_MODE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_DAY_MODE
+      - key: OUTREACH_FIRST_TOUCH_LINK
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_FIRST_TOUCH_LINK
+      - key: DAILY_SEND_CAP
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: DAILY_SEND_CAP
 
-  # Texas autopilot — DuckDuckGo discovery, email scrape, contact forms (every 12h)
+  # Texas autopilot — email discovery + mobile auto-send (every 4h, no contact forms in day mode)
   - type: cron
     name: texas-autopilot-cron
     runtime: node
     plan: starter
     repo: https://github.com/nick39257-resilient/passreadyfinder
     branch: main
-    schedule: "0 */12 * * *"
+    schedule: "0 */4 * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install && node scripts/ensure-playwright-chromium.mjs
     startCommand: node scripts/ensure-playwright-chromium.mjs && npm run texas-autopilot
     envVars:
@@ -218,18 +373,24 @@ services:
           name: passreadyfinder
           envVarKey: CONTROL_PANEL_SECRET
       - key: TEXAS_AUTOPILOT_LIMIT
-        value: "8"
+        value: "25"
       - key: TEXAS_AUTOPILOT_DELAY_MS
         value: "1500"
 
-  # UK autopilot — OSM/DDG discovery, email scrape (forms off on cron — saves RAM)
+      - key: OUTREACH_DAY_MODE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_DAY_MODE
+
+  # UK autopilot — OSM/DDG discovery, email scrape (every 4h)
   - type: cron
     name: uk-autopilot-cron
     runtime: node
     plan: starter
     repo: https://github.com/nick39257-resilient/passreadyfinder
     branch: main
-    schedule: "30 */12 * * *"
+    schedule: "30 */4 * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install && node scripts/ensure-playwright-chromium.mjs
     startCommand: node scripts/ensure-playwright-chromium.mjs && npm run uk-autopilot
     envVars:
@@ -275,8 +436,13 @@ services:
           name: passreadyfinder
           envVarKey: CONTROL_PANEL_SECRET
       - key: UK_AUTOPILOT_LIMIT
-        value: "8"
+        value: "25"
       - key: UK_AUTOPILOT_DELAY_MS
         value: "1500"
       - key: UK_AUTOPILOT_CONTACT_FORMS
         value: "false"
+      - key: OUTREACH_DAY_MODE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_DAY_MODE

@@ -113,14 +113,14 @@ export const productConfig = {
       latestHourUtc: 8,
       runBucketMinutes: 60,
     },
-    /** QueueDrafter — small batch every ~30 min; long gaps between leads. */
+    /** QueueDrafter — small batch every ~15–30 min; long gaps between leads. */
     queueDrafter: {
-      /** Leads drafted per cron tick (keep low to avoid 429). */
-      batchSize: 2,
-      /** Only draft leads above this risk score. */
-      riskScoreThreshold: 75,
-      leadDelayMinMs: 60_000,
-      leadDelayMaxMs: 120_000,
+      /** Leads drafted per cron tick (override QUEUE_DRAFTER_BATCH_SIZE). */
+      batchSize: Number(process.env.QUEUE_DRAFTER_BATCH_SIZE) || 8,
+      /** Only draft leads above this risk score (override QUEUE_DRAFTER_RISK_THRESHOLD). */
+      riskScoreThreshold: Number(process.env.QUEUE_DRAFTER_RISK_THRESHOLD) || 30,
+      leadDelayMinMs: Number(process.env.QUEUE_DRAFTER_DELAY_MIN_MS) || 20_000,
+      leadDelayMaxMs: Number(process.env.QUEUE_DRAFTER_DELAY_MAX_MS) || 45_000,
       rateLimitPauseMs: 5 * 60_000,
       maxRetriesPerLead: 4,
     },
@@ -132,7 +132,7 @@ export const productConfig = {
     sendDelayMinMs: 5 * 60 * 1000,
     sendDelayMaxMs: 15 * 60 * 1000,
     /** Max outreach emails per mailbox per UTC day (override via DAILY_SEND_CAP env). */
-    dailySendCap: 30,
+    dailySendCap: 50,
     /** Background cron — run bucket size (pair with Render schedule every 5 minutes). */
     cronSchedule: {
       earliestHourUtc: 9,
@@ -148,8 +148,8 @@ export const productConfig = {
       "Shared struggle opener: start with one line acknowledging the grind (e.g. Friday night rush, staffing, stock).",
       "Tool as byproduct: do not present PassReady as a product or sales pitch—it is a side project you built for your own kitchens that happened to work well.",
       "Variable injection (required): naturally include all three — (1) Business Name, (2) a practical FSA-area issue hook (not their star rating), (3) a generic local reference (Preston). Never mention being on the same road/high street.",
-      "First message: include the SafeScore link (score.passready.uk) on its own line as the only URL — free FSA check, no sign-up. No other links or wa.me.",
-      "Follow-up after they reply: same SafeScore link as the only CTA.",
+      "First message: NO links — ask a short peer question they can reply to in one word (e.g. worth sending the checklist?). SafeScore link only on follow-up touches after they engage or on touch 2+.",
+      "Follow-up touches 2–3: include the SafeScore link (score.passready.uk) as the only URL — free FSA check, no sign-up.",
       "Never pretend to be an EHO officer or any official body.",
       "Keep it short — under 125 words.",
     ],

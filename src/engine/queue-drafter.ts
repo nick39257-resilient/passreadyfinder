@@ -26,6 +26,7 @@ import {
   type LeadForDraft,
 } from "./drafter.js";
 import { logEngineError, logQueueDrafterResult } from "./intelligence/system-status.js";
+import { isValidOutreachEmail } from "./outreach-email.js";
 import {
   emailNotSuppressedSql,
   outreachHaltedSqlArgs,
@@ -73,13 +74,15 @@ export async function throttleBetweenLeads(): Promise<void> {
   await sleep(waitMs);
 }
 
+const ELIGIBLE_DRAFT_STATUSES = "('new', 'ready_to_review')";
+
 async function countEligibleNewLeads(): Promise<number> {
   const db = getDb();
   const result = await db.execute({
     sql: `
       SELECT COUNT(*) AS count
       FROM leads
-      WHERE status = 'new'
+      WHERE status IN ${ELIGIBLE_DRAFT_STATUSES}
         AND contacted_at IS NULL
         AND draft_message IS NULL
         AND COALESCE(touch_count, 0) < ?
@@ -113,13 +116,15 @@ async function fetchEligibleNewLeads(limit: number): Promise<LeadForQueueDraft[]
         fsa_score_structural,
         fsa_score_management
       FROM leads
-      WHERE status = 'new'
+      WHERE status IN ${ELIGIBLE_DRAFT_STATUSES}
         AND contacted_at IS NULL
         AND draft_message IS NULL
         AND COALESCE(touch_count, 0) < ?
         AND ${outreachHaltedSqlInClause()}
         AND ${emailNotSuppressedSql()}
-      ORDER BY lead_score DESC
+      ORDER BY
+        CASE WHEN email IS NOT NULL AND TRIM(email) != '' THEN 0 ELSE 1 END,
+        lead_score DESC
       LIMIT ?
     `,
     args: [productConfig.outreach.maxTouchesPerLead, ...outreachHaltedSqlArgs(), limit * 4],
@@ -143,9 +148,15 @@ function selectBatch(
         phone: lead.phone,
         website: lead.website,
       }).score,
+      hasEmail: isValidOutreachEmail(lead.email),
     }))
-    .filter((entry) => entry.riskScore > threshold)
-    .sort((a, b) => b.riskScore - a.riskScore || a.lead.id - b.lead.id);
+    .filter((entry) => entry.hasEmail || entry.riskScore > threshold)
+    .sort(
+      (a, b) =>
+        Number(b.hasEmail) - Number(a.hasEmail) ||
+        b.riskScore - a.riskScore ||
+        a.lead.id - b.lead.id,
+    );
 
   const selected = ranked.slice(0, batchSize).map((entry) => entry.lead);
   return {
@@ -237,7 +248,7 @@ export async function runQueueDrafter(options?: {
 
   if (selected.length === 0) {
     console.log(
-      `QueueDrafter: no eligible leads in this batch (risk > ${queueConfig.riskScoreThreshold}, status=new).`,
+      `QueueDrafter: no eligible leads in this batch (risk > ${queueConfig.riskScoreThreshold} or needs email, status new/ready_to_review).`,
     );
     console.log(`  ${remainingNew} new lead(s) still in queue.\n`);
     return result;
