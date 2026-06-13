@@ -1,104 +1,21 @@
-import nodemailer from "nodemailer";
-import {
-  getSmtpAuthUser,
-  getSmtpFromForRegion,
+export {
+  getDefaultReplyToEmail,
+  getEmailUser,
+  getPassreadyMailFrom,
+  getResendApiKey,
+  getResendClient,
+  isOutreachMailConfigured,
+  isSmtpMailConfigured,
+  PASSREADY_MAIL_FROM,
+  sendOutreachMail,
+  sendSmtpMail,
   type OutreachMailRegion,
-} from "../outreach-mail-from.js";
+} from "./resend-mail-service.js";
 
-export type { OutreachMailRegion } from "../outreach-mail-from.js";
 export {
   describeOutreachSender,
-  formatSmtpFromAddress,
+  formatOutreachFromAddress,
   getEmailFromName,
   getEmailUserForRegion,
-  getSmtpAuthUser,
-  getSmtpFromForRegion,
+  getOutreachFromForRegion,
 } from "../outreach-mail-from.js";
-
-const DEFAULT_EMAIL_HOST = "mail.privateemail.com";
-const DEFAULT_EMAIL_PORT = 465;
-
-function readEnv(name: string): string {
-  return process.env[name]?.trim() ?? "";
-}
-
-/** Reply-to / From address — prefers Render EMAIL_USER, then legacy MAIL_USERNAME. */
-export function getEmailUser(): string {
-  return readEnv("EMAIL_USER") || readEnv("MAIL_USERNAME") || "nick@passready.us";
-}
-
-export function getEmailPass(): string {
-  return readEnv("EMAIL_PASS") || readEnv("MAIL_PASSWORD");
-}
-
-export function getEmailHost(): string {
-  return readEnv("EMAIL_HOST") || DEFAULT_EMAIL_HOST;
-}
-
-export function getEmailPort(): number {
-  const raw = readEnv("EMAIL_PORT");
-  if (!raw) {
-    return DEFAULT_EMAIL_PORT;
-  }
-  const port = Number(raw);
-  return Number.isFinite(port) && port > 0 ? port : DEFAULT_EMAIL_PORT;
-}
-
-/** @deprecated Use getEmailUserForRegion('uk'|'us') — kept for existing imports. */
-export function getPassreadyMailFrom(): string {
-  return getEmailUser();
-}
-
-/** @deprecated Use getSmtpFromForRegion — kept for existing imports. */
-export const PASSREADY_MAIL_FROM = "nick@passready.us";
-
-let transport: nodemailer.Transporter | null = null;
-
-function getTransport(): nodemailer.Transporter {
-  if (!transport) {
-    const port = getEmailPort();
-    const pass = getEmailPass();
-    if (!pass) {
-      throw new Error(
-        "EMAIL_PASS (or legacy MAIL_PASSWORD) is required for SMTP — set it in Render env",
-      );
-    }
-
-    transport = nodemailer.createTransport({
-      host: getEmailHost(),
-      port,
-      secure: port === 465,
-      auth: {
-        user: getSmtpAuthUser(),
-        pass,
-      },
-    });
-  }
-  return transport;
-}
-
-export function isSmtpMailConfigured(): boolean {
-  return Boolean(getEmailPass());
-}
-
-export async function sendSmtpMail(input: {
-  to: string;
-  subject: string;
-  text: string;
-  html?: string;
-  /** UK uses @passready.uk by default; US/Texas uses @passready.us */
-  region?: OutreachMailRegion;
-}): Promise<{ messageId: string }> {
-  const transporter = getTransport();
-  const region = input.region ?? "uk";
-  const info = await transporter.sendMail({
-    from: getSmtpFromForRegion(region),
-    to: input.to.trim(),
-    subject: input.subject.trim(),
-    text: input.text,
-    ...(input.html?.trim() ? { html: input.html } : {}),
-  });
-
-  const messageId = info.messageId?.trim() || `smtp-${Date.now()}`;
-  return { messageId };
-}

@@ -22,9 +22,9 @@ import {
 import { isEmailSuppressed, normalizeOutreachEmail } from "./outreach-halt.js";
 import {
   getPassreadyMailFrom,
-  isSmtpMailConfigured,
-  sendSmtpMail,
-} from "./services/smtp-mail-service.js";
+  isOutreachMailConfigured,
+  sendOutreachMail,
+} from "./services/resend-mail-service.js";
 import {
   applyBodySpintax,
   buildSpintaxLeadContext,
@@ -130,8 +130,8 @@ export function buildOutboundSpintaxContent(
 export async function runSender(onProgress?: SendProgressCallback): Promise<SendRunResult> {
   await runMigrations();
 
-  if (!isSmtpMailConfigured()) {
-    throw new Error("EMAIL_PASS (or MAIL_PASSWORD) is required in .env");
+  if (!isOutreachMailConfigured()) {
+    throw new Error("RESEND_API_KEY is required in .env");
   }
 
   const deliverability = await getDeliverabilityStatus();
@@ -210,7 +210,7 @@ async function runSenderBody(onProgress?: SendProgressCallback): Promise<SendRun
   }
 
   await report(
-    `Sending ${leads.length} lead(s) via Private Email SMTP (${quota.sentToday}/${quota.cap} sent today, batch cap ${OUTBOUND_BATCH_LIMIT})…`,
+    `Sending ${leads.length} lead(s) via Resend (${quota.sentToday}/${quota.cap} sent today, batch cap ${OUTBOUND_BATCH_LIMIT})…`,
   );
   await report(`From: ${getPassreadyMailFrom()}`);
   if (testFallbackEnabled && testEmail) {
@@ -276,7 +276,7 @@ async function runSenderBody(onProgress?: SendProgressCallback): Promise<SendRun
         unsubscribeUrl,
       });
 
-      const { messageId } = await sendSmtpMail({
+      const { messageId } = await sendOutreachMail({
         to,
         subject,
         text,
@@ -306,7 +306,7 @@ async function runSenderBody(onProgress?: SendProgressCallback): Promise<SendRun
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`SMTP send failed for lead ${lead.id} (${lead.business_name}):`, err);
+      console.error(`Resend send failed for lead ${lead.id} (${lead.business_name}):`, err);
       result.errors.push({
         leadId: lead.id,
         businessName: lead.business_name,

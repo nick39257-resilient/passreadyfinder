@@ -6,7 +6,7 @@ export interface DeliverabilitySenderInfo {
   fromName: string;
   fromEmail: string;
   formattedFrom: string;
-  authUser: string;
+  provider: "resend";
 }
 
 export interface DeliverabilityReport {
@@ -34,7 +34,7 @@ export interface DeliverabilityReport {
   };
   scoreClicksTotal: number;
   sender: {
-    smtpConfigured: boolean;
+    resendConfigured: boolean;
     uk: DeliverabilitySenderInfo;
     us: DeliverabilitySenderInfo;
   };

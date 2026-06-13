@@ -25,14 +25,10 @@ services:
         value: gemini-3.1-flash-lite
       - key: WHATSAPP_NUMBER
         sync: false
-      - key: EMAIL_USER
+      - key: RESEND_API_KEY
         sync: false
-      - key: EMAIL_PASS
+      - key: RESEND_WEBHOOK_SECRET
         sync: false
-      - key: EMAIL_HOST
-        value: mail.privateemail.com
-      - key: EMAIL_PORT
-        value: "465"
       - key: TEST_EMAIL_ADDRESS
         sync: false
       - key: CONTROL_PANEL_SECRET
@@ -44,9 +40,7 @@ services:
       - key: DAILY_SEND_CAP
         value: "50"
       - key: EMAIL_FROM_NAME
-        value: "Nick – PassReady"
-      - key: EMAIL_USER_UK
-        sync: false
+        value: "Nick - PassReady"
       - key: QUEUE_DRAFTER_BATCH_SIZE
         value: "8"
       - key: QUEUE_DRAFTER_RISK_THRESHOLD
@@ -188,31 +182,11 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: WHATSAPP_NUMBER
-      - key: EMAIL_USER
+      - key: RESEND_API_KEY
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: EMAIL_USER
-      - key: EMAIL_USER_UK
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_USER_UK
-      - key: EMAIL_PASS
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_PASS
-      - key: EMAIL_HOST
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_HOST
-      - key: EMAIL_PORT
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_PORT
+          envVarKey: RESEND_API_KEY
       - key: EMAIL_FROM_NAME
         fromService:
           type: web
@@ -269,36 +243,16 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: TURSO_AUTH_TOKEN
-      - key: EMAIL_USER
+      - key: RESEND_API_KEY
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: EMAIL_USER
-      - key: EMAIL_PASS
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_PASS
-      - key: EMAIL_HOST
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_HOST
-      - key: EMAIL_PORT
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_PORT
+          envVarKey: RESEND_API_KEY
       - key: TEST_EMAIL_ADDRESS
         fromService:
           type: web
           name: passreadyfinder
           envVarKey: TEST_EMAIL_ADDRESS
-      - key: EMAIL_USER_UK
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_USER_UK
       - key: EMAIL_FROM_NAME
         fromService:
           type: web
@@ -347,26 +301,11 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: TURSO_AUTH_TOKEN
-      - key: EMAIL_USER
+      - key: RESEND_API_KEY
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: EMAIL_USER
-      - key: EMAIL_PASS
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_PASS
-      - key: EMAIL_HOST
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_HOST
-      - key: EMAIL_PORT
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_PORT
+          envVarKey: RESEND_API_KEY
       - key: CONTROL_PANEL_SECRET
         fromService:
           type: web
@@ -410,26 +349,11 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: TURSO_AUTH_TOKEN
-      - key: EMAIL_USER
+      - key: RESEND_API_KEY
         fromService:
           type: web
           name: passreadyfinder
-          envVarKey: EMAIL_USER
-      - key: EMAIL_PASS
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_PASS
-      - key: EMAIL_HOST
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_HOST
-      - key: EMAIL_PORT
-        fromService:
-          type: web
-          name: passreadyfinder
-          envVarKey: EMAIL_PORT
+          envVarKey: RESEND_API_KEY
       - key: CONTROL_PANEL_SECRET
         fromService:
           type: web

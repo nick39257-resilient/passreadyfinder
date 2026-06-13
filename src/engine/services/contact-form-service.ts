@@ -1,5 +1,5 @@
 import { productConfig } from "../../config/product.config.js";
-import { getPassreadyMailFrom } from "./smtp-mail-service.js";
+import { getPassreadyMailFrom } from "./resend-mail-service.js";
 import { normalizeWebsiteUrl } from "../contact-discovery/fetch-page.js";
 import {
   closeBrowserSafe,

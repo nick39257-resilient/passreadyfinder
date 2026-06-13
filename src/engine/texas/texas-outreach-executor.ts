@@ -14,7 +14,7 @@ import {
 } from "./texas-hb2844-spintax.js";
 import { texasLeadToApolloInput } from "./texas-enrichment-service.js";
 import { findOwnerEmailViaApollo } from "../services/apollo-service.js";
-import { isSmtpMailConfigured, sendSmtpMail } from "../services/smtp-mail-service.js";
+import { isOutreachMailConfigured, sendOutreachMail } from "../services/resend-mail-service.js";
 import { tryWebsiteContactForm } from "../services/contact-form-service.js";
 import { normalizeOutreachEmail } from "../outreach-halt.js";
 import { runMigrations } from "../store/db.js";
@@ -100,11 +100,11 @@ async function resolveEmailForTexasLead(row: TexasLeadRow): Promise<string | nul
 }
 
 async function sendTexasEmail(row: TexasLeadRow, to: string, text: string): Promise<string> {
-  if (!isSmtpMailConfigured()) {
-    throw new Error("EMAIL_PASS (or MAIL_PASSWORD) is required for SMTP outreach");
+  if (!isOutreachMailConfigured()) {
+    throw new Error("RESEND_API_KEY is required for outbound email");
   }
 
-  const { messageId } = await sendSmtpMail({
+  const { messageId } = await sendOutreachMail({
     to,
     subject: texasEmailSubject(row),
     text,
@@ -115,7 +115,7 @@ async function sendTexasEmail(row: TexasLeadRow, to: string, text: string): Prom
 }
 
 /**
- * Execute HB 2844 outreach for one Texas lead: SMTP email or Playwright contact form.
+ * Execute HB 2844 outreach for one Texas lead: Resend email or Playwright contact form.
  */
 export async function executeTexasLeadOutreach(leadId: number): Promise<TexasOutreachResult> {
   await runMigrations();

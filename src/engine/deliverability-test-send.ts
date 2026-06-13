@@ -1,6 +1,6 @@
 import type { OutreachMailRegion } from "./outreach-mail-from.js";
 import { describeOutreachSender } from "./outreach-mail-from.js";
-import { getEmailHost, getEmailPort, isSmtpMailConfigured, sendSmtpMail } from "./services/smtp-mail-service.js";
+import { isOutreachMailConfigured, sendOutreachMail } from "./services/resend-mail-service.js";
 import { applySpintaxTemplate, buildSpintaxLeadContext } from "./spintax.js";
 import { resolveTexasHb2844Subject, buildTexasHb2844SpintaxContext } from "./texas/texas-hb2844-spintax.js";
 
@@ -47,8 +47,7 @@ function buildTestBody(region: OutreachMailRegion, sender: ReturnType<typeof des
     "",
     `Region: ${region.toUpperCase()}`,
     `From: ${sender.formattedFrom}`,
-    `SMTP auth user: ${sender.authUser}`,
-    `SMTP host: ${getEmailHost()}:${getEmailPort()}`,
+    `Provider: Resend`,
     "",
     "Sample subject style used for this test:",
     sampleSubject,
@@ -56,7 +55,7 @@ function buildTestBody(region: OutreachMailRegion, sender: ReturnType<typeof des
     "What to check:",
     "1. Did this land in Inbox (not Spam/Promotions)?",
     "2. Send another test to mail-tester.com — aim for 8/10+.",
-    "3. If spam, fix SPF/DKIM/DMARC for your sending domain in Namecheap.",
+    "3. Verify passready.uk and passready.us are verified in Resend.",
     "",
     "— PassReady Finder deliverability check",
   ].join("\n");
@@ -73,8 +72,8 @@ export async function sendDeliverabilityTest(input: {
   subject: string;
   messageId: string;
 }> {
-  if (!isSmtpMailConfigured()) {
-    throw new Error("EMAIL_PASS is not configured — set it in Render env before test sends");
+  if (!isOutreachMailConfigured()) {
+    throw new Error("RESEND_API_KEY is not configured — set it in Render env before test sends");
   }
 
   const to = input.to.trim();
@@ -89,7 +88,7 @@ export async function sendDeliverabilityTest(input: {
       : `[PassReady test] ${buildUsTestSubject()}`;
   const text = buildTestBody(input.region, sender);
 
-  const { messageId } = await sendSmtpMail({
+  const { messageId } = await sendOutreachMail({
     to,
     subject,
     text,

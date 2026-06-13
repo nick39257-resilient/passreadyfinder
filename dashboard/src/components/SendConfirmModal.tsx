@@ -43,7 +43,7 @@ export function SendConfirmModal({
               of <strong>{sendReadyCount}</strong> send-ready
             </>
           ) : null}{" "}
-          queued email{sendableCount === 1 ? "" : "s"} now via Private Email.
+          queued email{sendableCount === 1 ? "" : "s"} now via Resend.
         </p>
         {blockedCount > 0 ? (
           <p className="mt-2 text-xs text-amber-200/90">

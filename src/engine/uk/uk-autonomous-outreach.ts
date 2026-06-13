@@ -3,7 +3,7 @@ import { getUkAutopilotScoreUrl } from "../../config/score-urls.js";
 import { buildTrackedLandingUrl } from "../outreach-landing-url.js";
 import { scrapeEmailFromWebsite } from "../enrich/website-email-scraper.js";
 import { enrichFromOsm } from "../enrich/osm-enricher.js";
-import { getEmailUser } from "../services/smtp-mail-service.js";
+import { getDefaultReplyToEmail } from "../services/resend-mail-service.js";
 import { tryTexasAutopilotContactForm } from "../texas/texas-contact-form-autopilot.js";
 import { runMigrations } from "../store/db.js";
 import type { LeadRow } from "../store/leads-repository.js";
@@ -54,7 +54,7 @@ export type UkAutopilotSummary = {
 const AUTOPILOT_SENDER_TITLE = "PassReady UK Compliance Desk";
 
 function autopilotReplyEmail(): string {
-  return getEmailUser();
+  return getDefaultReplyToEmail();
 }
 
 function autopilotSenderName(): string {

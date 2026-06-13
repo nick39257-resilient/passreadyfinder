@@ -11,7 +11,7 @@ import {
   type TexasLeadRow,
 } from "../store/texas-leads-repository.js";
 import { texasProductConfig } from "../../config/product.texas.config.js";
-import { getEmailUser } from "../services/smtp-mail-service.js";
+import { getDefaultReplyToEmail } from "../services/resend-mail-service.js";
 import { closeSharedChromiumBrowser } from "../services/playwright-browser.js";
 import { buildEffectiveTexasOutreachDraft } from "./texas-outreach-meta.js";
 import { tryAutoSendTexasMobileOutreach } from "./texas-mobile-auto-send.js";
@@ -48,7 +48,7 @@ export type TexasAutopilotSummary = {
 const AUTOPILOT_SENDER_TITLE = "PassReady US Compliance Desk";
 
 function autopilotReplyEmail(): string {
-  return getEmailUser();
+  return getDefaultReplyToEmail();
 }
 
 function autopilotSenderName(): string {

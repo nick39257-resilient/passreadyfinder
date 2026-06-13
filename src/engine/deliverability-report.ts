@@ -1,6 +1,6 @@
 import { getDeliverabilityStatus } from "./deliverability.js";
 import { describeOutreachSender } from "./outreach-mail-from.js";
-import { isSmtpMailConfigured } from "./services/smtp-mail-service.js";
+import { isOutreachMailConfigured } from "./services/resend-mail-service.js";
 import { getScoreTrafficCounts } from "./store/score-traffic-repository.js";
 import { getLeadStatusCounts } from "./store/stats-repository.js";
 import { getDb } from "./store/db.js";
@@ -31,7 +31,7 @@ export interface DeliverabilityReport {
   };
   scoreClicksTotal: number;
   sender: {
-    smtpConfigured: boolean;
+    resendConfigured: boolean;
     uk: ReturnType<typeof describeOutreachSender>;
     us: ReturnType<typeof describeOutreachSender>;
   };
@@ -110,7 +110,7 @@ export async function getDeliverabilityReport(): Promise<DeliverabilityReport> {
     },
     scoreClicksTotal: scoreTraffic.total,
     sender: {
-      smtpConfigured: isSmtpMailConfigured(),
+      resendConfigured: isOutreachMailConfigured(),
       uk: describeOutreachSender("uk"),
       us: describeOutreachSender("us"),
     },
@@ -120,7 +120,7 @@ export async function getDeliverabilityReport(): Promise<DeliverabilityReport> {
         "Open mail-tester.com and copy the test address they show.",
         "In PassReady dashboard below, paste that address and send a UK test (and a US test if you use Texas).",
         "Return to mail-tester and click “Then check your score”.",
-        "Aim for 8/10 or higher before live outreach. Fix SPF/DKIM/DMARC in Namecheap if below 7.",
+        "Aim for 8/10 or higher before live outreach. Verify both domains in Resend if below 7.",
         "Also send a test to your personal Gmail and Outlook — check Inbox vs Spam.",
       ],
     },

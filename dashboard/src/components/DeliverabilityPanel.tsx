@@ -94,7 +94,7 @@ export function DeliverabilityPanel({ compact = false }: { compact?: boolean }) 
             Deliverability — are emails getting through?
           </p>
           <p className="mt-1 text-[11px] leading-snug text-slate-400">
-            SMTP “sent” means Private Email accepted the message — not guaranteed inbox. Zero score
+            Resend “sent” means the API accepted the message — not guaranteed inbox. Zero score
             clicks usually means spam folder or wrong inboxes.
           </p>
         </div>
@@ -120,16 +120,16 @@ export function DeliverabilityPanel({ compact = false }: { compact?: boolean }) 
         </p>
       ) : null}
 
-      {report && !report.sender.smtpConfigured ? (
+      {report && !report.sender.resendConfigured ? (
         <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-xs text-amber-100">
-          EMAIL_PASS is not configured — outbound and test sends will fail until set in Render.
+          RESEND_API_KEY is not configured — outbound and test sends will fail until set in Render.
         </p>
       ) : null}
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-        <StatBlock label="UK logged sends" value={report?.emailEvents.sent ?? "—"} hint="SMTP accepted" tone="sky" />
+        <StatBlock label="UK logged sends" value={report?.emailEvents.sent ?? "—"} hint="Resend accepted" tone="sky" />
         <StatBlock label="Bounces" value={report?.emailEvents.bounce ?? "—"} hint={`Rate ${bouncePct}`} tone="rose" />
-        <StatBlock label="Failed delivery" value={report?.uk.failedDelivery ?? "—"} hint="SMTP error at send" tone="rose" />
+        <StatBlock label="Failed delivery" value={report?.uk.failedDelivery ?? "—"} hint="API error at send" tone="rose" />
         <StatBlock label="Score clicks (UK)" value={report?.uk.scoreClicks ?? "—"} hint="All-time pixel hits" tone="emerald" />
         <StatBlock
           label="Click rate"
@@ -163,7 +163,7 @@ export function DeliverabilityPanel({ compact = false }: { compact?: boolean }) 
             US: <span className="text-slate-200">{report.sender.us.formattedFrom}</span>
           </p>
           <p className="mt-1 text-slate-500">
-            SMTP login: {report.sender.uk.authUser} · Set EMAIL_USER_UK for UK From if using an alias.
+            Provider: Resend · Verify nick@passready.uk and nick@passready.us in Resend dashboard.
           </p>
         </div>
       ) : null}

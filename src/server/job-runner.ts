@@ -132,7 +132,7 @@ async function runJobBody(
     case "send": {
       await updateJob(jobId, {
         status: "running",
-        progress: "Sending ready_to_contact queue via Private Email SMTP…",
+        progress: "Sending ready_to_contact queue via Resend…",
       });
       return runSender(onProgress);
     }
