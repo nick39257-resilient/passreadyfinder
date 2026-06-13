@@ -108,6 +108,7 @@ async function sendTexasEmail(row: TexasLeadRow, to: string, text: string): Prom
     to,
     subject: texasEmailSubject(row),
     text,
+    region: "us",
   });
 
   return messageId;

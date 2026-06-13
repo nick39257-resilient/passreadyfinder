@@ -641,10 +641,28 @@ export async function createApp(options?: {
 
   app.get("/api/deliverability", async (_req, res) => {
     try {
-      res.json(await getDeliverabilityStatus());
+      const { getDeliverabilityReport } = await import("../engine/deliverability-report.js");
+      res.json(await getDeliverabilityReport());
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to fetch deliverability" });
+    }
+  });
+
+  app.post("/api/deliverability/test-send", requireControlAuth, async (req, res) => {
+    try {
+      const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
+      const regionRaw = typeof req.body?.region === "string" ? req.body.region.trim().toLowerCase() : "uk";
+      const region = regionRaw === "us" ? "us" : "uk";
+
+      const { sendDeliverabilityTest } = await import("../engine/deliverability-test-send.js");
+      const result = await sendDeliverabilityTest({ to, region });
+      res.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("Deliverability test send failed:", message);
+      const status = message.includes("not configured") || message.includes("Invalid") ? 400 : 500;
+      res.status(status).json({ error: message });
     }
   });
 

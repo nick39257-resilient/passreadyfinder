@@ -53,6 +53,7 @@ import { fetchScoreTrafficStats, type ScoreTrafficStats } from "./api/score-traf
 import type { AutopilotStatusMetadata } from "./lib/autopilot-heartbeat";
 import { MobileAutopilotTrigger } from "./components/MobileAutopilotTrigger";
 import { OutreachScoreFunnel } from "./components/OutreachScoreFunnel";
+import { DeliverabilityPanel } from "./components/DeliverabilityPanel";
 
 function isTexasCommandCenterRoute(): boolean {
   if (typeof window === "undefined") {
@@ -789,6 +790,8 @@ export function App() {
       <div className="mb-4">
         <AutopilotHeartbeat metadata={ukAutopilot} />
       </div>
+
+      <DeliverabilityPanel />
 
       <OutreachScoreFunnel leads={leads} scoreTraffic={scoreTraffic} />
 

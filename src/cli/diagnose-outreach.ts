@@ -188,7 +188,7 @@ async function main(): Promise<void> {
     tips.push("Postbox has approvals but nothing sent — run `npm run send` or check 2pm cron.");
   }
   if (deliverability.sendLocked) {
-    tips.push("Sending is LOCKED due to bounces — fix domain/DKIM in Resend before more sends.");
+    tips.push("Sending is LOCKED due to bounces — fix SPF/DKIM/DMARC in Namecheap before more sends.");
   }
   if (testFallback) {
     tips.push("ALLOW_TEST_EMAIL_FALLBACK=true — real owners may never get mail. Turn off for live sends.");

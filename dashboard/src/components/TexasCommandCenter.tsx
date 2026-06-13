@@ -25,6 +25,7 @@ import { MobileAutopilotTrigger } from "./MobileAutopilotTrigger";
 import { DraftPreviewBlock } from "./DraftPreviewBlock";
 import { TexasOutreachPanel } from "./TexasOutreachPanel";
 import { TexasOutreachScoreFunnel } from "./TexasOutreachScoreFunnel";
+import { DeliverabilityPanel } from "./DeliverabilityPanel";
 import { fetchScoreTrafficStats, type ScoreTrafficStats } from "../api/score-traffic";
 
 function jobProgressLabel(job: JobStatus): string {
@@ -387,6 +388,7 @@ export function TexasCommandCenter() {
       </header>
 
       <div className="px-4 pt-3">
+        <DeliverabilityPanel compact />
         <TexasOutreachScoreFunnel leads={leads} scoreTraffic={scoreTraffic} />
       </div>
 

@@ -16,8 +16,8 @@ const ctx = buildTexasHb2844SpintaxContext({
 });
 
 const subject = resolveTexasHb2844Subject(ctx);
-if (!subject.includes("Taco Truck TX") || !/Important|Action Required|Update/.test(subject)) {
-  console.error("urgent subject spintax failed:", subject);
+if (!subject.includes("Taco Truck TX") || !/Quick note|Heads-up|Question|July 1 DSHS/.test(subject)) {
+  console.error("Texas subject spintax failed:", subject);
   process.exit(1);
 }
 

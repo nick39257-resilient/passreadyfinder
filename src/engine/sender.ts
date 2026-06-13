@@ -277,6 +277,7 @@ async function runSenderBody(onProgress?: SendProgressCallback): Promise<SendRun
         subject,
         text,
         ...(html ? { html } : {}),
+        region: "uk",
       });
 
       await markLeadContacted(lead.id, messageId);

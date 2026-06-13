@@ -1,8 +1,22 @@
 import nodemailer from "nodemailer";
+import {
+  getSmtpAuthUser,
+  getSmtpFromForRegion,
+  type OutreachMailRegion,
+} from "../outreach-mail-from.js";
+
+export type { OutreachMailRegion } from "../outreach-mail-from.js";
+export {
+  describeOutreachSender,
+  formatSmtpFromAddress,
+  getEmailFromName,
+  getEmailUserForRegion,
+  getSmtpAuthUser,
+  getSmtpFromForRegion,
+} from "../outreach-mail-from.js";
 
 const DEFAULT_EMAIL_HOST = "mail.privateemail.com";
 const DEFAULT_EMAIL_PORT = 465;
-const DEFAULT_EMAIL_USER = "nick@passready.us";
 
 function readEnv(name: string): string {
   return process.env[name]?.trim() ?? "";
@@ -10,7 +24,7 @@ function readEnv(name: string): string {
 
 /** Reply-to / From address — prefers Render EMAIL_USER, then legacy MAIL_USERNAME. */
 export function getEmailUser(): string {
-  return readEnv("EMAIL_USER") || readEnv("MAIL_USERNAME") || DEFAULT_EMAIL_USER;
+  return readEnv("EMAIL_USER") || readEnv("MAIL_USERNAME") || "nick@passready.us";
 }
 
 export function getEmailPass(): string {
@@ -30,13 +44,13 @@ export function getEmailPort(): number {
   return Number.isFinite(port) && port > 0 ? port : DEFAULT_EMAIL_PORT;
 }
 
-/** @deprecated Use getEmailUser() — kept for existing imports. */
+/** @deprecated Use getEmailUserForRegion('uk'|'us') — kept for existing imports. */
 export function getPassreadyMailFrom(): string {
   return getEmailUser();
 }
 
-/** @deprecated Use getEmailUser() — kept for existing imports. */
-export const PASSREADY_MAIL_FROM = DEFAULT_EMAIL_USER;
+/** @deprecated Use getSmtpFromForRegion — kept for existing imports. */
+export const PASSREADY_MAIL_FROM = "nick@passready.us";
 
 let transport: nodemailer.Transporter | null = null;
 
@@ -55,7 +69,7 @@ function getTransport(): nodemailer.Transporter {
       port,
       secure: port === 465,
       auth: {
-        user: getEmailUser(),
+        user: getSmtpAuthUser(),
         pass,
       },
     });
@@ -72,10 +86,13 @@ export async function sendSmtpMail(input: {
   subject: string;
   text: string;
   html?: string;
+  /** UK uses @passready.uk by default; US/Texas uses @passready.us */
+  region?: OutreachMailRegion;
 }): Promise<{ messageId: string }> {
   const transporter = getTransport();
+  const region = input.region ?? "uk";
   const info = await transporter.sendMail({
-    from: getEmailUser(),
+    from: getSmtpFromForRegion(region),
     to: input.to.trim(),
     subject: input.subject.trim(),
     text: input.text,

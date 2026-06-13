@@ -6,7 +6,7 @@ import {
 } from "../spintax.js";
 
 export const TEXAS_URGENT_SUBJECT_SPINTAX =
-  "{Important|Action Required|Update}: DSHS July 1st Transition - {{businessName}} permits";
+  "{Quick note|Heads-up|Question} on July 1 DSHS — {{businessName}}";
 
 export type TexasVendorCategory = "TYPE_I" | "TYPE_II_III";
 

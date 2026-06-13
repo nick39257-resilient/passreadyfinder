@@ -54,8 +54,8 @@ export function applySpintaxTemplate(
 }
 
 const FIRST_TOUCH_SUBJECT_TEMPLATES = [
-  "{Hi|Hello|Good morning} — {quick question|a quick one} about {kitchen records|compliance logs} at {{businessName}}",
-  "{Hey|Hi} {{managerName}} — {{localAuthority}} {takeaway|kitchen} question re {{businessName}}",
+  "{Hi|Hello|Good morning} — {quick question|a quick one} about {{businessName}}",
+  "{Hey|Hi} {{managerName}} — {quick one|question} about {{businessName}} in {{town}}",
   "{Quick one|Question} about {{businessName}} on {{street}}",
 ] as const;
 
