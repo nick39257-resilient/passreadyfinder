@@ -1,5 +1,8 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
 # Sync: Dashboard → Blueprints → Connect repo → Apply
+# Copilot mode (default): warm-only outreach, no cold email autosend.
+# After push: apply blueprint in Render OR confirm web service env matches below.
+# Remove obsolete SMTP vars if still present: EMAIL_PASS, EMAIL_HOST, EMAIL_PORT, MAIL_USERNAME
 services:
   - type: web
     name: passreadyfinder
@@ -88,14 +91,14 @@ services:
           name: passreadyfinder
           envVarKey: TURSO_AUTH_TOKEN
 
-  # QueueDrafter — 8 leads per run, every 15 min (day mode)
+  # QueueDrafter — warm/replied leads only in copilot mode (every 30 min)
   - type: cron
     name: passreadyfinder-queue-draft
     runtime: node
     plan: starter
     repo: https://github.com/nick39257-resilient/passreadyfinder
     branch: main
-    schedule: "*/15 * * * *"
+    schedule: "*/30 * * * *"
     buildCommand: NPM_CONFIG_PRODUCTION=false npm install
     startCommand: npm run queue-draft
     envVars:
@@ -138,6 +141,11 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: OUTREACH_DAY_MODE
+      - key: OUTREACH_COPILOT_MODE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_COPILOT_MODE
       - key: QUEUE_DRAFTER_BATCH_SIZE
         fromService:
           type: web
@@ -149,7 +157,7 @@ services:
           name: passreadyfinder
           envVarKey: QUEUE_DRAFTER_RISK_THRESHOLD
 
-  # Day pipeline — draft + send every 2h while OUTREACH_DAY_MODE=true
+  # Day pipeline — disabled in copilot (requires OUTREACH_DAY_MODE + email autosend)
   - type: cron
     name: passreadyfinder-day-pipeline
     runtime: node
@@ -209,6 +217,21 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: OUTREACH_DAY_MODE
+      - key: OUTREACH_COPILOT_MODE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_COPILOT_MODE
+      - key: OUTREACH_EMAIL_AUTOSEND
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_EMAIL_AUTOSEND
+      - key: OUTREACH_WARM_ONLY
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_WARM_ONLY
       - key: OUTREACH_FIRST_TOUCH_LINK
         fromService:
           type: web
@@ -230,7 +253,7 @@ services:
           name: passreadyfinder
           envVarKey: QUEUE_DRAFTER_RISK_THRESHOLD
 
-  # Sender — every 30 min during UK business hours (day mode: 7am–8pm UK)
+  # Sender — skips in copilot (OUTREACH_EMAIL_AUTOSEND=false); kept for warm follow-up if re-enabled
   - type: cron
     name: passreadyfinder-send
     runtime: node
@@ -275,6 +298,21 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: OUTREACH_DAY_MODE
+      - key: OUTREACH_COPILOT_MODE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_COPILOT_MODE
+      - key: OUTREACH_EMAIL_AUTOSEND
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_EMAIL_AUTOSEND
+      - key: OUTREACH_WARM_ONLY
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_WARM_ONLY
       - key: OUTREACH_FIRST_TOUCH_LINK
         fromService:
           type: web
@@ -286,7 +324,7 @@ services:
           name: passreadyfinder
           envVarKey: DAILY_SEND_CAP
 
-  # Texas autopilot — email discovery + mobile auto-send (every 4h, no contact forms in day mode)
+  # Texas autopilot — discovery only in copilot (no mobile auto-email)
   - type: cron
     name: texas-autopilot-cron
     runtime: node
@@ -333,6 +371,16 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: OUTREACH_DAY_MODE
+      - key: OUTREACH_COPILOT_MODE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_COPILOT_MODE
+      - key: TEXAS_MOBILE_AUTO_SEND
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: TEXAS_MOBILE_AUTO_SEND
 
   # UK autopilot — OSM/DDG discovery, email scrape (every 4h)
   - type: cron
@@ -382,3 +430,8 @@ services:
           type: web
           name: passreadyfinder
           envVarKey: OUTREACH_DAY_MODE
+      - key: OUTREACH_COPILOT_MODE
+        fromService:
+          type: web
+          name: passreadyfinder
+          envVarKey: OUTREACH_COPILOT_MODE
