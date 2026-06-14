@@ -54,6 +54,7 @@ import type { AutopilotStatusMetadata } from "./lib/autopilot-heartbeat";
 import { MobileAutopilotTrigger } from "./components/MobileAutopilotTrigger";
 import { OutreachScoreFunnel } from "./components/OutreachScoreFunnel";
 import { DeliverabilityPanel } from "./components/DeliverabilityPanel";
+import { ActionCenter } from "./components/ActionCenter";
 
 function isTexasCommandCenterRoute(): boolean {
   if (typeof window === "undefined") {
@@ -790,6 +791,19 @@ export function App() {
       <div className="mb-4">
         <AutopilotHeartbeat metadata={ukAutopilot} />
       </div>
+
+      <ActionCenter
+        onOpenLead={(leadId) => {
+          const lead = leads.find((l) => l.id === leadId);
+          if (lead) {
+            setSelectedLead(lead);
+            return;
+          }
+          void fetchLeadDetail(leadId).then((detail) => {
+            if (detail) setSelectedLead(detail);
+          });
+        }}
+      />
 
       <DeliverabilityPanel />
 

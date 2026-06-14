@@ -1,3 +1,4 @@
+import { isCopilotOutreachMode } from "../outreach-strategy.js";
 import { texasProductConfig } from "../../config/product.texas.config.js";
 import {
   TEXAS_STATUS_EMAIL_SENT,
@@ -9,6 +10,9 @@ import { executeTexasLeadOutreach } from "./texas-outreach-executor.js";
 
 /** Auto-email Texas mobile vendors when an address is on file (default on). */
 export function texasMobileAutoSendEnabled(): boolean {
+  if (isCopilotOutreachMode()) {
+    return false;
+  }
   const raw = process.env.TEXAS_MOBILE_AUTO_SEND?.trim().toLowerCase();
   if (raw === "false" || raw === "0" || raw === "off") {
     return false;

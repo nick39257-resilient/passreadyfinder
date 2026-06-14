@@ -1,6 +1,9 @@
 export interface AppConfig {
   requiresControlSecret: boolean;
   outreachLandingUrl?: string;
+  copilotMode?: boolean;
+  emailAutosend?: boolean;
+  warmOnlyEmail?: boolean;
 }
 
 export async function fetchAppConfig(): Promise<AppConfig> {

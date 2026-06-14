@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import "dotenv/config";
+import { isCopilotOutreachMode, isEmailAutosendEnabled } from "../engine/outreach-strategy.js";
 import { isOutreachDayMode } from "../engine/outreach-day-mode.js";
 import { runLeadTriage } from "../engine/lead-triage.js";
 import { runSender } from "../engine/sender.js";
@@ -13,6 +14,15 @@ const LAST_SEND_KEY = "last_send_day_uk";
 
 async function main(): Promise<void> {
   try {
+    if (!isEmailAutosendEnabled()) {
+      console.log(
+        isCopilotOutreachMode()
+          ? "Copilot mode: cold email autosend disabled — send cron skipped."
+          : "OUTREACH_EMAIL_AUTOSEND is off — send cron skipped.",
+      );
+      return;
+    }
+
     const now = new Date();
     if (!isWithinUkSendWindow(now)) {
       console.log(`Outside UK send window. Next window: ${getNextUkSendWindowLabel(now)}.`);

@@ -29,6 +29,8 @@ const LEAD_PHASE_B_COLUMNS = [
   "last_previewed_at TEXT",
   "email_sent_at TEXT",
   "vendor_tier TEXT",
+  "whatsapp_sent_at TEXT",
+  "call_logged_at TEXT",
 ] as const;
 
 async function columnExists(table: string, column: string): Promise<boolean> {

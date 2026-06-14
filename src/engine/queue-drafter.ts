@@ -32,6 +32,7 @@ import {
   outreachHaltedSqlArgs,
   outreachHaltedSqlInClause,
 } from "./outreach-halt.js";
+import { isCopilotOutreachMode } from "./outreach-strategy.js";
 import { getDb, runMigrations } from "./store/db.js";
 
 const queueConfig = productConfig.outreach.queueDrafter;
@@ -76,6 +77,18 @@ export async function throttleBetweenLeads(): Promise<void> {
 
 const ELIGIBLE_DRAFT_STATUSES = "('new', 'ready_to_review')";
 
+function copilotDraftFilterSql(): string {
+  if (!isCopilotOutreachMode()) {
+    return "";
+  }
+  return `
+    AND (
+      (last_previewed_at IS NOT NULL AND datetime(last_previewed_at) >= datetime('now', '-7 days'))
+      OR replied_at IS NOT NULL
+    )
+  `;
+}
+
 async function countEligibleNewLeads(): Promise<number> {
   const db = getDb();
   const result = await db.execute({
@@ -88,6 +101,7 @@ async function countEligibleNewLeads(): Promise<number> {
         AND COALESCE(touch_count, 0) < ?
         AND ${outreachHaltedSqlInClause()}
         AND ${emailNotSuppressedSql()}
+        ${copilotDraftFilterSql()}
     `,
     args: [productConfig.outreach.maxTouchesPerLead, ...outreachHaltedSqlArgs()],
   });
@@ -122,6 +136,7 @@ async function fetchEligibleNewLeads(limit: number): Promise<LeadForQueueDraft[]
         AND COALESCE(touch_count, 0) < ?
         AND ${outreachHaltedSqlInClause()}
         AND ${emailNotSuppressedSql()}
+        ${copilotDraftFilterSql()}
       ORDER BY
         CASE WHEN email IS NOT NULL AND TRIM(email) != '' THEN 0 ELSE 1 END,
         lead_score DESC
@@ -149,10 +164,12 @@ function selectBatch(
         website: lead.website,
       }).score,
       hasEmail: isValidOutreachEmail(lead.email),
+      lowRating: lead.fsa_rating != null && lead.fsa_rating <= 3,
     }))
     .filter((entry) => entry.hasEmail || entry.riskScore > threshold)
     .sort(
       (a, b) =>
+        Number(b.lowRating) - Number(a.lowRating) ||
         Number(b.hasEmail) - Number(a.hasEmail) ||
         b.riskScore - a.riskScore ||
         a.lead.id - b.lead.id,

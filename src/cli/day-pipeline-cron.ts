@@ -5,6 +5,7 @@
  */
 import "dotenv/config";
 import { isOutreachDayMode } from "../engine/outreach-day-mode.js";
+import { isEmailAutosendEnabled } from "../engine/outreach-strategy.js";
 import { runQueueDrafter } from "../engine/queue-drafter.js";
 import { runSender } from "../engine/sender.js";
 import { closeDb } from "../engine/store/db.js";
@@ -12,8 +13,8 @@ import { getInFlightSendJob } from "../engine/store/jobs-repository.js";
 import { countApprovedLeads, countSendReadyLeads } from "../engine/store/stats-repository.js";
 
 async function main(): Promise<void> {
-  if (!isOutreachDayMode()) {
-    console.log("OUTREACH_DAY_MODE is off — day pipeline cron skipped.");
+  if (!isOutreachDayMode() || !isEmailAutosendEnabled()) {
+    console.log("Day pipeline skipped (day mode off or email autosend disabled).");
     return;
   }
 

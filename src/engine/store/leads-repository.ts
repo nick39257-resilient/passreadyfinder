@@ -138,6 +138,8 @@ export interface LeadRow {
   enrichment_detail?: string | null;
   local_authority_name?: string | null;
   last_previewed_at?: string | null;
+  whatsapp_sent_at?: string | null;
+  call_logged_at?: string | null;
   needs_eyes_updated_at?: string | null;
   created_at: string;
   updated_at: string;

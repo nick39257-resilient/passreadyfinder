@@ -1,4 +1,5 @@
 import { productConfig } from "../../config/product.config.js";
+import { isWarmOnlyEmailEnabled } from "../outreach-strategy.js";
 import {
   emailNotSuppressedSql,
   isLeadOutreachHalted,
@@ -31,8 +32,19 @@ export interface OutboundQueueLead extends ApprovedLead {
   vendor_tier?: string | null;
 }
 
-/** Leads approved for the next outbound touch (first or follow-up sequence). */
-const OUTBOUND_QUEUE_WHERE = `
+const WARM_ONLY_QUEUE_SQL = `
+  AND (
+    replied_at IS NOT NULL
+    OR (
+      last_previewed_at IS NOT NULL
+      AND datetime(last_previewed_at) >= datetime('now', '-7 days')
+    )
+  )
+`;
+
+function outboundQueueWhere(): string {
+  const warmOnly = isWarmOnlyEmailEnabled() ? WARM_ONLY_QUEUE_SQL : "";
+  return `
   status = 'ready_to_contact'
   AND draft_message IS NOT NULL
   AND email IS NOT NULL
@@ -40,7 +52,9 @@ const OUTBOUND_QUEUE_WHERE = `
   AND COALESCE(touch_count, 0) < ?
   AND ${outreachHaltedSqlInClause()}
   AND ${emailNotSuppressedSql("leads")}
+  ${warmOnly}
 `;
+}
 
 const OUTBOUND_SELECT_COLUMNS = `
   id, business_name, email, draft_message, status,
@@ -72,7 +86,7 @@ export async function getReadyToContactLeads(limit?: number): Promise<OutboundQu
   const sql = `
     SELECT ${OUTBOUND_SELECT_COLUMNS}
     FROM leads
-    WHERE ${OUTBOUND_QUEUE_WHERE}
+    WHERE ${outboundQueueWhere()}
     ORDER BY lead_score DESC
     ${limit !== undefined ? "LIMIT ?" : ""}
   `;
@@ -135,7 +149,7 @@ export async function claimReadyToContactBatch(
       SET status = 'processing', updated_at = datetime('now')
       WHERE id IN (
         SELECT id FROM leads
-        WHERE ${OUTBOUND_QUEUE_WHERE}
+        WHERE ${outboundQueueWhere()}
         ORDER BY lead_score DESC
         LIMIT ?
       )

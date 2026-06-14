@@ -73,6 +73,16 @@ import {
 import { mountTexasRoutes } from "./texas-routes.js";
 import { mountUkRoutes } from "./uk-routes.js";
 import { mountScoreTrafficRoutes } from "./score-traffic-routes.js";
+import {
+  isCopilotOutreachMode,
+  isEmailAutosendEnabled,
+  isWarmOnlyEmailEnabled,
+} from "../engine/outreach-strategy.js";
+import {
+  buildActionQueueDigest,
+  markLeadCallLogged,
+  markLeadWhatsAppSent,
+} from "../engine/action-queue/action-queue-service.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, "../..");
 const publicDir = path.join(projectRoot, "public");
@@ -170,6 +180,9 @@ export async function createApp(options?: {
     res.json({
       requiresControlSecret: Boolean(process.env.CONTROL_PANEL_SECRET?.trim()),
       outreachLandingUrl: getOutreachLandingUrl(),
+      copilotMode: isCopilotOutreachMode(),
+      emailAutosend: isEmailAutosendEnabled(),
+      warmOnlyEmail: isWarmOnlyEmailEnabled(),
     });
   });
 
@@ -663,6 +676,51 @@ export async function createApp(options?: {
       console.error("Deliverability test send failed:", message);
       const status = message.includes("not configured") || message.includes("Invalid") ? 400 : 500;
       res.status(status).json({ error: message });
+    }
+  });
+
+  app.get("/api/action-queue/digest", async (_req, res) => {
+    try {
+      res.json(await buildActionQueueDigest());
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to build action queue digest" });
+    }
+  });
+
+  app.post("/api/leads/:id/mark-whatsapp-sent", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+    try {
+      await markLeadWhatsAppSent(id);
+      res.json({ ok: true });
+    } catch (err) {
+      const message = formatRouteError(err);
+      const status =
+        message === "Lead not found"
+          ? 404
+          : message.includes("daily cap")
+            ? 429
+            : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+
+  app.post("/api/leads/:id/mark-call-logged", requireControlAuth, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+    try {
+      await markLeadCallLogged(id);
+      res.json({ ok: true });
+    } catch (err) {
+      const message = formatRouteError(err);
+      res.status(message === "Lead not found" ? 404 : 500).json({ error: message });
     }
   });
 

@@ -34,7 +34,19 @@ services:
       - key: CONTROL_PANEL_SECRET
         sync: false
       - key: OUTREACH_DAY_MODE
+        value: "false"
+      - key: OUTREACH_COPILOT_MODE
         value: "true"
+      - key: OUTREACH_WARM_ONLY
+        value: "true"
+      - key: OUTREACH_EMAIL_AUTOSEND
+        value: "false"
+      - key: COPILOT_WHATSAPP_DAILY_CAP
+        value: "20"
+      - key: COPILOT_DIGEST_SIZE
+        value: "10"
+      - key: TEXAS_MOBILE_AUTO_SEND
+        value: "false"
       - key: OUTREACH_FIRST_TOUCH_LINK
         value: "false"
       - key: DAILY_SEND_CAP

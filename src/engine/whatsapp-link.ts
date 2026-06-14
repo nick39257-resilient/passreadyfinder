@@ -84,7 +84,13 @@ export function buildOutboundWaMeLink(input: {
   const template =
     input.prefillTemplate?.trim() || productConfig.outreach.whatsappOutboundTemplate;
   const prefill = template.replace("[Business Name]", input.businessName.trim());
-  const landing = input.landingUrl?.trim() || getOutreachLandingUrl();
-  const body = prefill.includes(landing) ? prefill : `${prefill}\n\nFree score check: ${landing}`;
+  const landing =
+    input.landingUrl !== undefined
+      ? input.landingUrl.trim()
+      : getOutreachLandingUrl();
+  const body =
+    !landing || prefill.includes(landing)
+      ? prefill
+      : `${prefill}\n\nFree score check: ${landing}`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(body)}`;
 }
