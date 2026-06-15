@@ -23,3 +23,19 @@
     }
   }
 }
+
+@keyframes radar-ping {
+  0% {
+    transform: scale(0.35);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.radar-pulse {
+  animation: radar-ping 2s ease-out infinite;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.15) 0%, transparent 70%);
+}

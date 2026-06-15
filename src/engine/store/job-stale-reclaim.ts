@@ -5,6 +5,7 @@ import { getRecentJobs, updateJob, type JobRecord, type JobType } from "./jobs-r
 const STALE_WITHOUT_HEARTBEAT_MS: Partial<Record<JobType, number>> = {
   find: 20 * 60 * 1000,
   find_texas: 20 * 60 * 1000,
+  market_find: 20 * 60 * 1000,
   texas_reclassify: 10 * 60 * 1000,
   texas_autopilot: 25 * 60 * 1000,
   uk_autopilot: 25 * 60 * 1000,

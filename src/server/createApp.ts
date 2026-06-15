@@ -73,6 +73,9 @@ import {
 import { mountTexasRoutes } from "./texas-routes.js";
 import { mountUkRoutes } from "./uk-routes.js";
 import { mountScoreTrafficRoutes } from "./score-traffic-routes.js";
+import { mountMarketRoutes } from "./market-routes.js";
+import { mountGenericLeadsRoutes } from "./generic-leads-routes.js";
+import { mountFloridaRoutes } from "./florida-routes.js";
 import {
   isCopilotOutreachMode,
   isEmailAutosendEnabled,
@@ -170,6 +173,9 @@ export async function createApp(options?: {
 
   mountTexasRoutes(app, requireControlAuth);
   mountUkRoutes(app, requireControlAuth);
+  mountMarketRoutes(app, requireControlAuth);
+  mountGenericLeadsRoutes(app);
+  mountFloridaRoutes(app);
   mountScoreTrafficRoutes(app, requireControlAuth);
 
   app.get("/health", (_req, res) => {
@@ -183,6 +189,7 @@ export async function createApp(options?: {
       copilotMode: isCopilotOutreachMode(),
       emailAutosend: isEmailAutosendEnabled(),
       warmOnlyEmail: isWarmOnlyEmailEnabled(),
+      marketsApi: "/api/markets",
     });
   });
 

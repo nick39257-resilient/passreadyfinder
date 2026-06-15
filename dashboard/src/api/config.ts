@@ -4,6 +4,7 @@ export interface AppConfig {
   copilotMode?: boolean;
   emailAutosend?: boolean;
   warmOnlyEmail?: boolean;
+  marketsApi?: string;
 }
 
 export async function fetchAppConfig(): Promise<AppConfig> {

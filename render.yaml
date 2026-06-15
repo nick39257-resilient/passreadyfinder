@@ -48,6 +48,10 @@ services:
         value: "20"
       - key: COPILOT_DIGEST_SIZE
         value: "10"
+      - key: FLORIDA_DBPR_DATA_URL
+        sync: false
+      - key: OPEN_SEARCH_RADIUS_METRES
+        value: "8000"
       - key: TEXAS_MOBILE_AUTO_SEND
         value: "false"
       - key: OUTREACH_FIRST_TOUCH_LINK

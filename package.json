@@ -38,6 +38,7 @@
     "test:outreach-exclusions": "tsx scripts/test-outreach-exclusions.mjs",
     "test:pulse-status": "tsx scripts/test-pulse-status.mjs",
     "test:gemini-draft-model": "tsx scripts/test-gemini-draft-model.mjs",
+    "test:markets": "tsx src/markets/registry.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && npm run dashboard:build",
     "dashboard:install": "npm install --prefix dashboard --include=dev",

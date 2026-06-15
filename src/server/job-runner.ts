@@ -16,11 +16,14 @@ import {
   type JobType,
 } from "../engine/store/jobs-repository.js";
 import type { DraftJobParams, FindJobParams } from "../types/segmentation.js";
+import { runMarketFind } from "../markets/run-market-find.js";
+import type { MarketSearchParams } from "../markets/types.js";
 import { OperationTimeoutError, withTimeout } from "../engine/services/service-timeout.js";
 
 const JOB_TIMEOUT_MS: Partial<Record<JobType, number>> = {
   find: 2 * 60 * 60 * 1000,
   find_texas: 45 * 60 * 1000,
+  market_find: 2 * 60 * 60 * 1000,
   texas_reclassify: 15 * 60 * 1000,
   texas_autopilot: 55 * 60 * 1000,
   uk_autopilot: 55 * 60 * 1000,
@@ -79,6 +82,19 @@ async function runJobBody(
           : "Ingesting Texas health inspection open data…",
       });
       return runFindTexasLeadsJob({ segmentation: texasParams });
+    }
+    case "market_find": {
+      const marketParams = params as MarketSearchParams;
+      await updateJob(jobId, {
+        status: "running",
+        progress: `Market scan: ${marketParams.marketId} @ ${marketParams.location}…`,
+      });
+      return runMarketFind(marketParams, {
+        jobId,
+        onProgress: async (message) => {
+          await updateJob(jobId, { progress: message });
+        },
+      });
     }
     case "texas_reclassify": {
       await updateJob(jobId, {

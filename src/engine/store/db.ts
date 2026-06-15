@@ -86,6 +86,12 @@ async function runMigrationsOnce(): Promise<void> {
 
   const { runScoreTrafficMigrations } = await import("./score-traffic-repository.js");
   await runScoreTrafficMigrations();
+
+  const { runGenericLeadsMigrations } = await import("./generic-leads-migrations.js");
+  await runGenericLeadsMigrations();
+
+  const { runFloridaMigrations } = await import("./florida-migrations.js");
+  await runFloridaMigrations();
 }
 
 export async function runMigrations(): Promise<void> {
