@@ -1,6 +1,10 @@
 import { floridaProductConfig } from "../../config/product.florida.config.js";
 import type { FloridaLeadInput } from "../../types/florida.js";
 import { floridaDistrictUrlsForLocation } from "./florida-district-sources.js";
+import {
+  floridaLocationIsStatewide,
+  floridaLocationSearchTokens,
+} from "./florida-location-tokens.js";
 import { csvRowsToObjects, parseCsvText } from "./florida-csv-parser.js";
 import {
   computeFloridaRiskScore,
@@ -27,48 +31,7 @@ function pickNum(row: Record<string, string>, keys: string[]): number | null {
 }
 
 function locationSearchTokens(location: string): string[] {
-  const raw = location.trim().toLowerCase();
-  if (!raw || raw === "florida" || raw === "fl") {
-    return [];
-  }
-
-  const parts = raw
-    .split(/[,;]+/)
-    .map((s) => s.trim())
-    .filter((s) => s && s !== "fl" && s !== "florida" && s !== "usa" && s !== "us");
-
-  const tokens = new Set<string>(parts.length > 0 ? parts : [raw]);
-
-  const cityToCounty: Record<string, string[]> = {
-    orlando: ["orange"],
-    kissimmee: ["osceola"],
-    "winter park": ["orange"],
-    sanford: ["seminole"],
-    tampa: ["hillsborough"],
-    miami: ["dade"],
-    hialeah: ["dade"],
-    jacksonville: ["duval"],
-    gainesville: ["alachua"],
-    tallahassee: ["leon"],
-    "fort lauderdale": ["broward"],
-    hollywood: ["broward"],
-    "st. petersburg": ["pinellas"],
-    "st petersburg": ["pinellas"],
-    clearwater: ["pinellas"],
-    naples: ["collier"],
-    sarasota: ["sarasota"],
-  };
-
-  for (const token of [...tokens]) {
-    const counties = cityToCounty[token];
-    if (counties) {
-      for (const county of counties) {
-        tokens.add(county);
-      }
-    }
-  }
-
-  return [...tokens];
+  return floridaLocationSearchTokens(location);
 }
 
 function matchesLocationFilter(
@@ -206,6 +169,11 @@ function resolveFloridaDataUrls(input: {
 }): string[] {
   if (input.dataUrl?.trim()) {
     return [input.dataUrl.trim()];
+  }
+
+  // City/county searches always use the correct DBPR district CSV(s).
+  if (!floridaLocationIsStatewide(input.location)) {
+    return floridaDistrictUrlsForLocation(input.location);
   }
 
   const envUrl =

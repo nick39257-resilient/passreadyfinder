@@ -1,4 +1,5 @@
 import type { FloridaLeadInput } from "../../types/florida.js";
+import { floridaLocationSearchTokens } from "../florida/florida-location-tokens.js";
 import { getDb } from "./db.js";
 
 export interface FloridaLeadRow {
@@ -85,20 +86,22 @@ export async function listFloridaLeads(
   const location = filter?.location?.trim();
 
   if (location) {
-    const tokens = location
-      .toLowerCase()
-      .split(/[,;]+/)
-      .map((s) => s.trim())
-      .filter((s) => s && s !== "fl" && s !== "florida" && s !== "usa");
+    const searchParts = floridaLocationSearchTokens(location);
+    if (searchParts.length === 0) {
+      const result = await db.execute({
+        sql: `SELECT * FROM florida_leads ORDER BY risk_score DESC, id DESC LIMIT ?`,
+        args: [Math.min(limit, 500)],
+      });
+      return result.rows as unknown as FloridaLeadRow[];
+    }
 
-    const searchParts = tokens.length > 0 ? tokens : [location.toLowerCase()];
     const conditions = searchParts
-      .map(() => `(LOWER(city) LIKE ? OR LOWER(county) LIKE ?)`)
+      .map(() => `(LOWER(city) LIKE ? OR LOWER(county) LIKE ? OR LOWER(address) LIKE ?)`)
       .join(" OR ");
     const args: string[] = [];
     for (const part of searchParts) {
       const like = `%${part.replace(/\./g, "")}%`;
-      args.push(like, like);
+      args.push(like, like, like);
     }
     args.push(String(Math.min(limit, 500)));
 
