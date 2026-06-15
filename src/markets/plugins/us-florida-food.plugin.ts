@@ -26,7 +26,7 @@ export const usFloridaFoodPlugin: MarketPlugin = {
       return "location is required (Florida city or county)";
     }
     if (!floridaMarketConfigured()) {
-      return "Set FLORIDA_DBPR_DATA_URL to a DBPR district CSV from MyFloridaLicense public records";
+      return "Florida DBPR data source is not configured";
     }
     return null;
   },

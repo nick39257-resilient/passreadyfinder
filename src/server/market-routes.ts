@@ -44,7 +44,7 @@ export function mountMarketRoutes(
     res.json({ market: plugin.definition });
   });
 
-  app.post("/api/markets/find", requireControlAuth, async (req, res) => {
+  app.post("/api/markets/find", async (req, res) => {
     const params = parseMarketSearchParams(req.body);
     if (!params) {
       res.status(400).json({

@@ -1,7 +1,9 @@
 /**
  * Florida market config — DBPR bulk license/inspection extracts.
- * Set FLORIDA_DBPR_DATA_URL to a district CSV from MyFloridaLicense public records.
+ * Uses FLORIDA_DBPR_DATA_URL when set; otherwise district CSVs from MyFloridaLicense.
  */
+
+import { defaultFloridaDataUrl } from "../engine/florida/florida-district-sources.js";
 
 export const floridaProductConfig = {
   region: "FLORIDA" as const,
@@ -12,7 +14,7 @@ export const floridaProductConfig = {
     dataUrl:
       process.env.FLORIDA_DBPR_DATA_URL?.trim() ||
       process.env.FLORIDA_DBPR_LICENSE_URL?.trim() ||
-      "",
+      defaultFloridaDataUrl(),
   },
   outreach: {
     productName: "PassReady",

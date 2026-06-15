@@ -109,6 +109,9 @@ export function CommandPanel({
       ) : null}
 
       <nav className="mt-auto flex flex-col gap-1 border-t border-slate-800 pt-3 text-[11px]">
+        <a href="/dashboard/florida" className="text-slate-500 hover:text-slate-300">
+          Florida food radar →
+        </a>
         <a href="/dashboard/uk" className="text-slate-500 hover:text-slate-300">
           UK legacy command center →
         </a>

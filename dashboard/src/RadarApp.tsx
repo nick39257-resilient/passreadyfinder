@@ -8,7 +8,6 @@ import {
 } from "./api/markets";
 import { fetchGenericLeads } from "./api/generic-leads";
 import { fetchFloridaLeads } from "./api/florida-leads";
-import { ensureControlSecret } from "./lib/control-secret";
 import { CommandPanel } from "./components/radar/CommandPanel";
 import { RadarMap, type RadarPin } from "./components/radar/RadarMap";
 import {
@@ -35,7 +34,6 @@ export function RadarApp() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void ensureControlSecret();
     void fetchMarkets()
       .then(setMarkets)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load markets"));
