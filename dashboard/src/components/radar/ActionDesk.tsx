@@ -92,6 +92,8 @@ function LeadCard({ lead }: { lead: DeskLead }) {
 }
 
 export function ActionDesk({ leads, stats, onExport }: Props) {
+  const sorted = [...leads].sort((a, b) => b.priorityScore - a.priorityScore);
+
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -121,13 +123,13 @@ export function ActionDesk({ leads, stats, onExport }: Props) {
         </div>
       </div>
 
-      {leads.length === 0 ? (
+      {sorted.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">
           Run a scan to populate the priority queue.
         </p>
       ) : (
         <ul className="grid max-h-[420px] gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-          {leads.map((lead) => (
+          {sorted.map((lead) => (
             <LeadCard key={lead.id} lead={lead} />
           ))}
         </ul>

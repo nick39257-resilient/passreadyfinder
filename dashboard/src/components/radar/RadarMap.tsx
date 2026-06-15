@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -38,6 +38,26 @@ function pinColor(score: number): string {
 
 export function RadarMap({ center, pins, scanning }: Props) {
   const defaultCenter = center ?? { lat: 51.505, lng: -0.09 };
+  const [visiblePinCount, setVisiblePinCount] = useState(0);
+
+  useEffect(() => {
+    if (pins.length === 0) {
+      setVisiblePinCount(0);
+      return;
+    }
+    setVisiblePinCount(0);
+    let shown = 0;
+    const timer = setInterval(() => {
+      shown += 1;
+      setVisiblePinCount(shown);
+      if (shown >= pins.length) {
+        clearInterval(timer);
+      }
+    }, 60);
+    return () => clearInterval(timer);
+  }, [pins]);
+
+  const visiblePins = pins.slice(0, visiblePinCount);
 
   return (
     <div className="relative min-h-[280px] flex-1 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
@@ -58,7 +78,7 @@ export function RadarMap({ center, pins, scanning }: Props) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapRecenter center={center} />
-        {pins.map((pin) => (
+        {visiblePins.map((pin) => (
           <CircleMarker
             key={pin.id}
             center={[pin.lat, pin.lng]}

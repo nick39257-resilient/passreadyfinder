@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { assertGooglePlacesReady, isGooglePlacesEnabled } from "../../config/google-places.config.js";
 import { searchDuckDuckGoOnce } from "../search/web-search-discovery.js";
 import { upsertGenericLead } from "../store/generic-leads-repository.js";
 import { geocodeLocation } from "./nominatim.js";
@@ -32,6 +33,13 @@ export async function runOpenSearchPipeline(input: {
   const report = async (msg: string) => {
     await input.onProgress?.(msg);
   };
+
+  assertGooglePlacesReady();
+  if (isGooglePlacesEnabled()) {
+    await report("Google Places density layer enabled (paid)…");
+  } else {
+    await report("Using free OSM discovery (Google Places off)…");
+  }
 
   await report(`Geocoding ${location}…`);
   const geo = await geocodeLocation(location);

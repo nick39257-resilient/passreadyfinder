@@ -92,6 +92,12 @@ async function runMigrationsOnce(): Promise<void> {
 
   const { runFloridaMigrations } = await import("./florida-migrations.js");
   await runFloridaMigrations();
+
+  const { runMarketingTrafficMigrations } = await import("./marketing-traffic-repository.js");
+  await runMarketingTrafficMigrations();
+
+  const { runPulseTrialMigrations } = await import("./pulse-trial-repository.js");
+  await runPulseTrialMigrations();
 }
 
 export async function runMigrations(): Promise<void> {

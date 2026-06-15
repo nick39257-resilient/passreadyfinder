@@ -52,6 +52,10 @@ services:
         sync: false
       - key: OPEN_SEARCH_RADIUS_METRES
         value: "8000"
+      - key: GOOGLE_PLACES_ENABLED
+        value: "false"
+      - key: PULSE_WEBHOOK_SECRET
+        sync: false
       - key: TEXAS_MOBILE_AUTO_SEND
         value: "false"
       - key: OUTREACH_FIRST_TOUCH_LINK

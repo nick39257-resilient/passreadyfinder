@@ -52,7 +52,7 @@ export function CommandPanel({
               mode === m ? "bg-cyan-900/60 text-cyan-100" : "text-slate-500"
             }`}
           >
-            {m === "open" ? "Open search" : "Regulated"}
+            {m === "open" ? "Open search playground" : "Regulated compliance"}
           </button>
         ))}
       </div>
@@ -101,7 +101,7 @@ export function CommandPanel({
         onClick={onScan}
         className="min-h-11 rounded-xl bg-cyan-600 font-semibold text-white disabled:opacity-50"
       >
-        {busy ? "Scanning…" : "Run radar scan"}
+        {busy ? "Scanning…" : "Scan area"}
       </button>
 
       {ticker ? (

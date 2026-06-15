@@ -76,6 +76,9 @@ import { mountScoreTrafficRoutes } from "./score-traffic-routes.js";
 import { mountMarketRoutes } from "./market-routes.js";
 import { mountGenericLeadsRoutes } from "./generic-leads-routes.js";
 import { mountFloridaRoutes } from "./florida-routes.js";
+import { mountPulseRoutes } from "./pulse-routes.js";
+import { mountMarketingTrafficRoutes } from "./marketing-traffic-routes.js";
+import { isGooglePlacesEnabled } from "../config/google-places.config.js";
 import {
   isCopilotOutreachMode,
   isEmailAutosendEnabled,
@@ -176,6 +179,8 @@ export async function createApp(options?: {
   mountMarketRoutes(app, requireControlAuth);
   mountGenericLeadsRoutes(app);
   mountFloridaRoutes(app);
+  mountPulseRoutes(app, requireControlAuth);
+  mountMarketingTrafficRoutes(app, requireControlAuth);
   mountScoreTrafficRoutes(app, requireControlAuth);
 
   app.get("/health", (_req, res) => {
@@ -190,6 +195,8 @@ export async function createApp(options?: {
       emailAutosend: isEmailAutosendEnabled(),
       warmOnlyEmail: isWarmOnlyEmailEnabled(),
       marketsApi: "/api/markets",
+      googlePlacesEnabled: isGooglePlacesEnabled(),
+      pulseApi: "/api/pulse/dashboard",
     });
   });
 
