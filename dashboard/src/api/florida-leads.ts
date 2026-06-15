@@ -18,8 +18,15 @@ export interface FloridaLead {
   status: string;
 }
 
-export async function fetchFloridaLeads(limit = 200): Promise<FloridaLead[]> {
-  const res = await fetchWithTimeout(`/api/florida/leads?limit=${limit}`);
+export async function fetchFloridaLeads(
+  limit = 200,
+  location?: string,
+): Promise<FloridaLead[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (location?.trim()) {
+    params.set("location", location.trim());
+  }
+  const res = await fetchWithTimeout(`/api/florida/leads?${params}`);
   if (!res.ok) {
     throw new Error("Failed to load Florida leads");
   }

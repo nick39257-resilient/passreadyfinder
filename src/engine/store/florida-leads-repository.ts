@@ -77,8 +77,43 @@ export async function upsertFloridaLead(input: FloridaLeadInput): Promise<void> 
   });
 }
 
-export async function listFloridaLeads(limit = 500): Promise<FloridaLeadRow[]> {
+export async function listFloridaLeads(
+  limit = 500,
+  filter?: { location?: string },
+): Promise<FloridaLeadRow[]> {
   const db = getDb();
+  const location = filter?.location?.trim();
+
+  if (location) {
+    const tokens = location
+      .toLowerCase()
+      .split(/[,;]+/)
+      .map((s) => s.trim())
+      .filter((s) => s && s !== "fl" && s !== "florida" && s !== "usa");
+
+    const searchParts = tokens.length > 0 ? tokens : [location.toLowerCase()];
+    const conditions = searchParts
+      .map(() => `(LOWER(city) LIKE ? OR LOWER(county) LIKE ?)`)
+      .join(" OR ");
+    const args: string[] = [];
+    for (const part of searchParts) {
+      const like = `%${part.replace(/\./g, "")}%`;
+      args.push(like, like);
+    }
+    args.push(String(Math.min(limit, 500)));
+
+    const result = await db.execute({
+      sql: `
+        SELECT * FROM florida_leads
+        WHERE ${conditions}
+        ORDER BY risk_score DESC, id DESC
+        LIMIT ?
+      `,
+      args,
+    });
+    return result.rows as unknown as FloridaLeadRow[];
+  }
+
   const result = await db.execute({
     sql: `SELECT * FROM florida_leads ORDER BY risk_score DESC, id DESC LIMIT ?`,
     args: [limit],

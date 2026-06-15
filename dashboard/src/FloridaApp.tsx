@@ -1,27 +1,35 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { exportLeadsCsv, runMarketFindAndWait } from "./api/markets";
 import { fetchFloridaLeads } from "./api/florida-leads";
+import { geocodeSearchArea } from "./api/geocode";
 import { RadarMap } from "./components/radar/RadarMap";
 import { ActionDesk, floridaToDesk, type DeskLead } from "./components/radar/ActionDesk";
 
 const FLORIDA_MARKET_ID = "us_florida_food";
-const ORLANDO_CENTER = { lat: 28.5383, lng: -81.3792 };
 
 export function FloridaApp() {
-  const [location, setLocation] = useState("Orlando");
+  const [location, setLocation] = useState("Orlando, FL");
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [ticker, setTicker] = useState<string | null>(null);
   const [deskLeads, setDeskLeads] = useState<DeskLead[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const loadResults = useCallback(async () => {
-    const rows = await fetchFloridaLeads(300);
+  const loadResults = useCallback(async (searchLocation: string) => {
+    const rows = await fetchFloridaLeads(300, searchLocation);
     setDeskLeads(floridaToDesk(rows));
   }, []);
 
   useEffect(() => {
-    void loadResults().catch(() => undefined);
-  }, [loadResults]);
+    void geocodeSearchArea(location)
+      .then((geo) => {
+        if (geo) {
+          setMapCenter({ lat: geo.latitude, lng: geo.longitude });
+        }
+      })
+      .catch(() => undefined);
+    void loadResults(location).catch(() => undefined);
+  }, []);
 
   const stats = useMemo(() => {
     const total = deskLeads.length;
@@ -34,15 +42,24 @@ export function FloridaApp() {
     setBusy(true);
     setError(null);
     setTicker(`Scanning Florida DBPR records for ${location}…`);
+    void geocodeSearchArea(location)
+      .then((geo) => {
+        if (geo) {
+          setMapCenter({ lat: geo.latitude, lng: geo.longitude });
+        }
+      })
+      .catch(() => undefined);
     try {
-      await runMarketFindAndWait({
+      const result = (await runMarketFindAndWait({
         marketId: FLORIDA_MARKET_ID,
         location: location.trim(),
         mode: "regulated",
         onProgress: (msg) => setTicker(msg),
-      });
-      await loadResults();
-      setTicker("Scan complete — check action desk below");
+      })) as { stored?: number };
+
+      await loadResults(location.trim());
+      const count = result?.stored ?? deskLeads.length;
+      setTicker(`Scan complete — ${count} establishments indexed`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Florida scan failed");
       setTicker(null);
@@ -114,7 +131,7 @@ export function FloridaApp() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <RadarMap center={ORLANDO_CENTER} pins={[]} scanning={busy} />
+          <RadarMap center={mapCenter} pins={[]} scanning={busy} />
           {error ? (
             <p className="rounded-lg border border-red-900/50 bg-red-950/40 px-3 py-2 text-sm text-red-300">
               {error}

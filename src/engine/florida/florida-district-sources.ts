@@ -9,18 +9,28 @@ export const FLORIDA_DBPR_DISTRICT_CSV: Record<number, string> = {
   7: "https://www2.myfloridalicense.com/sto/file_download/extracts/7fdinspi.csv",
 };
 
+/**
+ * DBPR licensing districts (verified against county columns in fdinspi extracts).
+ * D1 Miami-Dade, D2 Broward/Palm Beach, D3 Tampa Bay, D4 Central FL (Orlando),
+ * D5 Jacksonville/North, D6 Panhandle, D7 Southwest Gulf.
+ */
 const LOCATION_DISTRICT_HINTS: Array<{ pattern: RegExp; districts: number[] }> = [
-  { pattern: /\b(orlando|kissimmee|lakeland|winter park|sanford|deltona)\b/i, districts: [3] },
-  { pattern: /\b(orange|osceola|seminole|volusia|lake|marion|sumter)\b/i, districts: [3] },
-  { pattern: /\b(miami|hialeah|fort lauderdale|hollywood|pompano|boca)\b/i, districts: [7] },
-  { pattern: /\b(broward|palm beach|miami-dade|monroe)\b/i, districts: [7] },
-  { pattern: /\b(tampa|st\.?\s*petersburg|clearwater|bradenton|sarasota)\b/i, districts: [5] },
-  { pattern: /\b(hillsborough|pinellas|manatee|sarasota|pasco|hernando|citrus)\b/i, districts: [5] },
-  { pattern: /\b(jacksonville|gainesville|tallahassee|pensacola)\b/i, districts: [1, 2] },
-  { pattern: /\b(cocoa|melbourne|palm bay|daytona|cocoa beach)\b/i, districts: [4] },
-  { pattern: /\b(brevard|flagler|volusia)\b/i, districts: [4] },
-  { pattern: /\b(fort myers|naples|cape coral|port charlotte)\b/i, districts: [6] },
-  { pattern: /\b(lee|collier|charlotte|sarasota|manatee)\b/i, districts: [6] },
+  { pattern: /\b(miami|hialeah|miami-dade|dade|key west|homestead)\b/i, districts: [1] },
+  { pattern: /\b(monroe)\b/i, districts: [1] },
+  { pattern: /\b(fort lauderdale|hollywood|pompano|boca|broward|palm beach)\b/i, districts: [2] },
+  { pattern: /\b(tampa|st\.?\s*petersburg|clearwater|bradenton|hillsborough|pinellas|polk|pasco)\b/i, districts: [3] },
+  {
+    pattern:
+      /\b(orlando|kissimmee|winter park|sanford|deltona|daytona|melbourne|cocoa|orange|osceola|seminole|volusia|brevard|lake|st\.?\s*lucie)\b/i,
+    districts: [4],
+  },
+  { pattern: /\b(jacksonville|gainesville|tallahassee|st\.?\s*augustine|duval|marion|alachua)\b/i, districts: [5] },
+  { pattern: /\b(pensacola|panama city|tallahassee|destin|escambia|okaloosa|bay county)\b/i, districts: [6] },
+  {
+    pattern:
+      /\b(fort myers|naples|cape coral|sarasota|venice|port charlotte|lee|collier|manatee|charlotte)\b/i,
+    districts: [7],
+  },
 ];
 
 export function floridaDistrictUrlsForLocation(location: string): string[] {
@@ -35,10 +45,9 @@ export function floridaDistrictUrlsForLocation(location: string): string[] {
     }
   }
 
-  // Unknown city — search all districts so any Florida location can match.
   return Object.values(FLORIDA_DBPR_DISTRICT_CSV);
 }
 
 export function defaultFloridaDataUrl(): string {
-  return FLORIDA_DBPR_DISTRICT_CSV[3];
+  return FLORIDA_DBPR_DISTRICT_CSV[4];
 }

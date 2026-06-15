@@ -11,12 +11,36 @@ import {
   US_TEXAS_FOOD_MARKET_ID,
 } from "../markets/search-params.js";
 import { MarketFindError } from "../markets/run-market-find.js";
+import { geocodeLocation } from "../engine/open-search/nominatim.js";
 import { deferStartJob } from "./autopilot-kickoff.js";
 
 export function mountMarketRoutes(
   app: Express,
   requireControlAuth: (req: Request, res: Response, next: NextFunction) => void,
 ): void {
+  app.get("/api/geocode", async (req, res) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+      if (!q) {
+        res.status(400).json({ error: "q is required" });
+        return;
+      }
+      const hit = await geocodeLocation(q);
+      if (!hit) {
+        res.status(404).json({ error: `Could not geocode: ${q}` });
+        return;
+      }
+      res.json({
+        latitude: hit.latitude,
+        longitude: hit.longitude,
+        displayName: hit.displayName,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Geocode failed" });
+    }
+  });
+
   app.get("/api/markets", async (_req, res) => {
     try {
       const markets = listMarketDefinitions().map((m) => ({

@@ -8,6 +8,7 @@ import {
 } from "./api/markets";
 import { fetchGenericLeads } from "./api/generic-leads";
 import { fetchFloridaLeads } from "./api/florida-leads";
+import { geocodeSearchArea } from "./api/geocode";
 import { CommandPanel } from "./components/radar/CommandPanel";
 import { RadarMap, type RadarPin } from "./components/radar/RadarMap";
 import {
@@ -19,6 +20,16 @@ import {
 
 const OPEN_SEARCH_ID = "open_search";
 const FLORIDA_ID = "us_florida_food";
+
+async function centerMapForLocation(
+  location: string,
+  setMapCenter: (c: { lat: number; lng: number }) => void,
+): Promise<void> {
+  const geo = await geocodeSearchArea(location);
+  if (geo) {
+    setMapCenter({ lat: geo.latitude, lng: geo.longitude });
+  }
+}
 
 export function RadarApp() {
   const [markets, setMarkets] = useState<MarketDefinition[]>([]);
@@ -37,6 +48,10 @@ export function RadarApp() {
     void fetchMarkets()
       .then(setMarkets)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load markets"));
+  }, []);
+
+  useEffect(() => {
+    void centerMapForLocation(location, setMapCenter).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -62,14 +77,14 @@ export function RadarApp() {
         return;
       }
       if (selectedMarket === FLORIDA_ID) {
-        const rows = await fetchFloridaLeads(200);
+        const rows = await fetchFloridaLeads(300, location);
         setDeskLeads(floridaToDesk(rows));
-        setMapCenter({ lat: 28.5383, lng: -81.3792 });
+        await centerMapForLocation(location, setMapCenter);
         return;
       }
       setDeskLeads([]);
     },
-    [marketId],
+    [marketId, location],
   );
 
   useEffect(() => {
@@ -98,7 +113,7 @@ export function RadarApp() {
             score: r.priorityScore,
           })),
       );
-      const first = rows[0];
+      const first = rows.find((r) => r.latitude != null && r.longitude != null);
       if (first?.latitude != null && first.longitude != null) {
         setMapCenter({ lat: first.latitude, lng: first.longitude });
       }
@@ -118,6 +133,7 @@ export function RadarApp() {
     setBusy(true);
     setError(null);
     setTicker(`Scanning ${location}…`);
+    void centerMapForLocation(location, setMapCenter);
     try {
       const result = (await runMarketFindAndWait({
         marketId,
@@ -125,7 +141,9 @@ export function RadarApp() {
         keyword: mode === "open" ? keyword.trim() : undefined,
         mode,
         onProgress: (msg) => setTicker(msg),
-      })) as { details?: { runId?: string; latitude?: number; longitude?: number } };
+      })) as {
+        details?: { runId?: string; latitude?: number; longitude?: number };
+      };
 
       const runId = result?.details?.runId ?? null;
       setLastRunId(runId);
@@ -134,6 +152,8 @@ export function RadarApp() {
           lat: result.details.latitude,
           lng: result.details.longitude,
         });
+      } else {
+        await centerMapForLocation(location, setMapCenter);
       }
 
       await loadResults(runId, marketId);

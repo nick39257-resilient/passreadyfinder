@@ -26,25 +26,88 @@ function pickNum(row: Record<string, string>, keys: string[]): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function locationSearchTokens(location: string): string[] {
+  const raw = location.trim().toLowerCase();
+  if (!raw || raw === "florida" || raw === "fl") {
+    return [];
+  }
+
+  const parts = raw
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s && s !== "fl" && s !== "florida" && s !== "usa" && s !== "us");
+
+  const tokens = new Set<string>(parts.length > 0 ? parts : [raw]);
+
+  const cityToCounty: Record<string, string[]> = {
+    orlando: ["orange"],
+    kissimmee: ["osceola"],
+    "winter park": ["orange"],
+    sanford: ["seminole"],
+    tampa: ["hillsborough"],
+    miami: ["dade"],
+    hialeah: ["dade"],
+    jacksonville: ["duval"],
+    gainesville: ["alachua"],
+    tallahassee: ["leon"],
+    "fort lauderdale": ["broward"],
+    hollywood: ["broward"],
+    "st. petersburg": ["pinellas"],
+    "st petersburg": ["pinellas"],
+    clearwater: ["pinellas"],
+    naples: ["collier"],
+    sarasota: ["sarasota"],
+  };
+
+  for (const token of [...tokens]) {
+    const counties = cityToCounty[token];
+    if (counties) {
+      for (const county of counties) {
+        tokens.add(county);
+      }
+    }
+  }
+
+  return [...tokens];
+}
+
 function matchesLocationFilter(
   row: Record<string, string>,
   location: string,
 ): boolean {
-  const needle = location.trim().toLowerCase();
-  if (!needle || needle === "florida" || needle === "fl") {
+  const tokens = locationSearchTokens(location);
+  if (tokens.length === 0) {
     return true;
   }
 
-  const hay = [
-    pick(row, ["location_city", "city", "location_city_name"]),
-    pick(row, ["county_name", "county", "location_county"]),
-    pick(row, ["location_address", "address", "location_zip", "zip"]),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  const city = (pick(row, ["location_city", "city", "location_city_name"]) ?? "").toLowerCase();
+  const county = (pick(row, ["county_name", "county", "location_county"]) ?? "").toLowerCase();
 
-  return hay.includes(needle);
+  return tokens.some((token) => {
+    const normalized = token.replace(/\./g, "").replace(/\s+/g, " ");
+    const cityNorm = city.replace(/\./g, "").replace(/\s+/g, " ");
+    const countyNorm = county.replace(/\./g, "").replace(/\s+/g, " ");
+    return (
+      cityNorm.includes(normalized) ||
+      countyNorm.includes(normalized) ||
+      normalized.includes(cityNorm)
+    );
+  });
+}
+
+function mergeFloridaLead(
+  existing: FloridaLeadInput,
+  next: FloridaLeadInput,
+): FloridaLeadInput {
+  if (next.riskScore > existing.riskScore) {
+    return next;
+  }
+  if (next.riskScore < existing.riskScore) {
+    return existing;
+  }
+  const existingDate = existing.lastInspectionDate ?? "";
+  const nextDate = next.lastInspectionDate ?? "";
+  return nextDate >= existingDate ? next : existing;
 }
 
 export function mapDbprRowToFloridaLead(
@@ -162,7 +225,7 @@ export async function ingestFloridaDbprData(input: {
 }): Promise<{ leads: FloridaLeadInput[]; source: string }> {
   const urls = resolveFloridaDataUrls(input);
   const limit = input.limit ?? floridaProductConfig.ingestion.defaultLimit;
-  const leads: FloridaLeadInput[] = [];
+  const byLicense = new Map<string, FloridaLeadInput>();
   const sources: string[] = [];
 
   for (const url of urls) {
@@ -176,15 +239,18 @@ export async function ingestFloridaDbprData(input: {
         continue;
       }
       const lead = mapDbprRowToFloridaLead(row, source);
-      if (lead) {
-        leads.push(lead);
+      if (!lead) {
+        continue;
       }
-      if (leads.length >= limit) {
+      const key = lead.licenseNumber ?? lead.externalId;
+      const existing = byLicense.get(key);
+      byLicense.set(key, existing ? mergeFloridaLead(existing, lead) : lead);
+      if (byLicense.size >= limit) {
         break;
       }
     }
 
-    if (leads.length >= limit) {
+    if (byLicense.size >= limit) {
       break;
     }
 
@@ -192,6 +258,8 @@ export async function ingestFloridaDbprData(input: {
       await new Promise((r) => setTimeout(r, floridaProductConfig.ingestion.requestDelayMs));
     }
   }
+
+  const leads = [...byLicense.values()];
 
   return {
     leads,

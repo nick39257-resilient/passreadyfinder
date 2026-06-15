@@ -5,8 +5,11 @@ export function mountFloridaRoutes(app: Express): void {
   app.get("/api/florida/leads", async (req, res) => {
     try {
       const limit = Number(req.query.limit);
+      const location =
+        typeof req.query.location === "string" ? req.query.location.trim() : undefined;
       const rows = await listFloridaLeads(
         Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 200,
+        { location },
       );
 
       res.json({

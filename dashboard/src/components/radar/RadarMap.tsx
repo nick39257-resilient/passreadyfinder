@@ -22,7 +22,7 @@ function MapRecenter({ center }: { center: { lat: number; lng: number } | null }
     if (center) {
       map.setView([center.lat, center.lng], 12, { animate: true });
     }
-  }, [center, map]);
+  }, [center?.lat, center?.lng, map]);
   return null;
 }
 
@@ -37,7 +37,8 @@ function pinColor(score: number): string {
 }
 
 export function RadarMap({ center, pins, scanning }: Props) {
-  const defaultCenter = center ?? { lat: 51.505, lng: -0.09 };
+  const fallback = { lat: 53.7632, lng: -2.7033 };
+  const viewCenter = center ?? fallback;
   const [visiblePinCount, setVisiblePinCount] = useState(0);
 
   useEffect(() => {
@@ -68,7 +69,8 @@ export function RadarMap({ center, pins, scanning }: Props) {
       ) : null}
 
       <MapContainer
-        center={[defaultCenter.lat, defaultCenter.lng]}
+        key={`${viewCenter.lat.toFixed(4)}-${viewCenter.lng.toFixed(4)}`}
+        center={[viewCenter.lat, viewCenter.lng]}
         zoom={11}
         className="h-full min-h-[280px] w-full"
         scrollWheelZoom
