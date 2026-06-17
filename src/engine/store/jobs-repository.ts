@@ -5,6 +5,7 @@ export type JobType =
   | "find"
   | "find_texas"
   | "market_find"
+  | "regulatory_enrich"
   | "texas_reclassify"
   | "texas_autopilot"
   | "uk_autopilot"

@@ -11,6 +11,9 @@ export type DeskLead = {
   phone: string | null;
   website: string | null;
   email: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
+  outreachReady?: boolean;
   address?: string | null;
   city?: string | null;
   county?: string | null;
@@ -33,6 +36,8 @@ type Props = {
     contactReady: number;
   };
   onExport: () => void;
+  onTriggerOutreach?: (lead: DeskLead) => void | Promise<void>;
+  outreachLeadId?: number | string | null;
 };
 
 function whatsAppUrl(lead: DeskLead): string | null {
@@ -64,12 +69,19 @@ function LeadCard({
   lead,
   expanded,
   onToggle,
+  onTriggerOutreach,
+  outreachBusy,
 }: {
   lead: DeskLead;
   expanded: boolean;
   onToggle: () => void;
+  onTriggerOutreach?: (lead: DeskLead) => void;
+  outreachBusy?: boolean;
 }) {
   const waUrl = whatsAppUrl(lead);
+  const canOutreach = Boolean(
+    lead.outreachReady || lead.email || lead.facebookUrl || lead.instagramUrl,
+  );
 
   return (
     <li>
@@ -118,6 +130,8 @@ function LeadCard({
             />
             <DetailRow label="Risk level" value={lead.riskLevel} />
             <DetailRow label="Status" value={lead.status} />
+            <DetailRow label="Facebook" value={lead.facebookUrl} />
+            <DetailRow label="Instagram" value={lead.instagramUrl} />
             {lead.gapReasons.length > 0 ? (
               <ul className="mt-1 space-y-0.5">
                 {lead.gapReasons.map((g) => (
@@ -164,6 +178,16 @@ function LeadCard({
                   Site
                 </a>
               ) : null}
+              {canOutreach && onTriggerOutreach ? (
+                <button
+                  type="button"
+                  disabled={outreachBusy}
+                  onClick={() => onTriggerOutreach(lead)}
+                  className="rounded-lg border border-violet-700/60 bg-violet-950/50 px-2 py-1 text-[10px] font-semibold text-violet-200 disabled:opacity-50"
+                >
+                  {outreachBusy ? "Sending…" : "Trigger Automated Outreach"}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : (
@@ -174,7 +198,13 @@ function LeadCard({
   );
 }
 
-export function ActionDesk({ leads, stats, onExport }: Props) {
+export function ActionDesk({
+  leads,
+  stats,
+  onExport,
+  onTriggerOutreach,
+  outreachLeadId,
+}: Props) {
   const sorted = [...leads].sort((a, b) => b.priorityScore - a.priorityScore);
   const [expandedId, setExpandedId] = useState<number | string | null>(null);
 
@@ -219,6 +249,8 @@ export function ActionDesk({ leads, stats, onExport }: Props) {
               lead={lead}
               expanded={expandedId === lead.id}
               onToggle={() => setExpandedId((cur) => (cur === lead.id ? null : lead.id))}
+              onTriggerOutreach={onTriggerOutreach}
+              outreachBusy={outreachLeadId === lead.id}
             />
           ))}
         </ul>
@@ -246,32 +278,44 @@ export function genericToDesk(leads: GenericLead[]): DeskLead[] {
 }
 
 export function floridaToDesk(leads: FloridaLead[]): DeskLead[] {
-  return leads.map((l) => ({
-    id: l.id,
-    businessName: l.businessName,
-    subtitle: [l.city, l.county, l.zip].filter(Boolean).join(" · "),
-    gapReasons: [
-      ...(l.priorityViolations && l.priorityViolations > 0
-        ? [`${l.priorityViolations} priority violations`]
-        : []),
-      ...(l.riskLevel ? [`Risk: ${l.riskLevel}`] : []),
-      ...(l.lastInspectionDate ? [`Last inspected ${l.lastInspectionDate}`] : []),
-      ...(!l.email ? ["No email on file"] : []),
-    ],
-    priorityScore: l.riskScore,
-    phone: l.phone,
-    website: null,
-    email: l.email,
-    address: l.address,
-    city: l.city,
-    county: l.county,
-    zip: l.zip,
-    licenseNumber: l.licenseNumber,
-    lastInspectionDate: l.lastInspectionDate,
-    priorityViolations: l.priorityViolations,
-    inspectionScore: l.inspectionScore,
-    riskLevel: l.riskLevel,
-    status: l.status,
-    phoneRegion: "us",
-  }));
+  return leads.map((l) => {
+    const hasContact = Boolean(
+      l.outreachReady ||
+        l.email?.trim() ||
+        l.facebookUrl?.trim() ||
+        l.instagramUrl?.trim(),
+    );
+    return {
+      id: l.id,
+      businessName: l.businessName,
+      subtitle: [l.city, l.county, l.zip].filter(Boolean).join(" · "),
+      gapReasons: [
+        ...(l.priorityViolations && l.priorityViolations > 0
+          ? [`${l.priorityViolations} priority violations`]
+          : []),
+        ...(l.riskLevel ? [`Risk: ${l.riskLevel}`] : []),
+        ...(l.lastInspectionDate ? [`Last inspected ${l.lastInspectionDate}`] : []),
+        ...(!hasContact ? ["No email on file"] : []),
+        ...(l.enrichmentStatus === "pending" ? ["Enrichment queued"] : []),
+      ],
+      priorityScore: l.riskScore,
+      phone: l.phone,
+      website: l.website,
+      email: l.email,
+      facebookUrl: l.facebookUrl,
+      instagramUrl: l.instagramUrl,
+      outreachReady: hasContact,
+      address: l.address,
+      city: l.city,
+      county: l.county,
+      zip: l.zip,
+      licenseNumber: l.licenseNumber,
+      lastInspectionDate: l.lastInspectionDate,
+      priorityViolations: l.priorityViolations,
+      inspectionScore: l.inspectionScore,
+      riskLevel: l.riskLevel,
+      status: l.status,
+      phoneRegion: "us",
+    };
+  });
 }

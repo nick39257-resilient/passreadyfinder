@@ -1,5 +1,30 @@
 import { getDb } from "./db.js";
 
+async function columnExists(table: string, column: string): Promise<boolean> {
+  const db = getDb();
+  const result = await db.execute(`PRAGMA table_info(${table})`);
+  return result.rows.some((row) => row.name === column);
+}
+
+async function addColumnIfMissing(table: string, columnDef: string): Promise<void> {
+  const columnName = columnDef.split(" ")[0];
+  if (!(await columnExists(table, columnName))) {
+    const db = getDb();
+    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+  }
+}
+
+const FLORIDA_LEAD_EXTRA_COLUMNS = [
+  "website TEXT",
+  "facebook_url TEXT",
+  "instagram_url TEXT",
+  "enrichment_status TEXT",
+  "enrichment_detail TEXT",
+  "enriched_at TEXT",
+  "outreach_sent_at TEXT",
+  "resend_message_id TEXT",
+] as const;
+
 export async function runFloridaMigrations(): Promise<void> {
   const db = getDb();
   await db.batch(
@@ -31,7 +56,12 @@ export async function runFloridaMigrations(): Promise<void> {
       )`,
       `CREATE INDEX IF NOT EXISTS idx_florida_leads_risk ON florida_leads(risk_score DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_florida_leads_county ON florida_leads(county)`,
+      `CREATE INDEX IF NOT EXISTS idx_florida_leads_status ON florida_leads(status)`,
     ],
     "write",
   );
+
+  for (const column of FLORIDA_LEAD_EXTRA_COLUMNS) {
+    await addColumnIfMissing("florida_leads", column);
+  }
 }

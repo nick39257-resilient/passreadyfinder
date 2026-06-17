@@ -8,6 +8,11 @@ const TEXAS_LEAD_EXTRA_COLUMNS = [
   "outreach_sent_at TEXT",
   "resend_message_id TEXT",
   "last_previewed_at TEXT",
+  "facebook_url TEXT",
+  "instagram_url TEXT",
+  "enrichment_status TEXT",
+  "enrichment_detail TEXT",
+  "enriched_at TEXT",
 ] as const;
 
 async function columnExists(table: string, column: string): Promise<boolean> {

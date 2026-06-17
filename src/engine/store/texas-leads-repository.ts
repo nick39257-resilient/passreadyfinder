@@ -25,6 +25,11 @@ export interface TexasLeadRow {
   contact_form_page_url: string | null;
   outreach_sent_at: string | null;
   resend_message_id: string | null;
+  facebook_url: string | null;
+  instagram_url: string | null;
+  enrichment_status: string | null;
+  enrichment_detail: string | null;
+  enriched_at: string | null;
   inspection_score: number | null;
   demerits: number | null;
   vehicle_type: string | null;
@@ -423,6 +428,86 @@ export async function countTexasLeads(): Promise<{
     readyToSend: Number(readyToSend.rows[0]?.c ?? 0),
     multiChannelReady: Number(multiChannelReady.rows[0]?.c ?? 0),
   };
+}
+
+export async function listTexasLeadsNeedingEnrichment(limit: number): Promise<TexasLeadRow[]> {
+  const db = getDb();
+  const result = await db.execute({
+    sql: `
+      SELECT * FROM texas_leads
+      WHERE (email IS NULL OR TRIM(email) = '')
+        AND (facebook_url IS NULL OR TRIM(facebook_url) = '')
+        AND (instagram_url IS NULL OR TRIM(instagram_url) = '')
+        AND status NOT IN ('EMAIL_SENT', 'FORM_SUBMITTED')
+        AND COALESCE(enrichment_status, 'pending') IN ('pending', 'failed', 'no_contact')
+      ORDER BY
+        CASE WHEN intervention_level = 'CRITICAL_INTERVENTION' THEN 0 ELSE 1 END,
+        risk_score DESC,
+        id ASC
+      LIMIT ?
+    `,
+    args: [Math.min(limit, 120)],
+  });
+  return result.rows.map((r) => rowToRecord(r as Record<string, unknown>));
+}
+
+export async function applyTexasEnrichmentResult(input: {
+  leadId: number;
+  email: string | null;
+  website: string | null;
+  facebookUrl: string | null;
+  instagramUrl: string | null;
+  status: "ready_to_contact" | "no_contact" | "skipped_has_contact";
+  enrichmentDetail: string;
+}): Promise<void> {
+  const db = getDb();
+  const row = await getTexasLeadById(input.leadId);
+  if (!row) {
+    return;
+  }
+
+  const email =
+    input.email?.trim() && isValidOutreachEmail(input.email)
+      ? input.email.trim().toLowerCase()
+      : null;
+  const facebookUrl = input.facebookUrl?.trim() ?? null;
+  const instagramUrl = input.instagramUrl?.trim() ?? null;
+  const website = input.website?.trim() ?? null;
+  const ready =
+    input.status === "ready_to_contact" ||
+    Boolean(email || facebookUrl || instagramUrl);
+  const nextStatus = ready
+    ? email
+      ? "EMAIL_DISCOVERED"
+      : "ready_to_contact"
+    : row.status;
+  const enrichmentStatus = ready ? "ready" : "no_contact";
+
+  await db.execute({
+    sql: `
+      UPDATE texas_leads SET
+        email = COALESCE(?, email),
+        website = COALESCE(?, website),
+        facebook_url = COALESCE(?, facebook_url),
+        instagram_url = COALESCE(?, instagram_url),
+        status = ?,
+        enrichment_status = ?,
+        enrichment_detail = ?,
+        enriched_at = datetime('now'),
+        updated_at = datetime('now')
+      WHERE id = ?
+    `,
+    args: [
+      email,
+      website,
+      facebookUrl,
+      instagramUrl,
+      nextStatus,
+      enrichmentStatus,
+      input.enrichmentDetail.slice(0, 900),
+      input.leadId,
+    ],
+  });
 }
 
 export async function countTexasAutopilotQueue(): Promise<number> {

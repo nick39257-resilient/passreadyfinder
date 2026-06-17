@@ -18,7 +18,11 @@ import {
 import type { DraftJobParams, FindJobParams } from "../types/segmentation.js";
 import { runMarketFind } from "../markets/run-market-find.js";
 import type { MarketSearchParams } from "../markets/types.js";
+import { US_FLORIDA_FOOD_MARKET_ID, US_TEXAS_FOOD_MARKET_ID } from "../markets/search-params.js";
+import { runRegulatoryEnrichBatch } from "../engine/enrich/regulatory-enrich-batch.js";
 import { OperationTimeoutError, withTimeout } from "../engine/services/service-timeout.js";
+import { createJob } from "../engine/store/jobs-repository.js";
+import { deferStartJob } from "./autopilot-kickoff.js";
 
 const JOB_TIMEOUT_MS: Partial<Record<JobType, number>> = {
   find: 2 * 60 * 60 * 1000,
@@ -29,6 +33,7 @@ const JOB_TIMEOUT_MS: Partial<Record<JobType, number>> = {
   uk_autopilot: 55 * 60 * 1000,
   draft_all: 60 * 60 * 1000,
   contact_discovery: 20 * 60 * 1000,
+  regulatory_enrich: 50 * 60 * 1000,
   send: 4 * 60 * 60 * 1000,
 };
 
@@ -174,6 +179,30 @@ async function runJobBody(
       });
       return { leadId, contactScore: discovery.contactScore };
     }
+    case "regulatory_enrich": {
+      const enrichParams = params as {
+        marketId?: string;
+        location?: string | null;
+        limit?: number;
+      } | null;
+      if (!enrichParams?.marketId?.trim()) {
+        throw new Error("marketId is required for regulatory enrich job");
+      }
+      await updateJob(jobId, {
+        status: "running",
+        progress: `Contact enrichment: ${enrichParams.marketId}…`,
+      });
+      return runRegulatoryEnrichBatch(
+        {
+          marketId: enrichParams.marketId,
+          location: enrichParams.location ?? null,
+          limit: enrichParams.limit,
+        },
+        async (message) => {
+          await updateJob(jobId, { progress: message });
+        },
+      );
+    }
     default: {
       const _exhaustive: never = type;
       throw new Error(`Unknown job type: ${_exhaustive}`);
@@ -222,6 +251,36 @@ export function startJob(jobId: string, type: JobType): void {
         progress: "Complete",
         result,
       });
+      if (type === "market_find") {
+        try {
+          const job = await getJob(jobId);
+          let marketParams: MarketSearchParams | null = null;
+          if (job?.params) {
+            try {
+              marketParams = JSON.parse(job.params) as MarketSearchParams;
+            } catch {
+              marketParams = null;
+            }
+          }
+          const marketId = marketParams?.marketId?.trim().toLowerCase();
+          if (
+            marketId === US_FLORIDA_FOOD_MARKET_ID ||
+            marketId === US_TEXAS_FOOD_MARKET_ID
+          ) {
+            const enrichJobId = await createJob("regulatory_enrich", {
+              marketId,
+              location: marketParams?.location ?? null,
+              limit: Number(process.env.REGULATORY_ENRICH_BATCH_LIMIT) || 40,
+            });
+            deferStartJob(enrichJobId, "regulatory_enrich");
+          }
+        } catch (kickoffErr) {
+          console.warn(
+            "Post-scan regulatory enrich kickoff failed:",
+            kickoffErr instanceof Error ? kickoffErr.message : kickoffErr,
+          );
+        }
+      }
       if (type === "send") {
         await logSendJobOutcome(result);
         try {

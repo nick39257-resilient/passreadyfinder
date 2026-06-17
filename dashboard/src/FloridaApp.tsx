@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { exportLeadsCsv, runMarketFindAndWait } from "./api/markets";
-import { fetchFloridaLeads } from "./api/florida-leads";
+import { fetchFloridaLeads, triggerFloridaOutreach } from "./api/florida-leads";
 import { geocodeSearchArea } from "./api/geocode";
 import { RadarMap } from "./components/radar/RadarMap";
 import { ActionDesk, floridaToDesk, type DeskLead } from "./components/radar/ActionDesk";
@@ -14,6 +14,7 @@ export function FloridaApp() {
   const [ticker, setTicker] = useState<string | null>(null);
   const [deskLeads, setDeskLeads] = useState<DeskLead[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [outreachLeadId, setOutreachLeadId] = useState<number | string | null>(null);
 
   const loadResults = useCallback(async (searchLocation: string) => {
     const rows = await fetchFloridaLeads(300, searchLocation);
@@ -33,10 +34,41 @@ export function FloridaApp() {
 
   const stats = useMemo(() => {
     const total = deskLeads.length;
-    const highPriority = deskLeads.filter((l) => l.priorityScore >= 60).length;
-    const contactReady = deskLeads.filter((l) => Boolean(l.phone || l.email)).length;
+    const highPriority = deskLeads.filter(
+      (l) => l.priorityScore >= 60 && !l.outreachReady,
+    ).length;
+    const contactReady = deskLeads.filter(
+      (l) =>
+        l.outreachReady ||
+        Boolean(l.email?.trim() || l.facebookUrl?.trim() || l.instagramUrl?.trim()),
+    ).length;
     return { total, highPriority, contactReady };
   }, [deskLeads]);
+
+  async function handleTriggerOutreach(lead: DeskLead) {
+    if (typeof lead.id !== "number") {
+      return;
+    }
+    setOutreachLeadId(lead.id);
+    setError(null);
+    try {
+      const result = await triggerFloridaOutreach(lead.id);
+      if (result.channel === "email") {
+        setTicker(`Outreach sent to ${lead.businessName} via Resend`);
+      } else {
+        const social = lead.facebookUrl ?? lead.instagramUrl;
+        if (social) {
+          window.open(social, "_blank", "noopener,noreferrer");
+        }
+        setTicker(`Social outreach ready for ${lead.businessName}`);
+      }
+      await loadResults(location.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Outreach failed");
+    } finally {
+      setOutreachLeadId(null);
+    }
+  }
 
   async function handleScan() {
     setBusy(true);
@@ -59,7 +91,15 @@ export function FloridaApp() {
 
       await loadResults(location.trim());
       const count = result?.stored ?? deskLeads.length;
-      setTicker(`Scan complete — ${count} establishments indexed`);
+      setTicker(
+        `Scan complete — ${count} indexed. Background contact enrichment running (refresh in ~1 min).`,
+      );
+      window.setTimeout(() => {
+        void loadResults(location.trim()).catch(() => undefined);
+      }, 45_000);
+      window.setTimeout(() => {
+        void loadResults(location.trim()).catch(() => undefined);
+      }, 120_000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Florida scan failed");
       setTicker(null);
@@ -137,7 +177,13 @@ export function FloridaApp() {
               {error}
             </p>
           ) : null}
-          <ActionDesk leads={deskLeads} stats={stats} onExport={handleExport} />
+          <ActionDesk
+            leads={deskLeads}
+            stats={stats}
+            onExport={handleExport}
+            onTriggerOutreach={handleTriggerOutreach}
+            outreachLeadId={outreachLeadId}
+          />
         </div>
       </div>
     </div>
