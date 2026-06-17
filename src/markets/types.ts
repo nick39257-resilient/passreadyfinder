@@ -15,7 +15,7 @@ export interface MarketDefinition {
   supportsKeyword: boolean;
   locationHint: string;
   /** Lead table / outreach lane this market writes to */
-  dataLane: "uk_leads" | "texas_leads" | "florida_leads" | "generic_leads";
+  dataLane: "uk_leads" | "texas_leads" | "florida_leads" | "generic_leads" | "mfu_support_facilities";
 }
 
 /** Unified search request — all find jobs normalize to this shape. */

@@ -3,12 +3,14 @@ import {
   OPEN_SEARCH_MARKET_ID,
   UK_FSA_FOOD_MARKET_ID,
   US_FLORIDA_FOOD_MARKET_ID,
+  US_MFU_SUPPORT_MARKET_ID,
   US_TEXAS_FOOD_MARKET_ID,
 } from "./search-params.js";
 import { ukFsaFoodPlugin } from "./plugins/uk-fsa-food.plugin.js";
 import { usTexasFoodPlugin } from "./plugins/us-texas-food.plugin.js";
 import { openSearchPlugin } from "./plugins/open-search.plugin.js";
 import { usFloridaFoodPlugin } from "./plugins/us-florida-food.plugin.js";
+import { usMfuSupportPlugin } from "./plugins/us-mfu-support.plugin.js";
 import { floridaMarketConfigured } from "../engine/florida/florida-pipeline.js";
 
 const PLUGINS: MarketPlugin[] = [
@@ -16,6 +18,7 @@ const PLUGINS: MarketPlugin[] = [
   usTexasFoodPlugin,
   openSearchPlugin,
   usFloridaFoodPlugin,
+  usMfuSupportPlugin,
 ];
 
 const byId = new Map<string, MarketPlugin>(

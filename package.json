@@ -40,6 +40,8 @@
     "test:gemini-draft-model": "tsx scripts/test-gemini-draft-model.mjs",
     "test:markets": "tsx src/markets/registry.test.ts",
     "test:pulse": "tsx src/server/pulse-routes.test.ts",
+    "test:mfu-facilities": "tsx src/engine/mfu-facilities/mfu-facilities.test.ts",
+    "extract:mfu-facilities": "tsx src/cli/extract-mfu-facilities.ts",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && npm run dashboard:build",
     "dashboard:install": "npm install --prefix dashboard --include=dev",
@@ -60,6 +62,7 @@
     "express": "^5.2.1",
     "nodemailer": "^8.0.10",
     "openai": "^6.39.0",
+    "pdf-parse": "^2.4.5",
     "resend": "^6.12.3",
     "zod": "^4.4.3"
   },

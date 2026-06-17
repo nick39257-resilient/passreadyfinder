@@ -11,6 +11,7 @@ export const UK_FSA_FOOD_MARKET_ID = "uk_fsa_food";
 export const US_TEXAS_FOOD_MARKET_ID = "us_texas_food";
 export const OPEN_SEARCH_MARKET_ID = "open_search";
 export const US_FLORIDA_FOOD_MARKET_ID = "us_florida_food";
+export const US_MFU_SUPPORT_MARKET_ID = "us_mfu_support";
 
 export function parseMarketId(value: unknown): string | null {
   if (typeof value !== "string") {

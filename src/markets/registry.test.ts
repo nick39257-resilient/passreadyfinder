@@ -23,7 +23,7 @@ function assert(condition: boolean, message: string): void {
 }
 
 const markets = listMarketDefinitions();
-assert(markets.length >= 4, "registry lists planned + active markets");
+assert(markets.length >= 5, "registry lists planned + active markets");
 assert(
   listActiveMarkets().every((m) => m.status === "active"),
   "active markets filter",
@@ -62,6 +62,9 @@ assert(open?.definition.status === "active", "open search is active");
 
 const fl = getMarketPlugin("us_florida_food");
 assert(fl?.definition.id === US_FLORIDA_FOOD_MARKET_ID, "florida plugin registered");
+
+const mfu = getMarketPlugin("us_mfu_support");
+assert(mfu?.definition.dataLane === "mfu_support_facilities", "mfu support lane registered");
 
 if (failed > 0) {
   process.exit(1);

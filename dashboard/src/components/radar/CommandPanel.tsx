@@ -112,6 +112,9 @@ export function CommandPanel({
         <a href="/dashboard/florida" className="text-slate-500 hover:text-slate-300">
           Florida food radar →
         </a>
+        <a href="/dashboard/mfu-support" className="text-slate-500 hover:text-slate-300">
+          CPF & commissary radar →
+        </a>
         <a href="/dashboard/uk" className="text-slate-500 hover:text-slate-300">
           UK legacy command center →
         </a>

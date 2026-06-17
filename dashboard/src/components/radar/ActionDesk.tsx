@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { GenericLead } from "../../api/generic-leads";
 import type { FloridaLead } from "../../api/florida-leads";
+import type { MfuSupportFacility } from "../../api/mfu-support";
 
 export type DeskLead = {
   id: number | string;
@@ -315,6 +316,57 @@ export function floridaToDesk(leads: FloridaLead[]): DeskLead[] {
       inspectionScore: l.inspectionScore,
       riskLevel: l.riskLevel,
       status: l.status,
+      phoneRegion: "us",
+    };
+  });
+}
+
+function serviceLabels(services: MfuSupportFacility["services_provided"]): string[] {
+  const labels: string[] = [];
+  if (services.potable_water_fill) labels.push("Potable water");
+  if (services.greywater_dump) labels.push("Greywater dump");
+  if (services.grease_disposal) labels.push("Grease disposal");
+  if (services.commercial_kitchen_access) labels.push("Kitchen access");
+  if (services.dry_cold_storage) labels.push("Dry/cold storage");
+  return labels;
+}
+
+function mfuPriorityScore(facility: MfuSupportFacility): number {
+  const services = Object.values(facility.services_provided).filter((v) => v === true).length;
+  let score = 40 + services * 12;
+  if (facility.contact_details.phone) score += 25;
+  if (facility.contact_details.email) score += 20;
+  return Math.min(score, 99);
+}
+
+export function mfuToDesk(facilities: MfuSupportFacility[]): DeskLead[] {
+  return facilities.map((f) => {
+    const services = serviceLabels(f.services_provided);
+    const hasContact = Boolean(
+      f.outreachReady ||
+        f.contact_details.phone?.trim() ||
+        f.contact_details.email?.trim(),
+    );
+    return {
+      id: f.id,
+      businessName: f.facility_name,
+      subtitle: [f.governing_authority, f.address.city, f.address.county].filter(Boolean).join(" · "),
+      gapReasons: [
+        `${f.legal_term_used} (${f.state})`,
+        ...(services.length > 0 ? [`Services: ${services.join(", ")}`] : ["Services not listed in source"]),
+        ...(!hasContact ? ["No contact on file"] : []),
+      ],
+      priorityScore: mfuPriorityScore(f),
+      phone: f.contact_details.phone,
+      website: f.contact_details.website,
+      email: f.contact_details.email,
+      outreachReady: hasContact,
+      address: f.address.street,
+      city: f.address.city,
+      county: f.address.county,
+      zip: f.address.zip_code,
+      licenseNumber: f.license_number,
+      status: f.state,
       phoneRegion: "us",
     };
   });

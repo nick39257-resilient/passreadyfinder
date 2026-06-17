@@ -76,6 +76,7 @@ import { mountScoreTrafficRoutes } from "./score-traffic-routes.js";
 import { mountMarketRoutes } from "./market-routes.js";
 import { mountGenericLeadsRoutes } from "./generic-leads-routes.js";
 import { mountFloridaRoutes } from "./florida-routes.js";
+import { mountMfuSupportRoutes } from "./mfu-support-routes.js";
 import { mountPulseRoutes } from "./pulse-routes.js";
 import { mountMarketingTrafficRoutes } from "./marketing-traffic-routes.js";
 import { isGooglePlacesEnabled } from "../config/google-places.config.js";
@@ -179,6 +180,7 @@ export async function createApp(options?: {
   mountMarketRoutes(app, requireControlAuth);
   mountGenericLeadsRoutes(app);
   mountFloridaRoutes(app);
+  mountMfuSupportRoutes(app);
   mountPulseRoutes(app, requireControlAuth);
   mountMarketingTrafficRoutes(app, requireControlAuth);
   mountScoreTrafficRoutes(app, requireControlAuth);
